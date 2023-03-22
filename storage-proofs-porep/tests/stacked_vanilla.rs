@@ -22,12 +22,9 @@ use storage_proofs_core::{
     util::{default_rows_to_discard, NODE_SIZE},
     TEST_SEED,
 };
-use storage_proofs_porep::{
-    stacked::{
-        LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedBucketGraph, StackedDrg,
-        TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
-    },
-    PoRep,
+use storage_proofs_porep::stacked::{
+    LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedBucketGraph, StackedDrg,
+    TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
 };
 use tempfile::tempdir;
 
@@ -120,8 +117,9 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
 
     let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
 
-    StackedDrg::<Tree, Blake2sHasher>::replicate(
-        &pp,
+    StackedDrg::<Tree, Blake2sHasher>::transform_and_replicate_layers(
+        &pp.graph,
+        &pp.layer_challenges,
         &replica_id,
         (mmapped_data.as_mut()).into(),
         None,
@@ -167,11 +165,12 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
 
     assert_ne!(data, &mmapped_data[..], "replication did not change data");
 
-    StackedDrg::<Tree, Blake2sHasher>::extract_all(
-        &pp,
+    StackedDrg::<Tree, Blake2sHasher>::extract_and_invert_transform_layers(
+        &pp.graph,
+        &pp.layer_challenges,
         &replica_id,
         mmapped_data.as_mut(),
-        Some(config),
+        config,
     )
     .expect("failed to extract data");
 
@@ -241,8 +240,9 @@ fn test_stacked_porep_resume_seal() {
     };
 
     // first replicaton
-    StackedDrg::<Tree, Blake2sHasher>::replicate(
-        &pp,
+    StackedDrg::<Tree, Blake2sHasher>::transform_and_replicate_layers(
+        &pp.graph,
+        &pp.layer_challenges,
         &replica_id,
         (mmapped_data1.as_mut()).into(),
         None,
@@ -253,8 +253,9 @@ fn test_stacked_porep_resume_seal() {
     clear_temp();
 
     // replicate a second time
-    StackedDrg::<Tree, Blake2sHasher>::replicate(
-        &pp,
+    StackedDrg::<Tree, Blake2sHasher>::transform_and_replicate_layers(
+        &pp.graph,
+        &pp.layer_challenges,
         &replica_id,
         (mmapped_data2.as_mut()).into(),
         None,
@@ -280,8 +281,9 @@ fn test_stacked_porep_resume_seal() {
     }
 
     // replicate a third time
-    StackedDrg::<Tree, Blake2sHasher>::replicate(
-        &pp,
+    StackedDrg::<Tree, Blake2sHasher>::transform_and_replicate_layers(
+        &pp.graph,
+        &pp.layer_challenges,
         &replica_id,
         (mmapped_data3.as_mut()).into(),
         None,
@@ -296,11 +298,12 @@ fn test_stacked_porep_resume_seal() {
     assert_eq!(&mmapped_data1[..], &mmapped_data2[..]);
     assert_eq!(&mmapped_data2[..], &mmapped_data3[..]);
 
-    StackedDrg::<Tree, Blake2sHasher>::extract_all(
-        &pp,
+    StackedDrg::<Tree, Blake2sHasher>::extract_and_invert_transform_layers(
+        &pp.graph,
+        &pp.layer_challenges,
         &replica_id,
         mmapped_data1.as_mut(),
-        Some(config),
+        config,
     )
     .expect("failed to extract data");
 
@@ -387,8 +390,9 @@ fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Laye
     };
 
     let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
-    let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, Blake2sHasher>::replicate(
-        &pp,
+    let (tau, p_aux, t_aux) = StackedDrg::<Tree, Blake2sHasher>::transform_and_replicate_layers(
+        &pp.graph,
+        &pp.layer_challenges,
         &replica_id,
         (mmapped_data.as_mut()).into(),
         None,

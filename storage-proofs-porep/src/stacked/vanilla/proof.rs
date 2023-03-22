@@ -53,7 +53,6 @@ use crate::{
         },
         EncodingProof, LabelingProof,
     },
-    PoRep,
 };
 
 pub const TOTAL_PARENTS: usize = 37;
@@ -499,7 +498,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         Ok(porep_proofs)
     }
 
-    pub(crate) fn extract_and_invert_transform_layers(
+    pub fn extract_and_invert_transform_layers(
         graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
@@ -1471,7 +1470,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         )
     }
 
-    pub(crate) fn transform_and_replicate_layers(
+    // TODO vmx 2023-03-22: This one should *not* be public. It's only public for the tests. Move
+    // the tests into this file instead.
+    pub fn transform_and_replicate_layers(
         graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
@@ -1721,8 +1722,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         cache_path: PathBuf,
         replica_path: PathBuf,
     ) -> Result<(
-        <Self as PoRep<'a, Tree::Hasher, G>>::Tau,
-        <Self as PoRep<'a, Tree::Hasher, G>>::ProverAux,
+        Tau<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
+        (
+            PersistentAux<<Tree::Hasher as Hasher>::Domain>,
+            TemporaryAux<Tree, G>,
+        ),
     )> {
         info!("replicate_phase2");
 
