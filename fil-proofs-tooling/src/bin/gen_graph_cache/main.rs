@@ -36,7 +36,7 @@ fn gen_graph_cache<Tree: 'static + MerkleTreeTrait>(
     // we just use dummy values of 1 for the setup params.
     let layers = 1;
     let challenge_count = 1;
-    let layer_challenges = LayerChallenges::new(layers, challenge_count);
+    let layer_challenges = LayerChallenges::new(layers, challenge_count, false);
 
     let sp = SetupParams {
         nodes,

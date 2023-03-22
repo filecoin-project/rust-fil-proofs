@@ -106,7 +106,7 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
     let replica_path = cache_dir.path().join("replica-path");
     let mut mmapped_data = setup_replica(&data, &replica_path);
 
-    let layer_challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+    let layer_challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5, false);
 
     let sp = SetupParams {
         nodes,
@@ -213,7 +213,7 @@ fn test_stacked_porep_resume_seal() {
     let mut mmapped_data2 = setup_replica(&data, &replica_path2);
     let mut mmapped_data3 = setup_replica(&data, &replica_path3);
 
-    let layer_challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+    let layer_challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5, false);
 
     let sp = SetupParams {
         nodes,
@@ -314,7 +314,7 @@ table_tests! {
 }
 
 fn test_prove_verify_fixed(n: usize) {
-    let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+    let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5, false);
 
     test_prove_verify::<DiskTree<Sha256Hasher, U8, U0, U0>>(n, challenges.clone());
     test_prove_verify::<DiskTree<Sha256Hasher, U8, U2, U0>>(n, challenges.clone());
@@ -447,7 +447,7 @@ fn test_stacked_porep_setup_terminates() {
     let degree = BASE_DEGREE;
     let expansion_degree = EXP_DEGREE;
     let nodes = 1024 * 1024 * 32 * 8; // This corresponds to 8GiB sectors (32-byte nodes)
-    let layer_challenges = LayerChallenges::new(10, 333);
+    let layer_challenges = LayerChallenges::new(10, 333, false);
     let sp = SetupParams {
         nodes,
         degree,
@@ -559,7 +559,7 @@ fn test_generate_labels_aux(
     )
     .unwrap();
 
-    let unused_layer_challenges = LayerChallenges::new(layers, 0);
+    let unused_layer_challenges = LayerChallenges::new(layers, 0, false);
 
     let labels = StackedDrg::<
         // Although not generally correct for every size, the hasher shape is not used,
