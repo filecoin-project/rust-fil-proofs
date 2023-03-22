@@ -1,6 +1,8 @@
-use filecoin_hashers::Domain;
+use log::trace;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
+
+use filecoin_hashers::Domain;
 use sha2::{Digest, Sha256};
 
 #[inline]
@@ -50,8 +52,10 @@ impl LayerChallenges {
         k: u8,
     ) -> Vec<usize> {
         if self.use_synthetic {
-            self.derive_synthetic_internal(self.challenges_count_all(), leaves, replica_id, seed, k)
+            trace!("LayerChallenges using Synthetic Challenges");
+            self.derive_synthetic_internal(leaves, replica_id)
         } else {
+            trace!("LayerChallenges using Layer Challenges");
             self.derive_internal(self.challenges_count_all(), leaves, replica_id, seed, k)
         }
     }
@@ -84,11 +88,8 @@ impl LayerChallenges {
 
     pub fn derive_synthetic_internal<D: Domain>(
         &self,
-        _challenges_count: usize,
         leaves: usize,
         replica_id: &D,
-        _seed: &[u8; 32],
-        _k: u8,
     ) -> Vec<usize> {
         use blstrs::Scalar as Fr;
         assert!(leaves > 2, "Too few leaves: {}", leaves);
