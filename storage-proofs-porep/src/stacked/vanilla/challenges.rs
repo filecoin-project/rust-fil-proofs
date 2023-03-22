@@ -17,11 +17,16 @@ pub struct LayerChallenges {
     layers: usize,
     /// The maximum count of challenges
     max_count: usize,
+    use_synthetic: bool,
 }
 
 impl LayerChallenges {
-    pub const fn new(layers: usize, max_count: usize) -> Self {
-        LayerChallenges { layers, max_count }
+    pub const fn new(layers: usize, max_count: usize, use_synthetic: bool) -> Self {
+        LayerChallenges {
+            layers,
+            max_count,
+            use_synthetic,
+        }
     }
 
     pub fn layers(&self) -> usize {
@@ -32,6 +37,10 @@ impl LayerChallenges {
         self.max_count
     }
 
+    pub fn use_synthetic(&self) -> bool {
+        self.use_synthetic
+    }
+
     /// Derive all challenges.
     pub fn derive<D: Domain>(
         &self,
@@ -40,7 +49,11 @@ impl LayerChallenges {
         seed: &[u8; 32],
         k: u8,
     ) -> Vec<usize> {
-        self.derive_internal(self.challenges_count_all(), leaves, replica_id, seed, k)
+        if self.use_synthetic {
+            self.derive_synthetic_internal(self.challenges_count_all(), leaves, replica_id, seed, k)
+        } else {
+            self.derive_internal(self.challenges_count_all(), leaves, replica_id, seed, k)
+        }
     }
 
     pub fn derive_internal<D: Domain>(
@@ -67,6 +80,25 @@ impl LayerChallenges {
                 bigint_to_challenge(bigint, leaves)
             })
             .collect()
+    }
+
+    pub fn derive_synthetic_internal<D: Domain>(
+        &self,
+        _challenges_count: usize,
+        leaves: usize,
+        replica_id: &D,
+        _seed: &[u8; 32],
+        _k: u8,
+    ) -> Vec<usize> {
+        use blstrs::Scalar as Fr;
+        assert!(leaves > 2, "Too few leaves: {}", leaves);
+
+        // FIXME: better way to convert Domain to Scalar?
+        let mut id = [0u8; 32];
+        id[..].copy_from_slice(&replica_id.into_bytes());
+        let generator = SynthChallenges::default_chacha20(leaves, &Fr::from_bytes_le(&id).unwrap());
+
+        generator.collect()
     }
 }
 
@@ -330,7 +362,7 @@ mod test {
 
     #[test]
     fn test_calculate_fixed_challenges() {
-        let layer_challenges = LayerChallenges::new(10, 333);
+        let layer_challenges = LayerChallenges::new(10, 333, false);
         let expected = 333;
 
         let calculated_count = layer_challenges.challenges_count_all();
@@ -342,7 +374,7 @@ mod test {
         let n = 200;
         let layers = 100;
 
-        let challenges = LayerChallenges::new(layers, n);
+        let challenges = LayerChallenges::new(layers, n, false);
         let leaves = 1 << 30;
         let rng = &mut thread_rng();
         let replica_id: Sha256Domain = Sha256Domain::random(rng);
@@ -425,15 +457,16 @@ mod test {
         let total_challenges = n * partitions;
 
         for _layer in 1..=layers {
-            let one_partition_challenges = LayerChallenges::new(layers, total_challenges).derive(
-                leaves,
-                &replica_id,
-                &seed,
-                0,
-            );
+            let one_partition_challenges = LayerChallenges::new(layers, total_challenges, false)
+                .derive(leaves, &replica_id, &seed, 0);
             let many_partition_challenges = (0..partitions)
                 .flat_map(|k| {
-                    LayerChallenges::new(layers, n).derive(leaves, &replica_id, &seed, k as u8)
+                    LayerChallenges::new(layers, n, false).derive(
+                        leaves,
+                        &replica_id,
+                        &seed,
+                        k as u8,
+                    )
                 })
                 .collect::<Vec<_>>();
 

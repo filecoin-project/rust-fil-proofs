@@ -81,6 +81,8 @@ pub fn setup_params(
     porep_id: [u8; 32],
     api_version: ApiVersion,
 ) -> Result<stacked::SetupParams> {
+    // FIXME: wire in use_synthetic
+    let use_synthetic = false;
     let layer_challenges = select_challenges(
         partitions,
         POREP_MINIMUM_CHALLENGES.from_sector_size(u64::from(sector_bytes)),
@@ -89,6 +91,7 @@ pub fn setup_params(
             .expect("LAYERS poisoned")
             .get(&u64::from(sector_bytes))
             .expect("unknown sector size"),
+        use_synthetic,
     );
     let sector_bytes = u64::from(sector_bytes);
 
@@ -116,12 +119,13 @@ fn select_challenges(
     partitions: usize,
     minimum_total_challenges: usize,
     layers: usize,
+    use_synthetic: bool,
 ) -> LayerChallenges {
     let mut count = 1;
-    let mut guess = LayerChallenges::new(layers, count);
+    let mut guess = LayerChallenges::new(layers, count, use_synthetic);
     while partitions * guess.challenges_count_all() < minimum_total_challenges {
         count += 1;
-        guess = LayerChallenges::new(layers, count);
+        guess = LayerChallenges::new(layers, count, use_synthetic);
     }
 
     guess
@@ -135,7 +139,7 @@ mod tests {
 
     #[test]
     fn partition_layer_challenges_test() {
-        let f = |partitions| select_challenges(partitions, 12, 11).challenges_count_all();
+        let f = |partitions| select_challenges(partitions, 12, 11, false).challenges_count_all();
         // Update to ensure all supported PoRepProofPartitions options are represented here.
         assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
 

@@ -273,7 +273,7 @@ fn measure_porep_circuit(i: &ProdbenchInputs) -> usize {
     let drg_degree = DRG_DEGREE;
     let expansion_degree = EXP_DEGREE;
     let nodes = (i.sector_size_bytes() / 32) as usize;
-    let layer_challenges = LayerChallenges::new(layers, challenge_count);
+    let layer_challenges = LayerChallenges::new(layers, challenge_count, false);
 
     let arbitrary_porep_id = [222; 32];
     let sp = SetupParams {

@@ -53,7 +53,7 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
     let degree = BASE_DEGREE;
     let expansion_degree = EXP_DEGREE;
     let num_layers = 2;
-    let layer_challenges = LayerChallenges::new(num_layers, 1);
+    let layer_challenges = LayerChallenges::new(num_layers, 1, false);
     let partition_count = 1;
 
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
