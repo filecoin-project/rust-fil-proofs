@@ -20,12 +20,9 @@ use storage_proofs_core::{
     util::default_rows_to_discard,
     TEST_SEED,
 };
-use storage_proofs_porep::{
-    stacked::{
-        ChallengeRequirements, LayerChallenges, PrivateInputs, PublicInputs, SetupParams,
-        StackedCompound, StackedDrg, TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
-    },
-    PoRep,
+use storage_proofs_porep::stacked::{
+    ChallengeRequirements, LayerChallenges, PrivateInputs, PublicInputs, SetupParams,
+    StackedCompound, StackedDrg, TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
 };
 use tempfile::tempdir;
 
@@ -91,8 +88,9 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
     let mut mmapped_data = setup_replica(&data, &replica_path);
 
     let public_params = StackedCompound::setup(&setup_params).expect("setup failed");
-    let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, _>::replicate(
-        &public_params.vanilla_params,
+    let (tau, p_aux, t_aux) = StackedDrg::<Tree, _>::transform_and_replicate_layers(
+        &public_params.vanilla_params.graph,
+        &public_params.vanilla_params.layer_challenges,
         &replica_id.into(),
         (mmapped_data.as_mut()).into(),
         None,

@@ -21,12 +21,9 @@ use storage_proofs_core::{
     util::default_rows_to_discard,
     TEST_SEED,
 };
-use storage_proofs_porep::{
-    stacked::{
-        LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedCompound, StackedDrg,
-        TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
-    },
-    PoRep,
+use storage_proofs_porep::stacked::{
+    LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedCompound, StackedDrg,
+    TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
 };
 use tempfile::tempdir;
 
@@ -91,8 +88,9 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
     };
 
     let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
-    let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, Sha256Hasher>::replicate(
-        &pp,
+    let (tau, p_aux, t_aux) = StackedDrg::<Tree, Sha256Hasher>::transform_and_replicate_layers(
+        &pp.graph,
+        &pp.layer_challenges,
         &replica_id.into(),
         (mmapped_data.as_mut()).into(),
         None,
