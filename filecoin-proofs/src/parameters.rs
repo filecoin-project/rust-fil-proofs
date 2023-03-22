@@ -1,11 +1,11 @@
 use anyhow::{ensure, Result};
-use storage_proofs_core::{api_version::ApiVersion, proof::ProofScheme};
+use storage_proofs_core::proof::ProofScheme;
 use storage_proofs_porep::stacked::{self, LayerChallenges, StackedDrg};
 use storage_proofs_post::fallback::{self, FallbackPoSt};
 
 use crate::{
     constants::{DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS},
-    types::{MerkleTreeTrait, PaddedBytesAmount, PoStConfig},
+    types::{MerkleTreeTrait, PoRepConfig, PoStConfig},
     POREP_MINIMUM_CHALLENGES,
 };
 
@@ -16,17 +16,9 @@ type WindowPostSetupParams = fallback::SetupParams;
 pub type WindowPostPublicParams = fallback::PublicParams;
 
 pub fn public_params<Tree: 'static + MerkleTreeTrait>(
-    sector_bytes: PaddedBytesAmount,
-    partitions: usize,
-    porep_id: [u8; 32],
-    api_version: ApiVersion,
+    porep_config: &PoRepConfig,
 ) -> Result<stacked::PublicParams<Tree>> {
-    StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params(
-        sector_bytes,
-        partitions,
-        porep_id,
-        api_version,
-    )?)
+    StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params(porep_config)?)
 }
 
 pub fn winning_post_public_params<Tree: 'static + MerkleTreeTrait>(
@@ -75,16 +67,11 @@ pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupPara
     }
 }
 
-pub fn setup_params(
-    sector_bytes: PaddedBytesAmount,
-    partitions: usize,
-    porep_id: [u8; 32],
-    api_version: ApiVersion,
-) -> Result<stacked::SetupParams> {
-    // FIXME: wire in use_synthetic
-    let use_synthetic = false;
+pub fn setup_params(porep_config: &PoRepConfig) -> Result<stacked::SetupParams> {
+    let use_synthetic = false; // FIXME
+    let sector_bytes = porep_config.padded_bytes_amount();
     let layer_challenges = select_challenges(
-        partitions,
+        usize::from(porep_config.partitions),
         POREP_MINIMUM_CHALLENGES.from_sector_size(u64::from(sector_bytes)),
         *LAYERS
             .read()
@@ -109,9 +96,10 @@ pub fn setup_params(
         nodes,
         degree,
         expansion_degree,
-        porep_id,
+        porep_id: porep_config.porep_id,
         layer_challenges,
-        api_version,
+        api_version: porep_config.api_version,
+        api_features: porep_config.api_features.clone(),
     })
 }
 
@@ -150,13 +138,15 @@ mod tests {
 
     #[test]
     fn test_winning_post_params() {
+        use storage_proofs_core::api_version::ApiVersion;
+
         let config = PoStConfig {
             typ: PoStType::Winning,
             priority: false,
             challenge_count: 66,
             sector_count: 1,
             sector_size: 2048u64.into(),
-            api_version: ApiVersion::V1_0_0,
+            api_version: ApiVersion::V1_2_0,
         };
 
         let params =

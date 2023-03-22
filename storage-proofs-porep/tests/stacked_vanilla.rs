@@ -114,7 +114,8 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
         expansion_degree: EXP_DEGREE,
         porep_id: [32; 32],
         layer_challenges: layer_challenges.clone(),
-        api_version: ApiVersion::V1_1_0,
+        api_version: ApiVersion::V1_2_0,
+        api_features: vec![],
     };
 
     let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -221,7 +222,8 @@ fn test_stacked_porep_resume_seal() {
         expansion_degree: EXP_DEGREE,
         porep_id: [32; 32],
         layer_challenges: layer_challenges.clone(),
-        api_version: ApiVersion::V1_1_0,
+        api_version: ApiVersion::V1_2_0,
+        api_features: vec![],
     };
 
     let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -380,7 +382,8 @@ fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Laye
         expansion_degree,
         porep_id: arbitrary_porep_id,
         layer_challenges: challenges,
-        api_version: ApiVersion::V1_1_0,
+        api_version: ApiVersion::V1_2_0,
+        api_features: vec![],
     };
 
     let pp = StackedDrg::<Tree, Blake2sHasher>::setup(&sp).expect("setup failed");
@@ -454,7 +457,8 @@ fn test_stacked_porep_setup_terminates() {
         expansion_degree,
         porep_id: [32; 32],
         layer_challenges,
-        api_version: ApiVersion::V1_1_0,
+        api_version: ApiVersion::V1_2_0,
+        api_features: vec![],
     };
 
     // When this fails, the call to setup should panic, but seems to actually hang (i.e. neither return nor panic) for some reason.
@@ -522,6 +526,36 @@ fn test_stacked_porep_generate_labels() {
         replica_id,
         porep_id,
         ApiVersion::V1_1_0,
+        Fr::from_u64s_le(&[
+            0x22ab81cf68c4676d,
+            0x7a77a82fc7c9c189,
+            0xc6c03d32c1e42d23,
+            0x0f777c18cc2c55bd,
+        ])
+        .unwrap(),
+    );
+
+    test_generate_labels_aux(
+        nodes_2k,
+        layers,
+        replica_id,
+        porep_id,
+        ApiVersion::V1_2_0,
+        Fr::from_u64s_le(&[
+            0xabb3f38bb70defcf,
+            0x777a2e4d7769119f,
+            0x3448959d495490bc,
+            0x06021188c7a71cb5,
+        ])
+        .unwrap(),
+    );
+
+    test_generate_labels_aux(
+        nodes_4k,
+        layers,
+        replica_id,
+        porep_id,
+        ApiVersion::V1_2_0,
         Fr::from_u64s_le(&[
             0x22ab81cf68c4676d,
             0x7a77a82fc7c9c189,

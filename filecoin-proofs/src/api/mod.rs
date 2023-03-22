@@ -291,12 +291,7 @@ where
             <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
         ),
     );
-    let pp = public_params(
-        porep_config.padded_bytes_amount(),
-        usize::from(porep_config.partitions),
-        porep_config.porep_id,
-        porep_config.api_version,
-    )?;
+    let pp = public_params(porep_config)?;
 
     let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();
     let num_bytes_padded: PaddedBytesAmount = num_bytes.into();

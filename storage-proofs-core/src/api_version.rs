@@ -143,5 +143,5 @@ fn test_api_version_order() {
 fn test_api_feature_synthetic_porep() {
     let feature = ApiFeature::SyntheticPoRep;
     assert!(feature.first_supported_version() == ApiVersion::V1_2_0);
-    assert!(feature.last_supported_version() == None);
+    assert!(feature.last_supported_version().is_none());
 }

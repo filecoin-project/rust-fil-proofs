@@ -88,6 +88,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
         porep_id: arbitrary_porep_id,
         layer_challenges,
         api_version: ApiVersion::V1_1_0,
+        api_features: vec![],
     };
 
     let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");

@@ -32,13 +32,8 @@ use structopt::StructOpt;
 fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) {
     info!("generating PoRep groth params");
 
-    let public_params = public_params(
-        porep_config.padded_bytes_amount(),
-        usize::from(porep_config.partitions),
-        porep_config.porep_id,
-        porep_config.api_version,
-    )
-    .expect("failed to get public params from config");
+    let public_params =
+        public_params(&porep_config).expect("failed to get public params from config");
 
     let circuit = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
         StackedDrg<Tree, DefaultPieceHasher>,
