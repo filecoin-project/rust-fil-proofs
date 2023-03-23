@@ -30,6 +30,7 @@ use storage_proofs_core::{
     },
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
+    settings::SETTINGS,
 };
 use storage_proofs_porep::stacked::{StackedDrg, TreeRElementData};
 
@@ -757,7 +758,7 @@ where
             .read_range(start..end)
             .expect("failed to read from source");
 
-        if StackedDrg::<TreeR, TreeDHasher>::use_gpu_tree_builder() {
+        if SETTINGS.use_gpu_tree_builder::<TreeR>() {
             Ok(TreeRElementData::FrList(
                 tree_data.into_par_iter().map(|x| x.into()).collect(),
             ))

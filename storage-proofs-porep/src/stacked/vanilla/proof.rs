@@ -1,4 +1,3 @@
-use std::any::TypeId;
 use std::fs;
 use std::marker::PhantomData;
 use std::panic::panic_any;
@@ -10,7 +9,7 @@ use bincode::deserialize;
 use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
 use ff::PrimeField;
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher, PoseidonArity};
+use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0, U11, U2, U8};
 use lazy_static::lazy_static;
 use log::{error, info, trace, warn};
@@ -436,20 +435,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         Ok(tree)
     }
 
-    // Even if the column builder is enabled, the GPU column builder
-    // only supports Poseidon hashes.
-    pub fn use_gpu_column_builder() -> bool {
-        SETTINGS.use_gpu_column_builder
-            && TypeId::of::<Tree::Hasher>() == TypeId::of::<PoseidonHasher>()
-    }
-
-    // Even if the tree builder is enabled, the GPU tree builder
-    // only supports Poseidon hashes.
-    pub fn use_gpu_tree_builder() -> bool {
-        SETTINGS.use_gpu_tree_builder
-            && TypeId::of::<Tree::Hasher>() == TypeId::of::<PoseidonHasher>()
-    }
-
     #[cfg(any(feature = "cuda", feature = "opencl"))]
     fn generate_tree_c<ColumnArity, TreeArity>(
         layers: usize,
@@ -462,7 +447,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         ColumnArity: 'static + PoseidonArity,
         TreeArity: PoseidonArity,
     {
-        if Self::use_gpu_column_builder() {
+        if SETTINGS.use_gpu_column_builder::<Tree>() {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
                 layers,
                 nodes_count,
@@ -869,7 +854,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         start: usize,
         end: usize,
     ) -> Result<TreeRElementData<Tree>> {
-        if Self::use_gpu_tree_builder() {
+        if SETTINGS.use_gpu_tree_builder::<Tree>() {
             use fr32::bytes_into_fr;
 
             let mut layer_bytes = vec![0u8; (end - start) * std::mem::size_of::<Fr>()];
@@ -935,7 +920,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             None => Self::prepare_tree_r_data,
         };
 
-        if Self::use_gpu_tree_builder() {
+        if SETTINGS.use_gpu_tree_builder::<Tree>() {
             Self::generate_tree_r_last_gpu::<TreeArity>(
                 data,
                 nodes_count,
@@ -1504,7 +1489,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             tree_count,
         )?;
 
-        if Self::use_gpu_tree_builder() {
+        if SETTINGS.use_gpu_tree_builder::<Tree>() {
             info!("generating tree r last using the GPU");
             let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
 
@@ -1734,7 +1719,7 @@ mod tests {
     use super::*;
 
     use crate::stacked::EXP_DEGREE;
-    use filecoin_hashers::sha256::Sha256Hasher;
+    use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher};
     use storage_proofs_core::{api_version::ApiVersion, drgraph::BASE_DEGREE};
     use tempfile::tempdir;
 
