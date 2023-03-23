@@ -32,6 +32,7 @@ use storage_proofs_core::{
     },
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
+    settings::SETTINGS,
 };
 use storage_proofs_porep::stacked::{StackedDrg, TreeRElementData};
 
@@ -359,7 +360,7 @@ pub fn prepare_tree_r_data<Tree: 'static + MerkleTreeTrait>(
         .read_range(start..end)
         .expect("failed to read from source");
 
-    if StackedDrg::<Tree, TreeDHasher>::use_gpu_tree_builder() {
+    if SETTINGS.use_gpu_tree_builder::<Tree>() {
         Ok(TreeRElementData::FrList(
             tree_data.into_par_iter().map(|x| x.into()).collect(),
         ))
