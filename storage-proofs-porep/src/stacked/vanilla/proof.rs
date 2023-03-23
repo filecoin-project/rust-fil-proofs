@@ -676,7 +676,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     // storage_proofs_core::merkle::create_base_merkle_tree, this
     // method requires the data on disk to be exactly the same size as
     // the tree length / NODE_SIZE.
-    pub fn build_binary_tree<K: Hasher>(
+    fn build_binary_tree<K: Hasher>(
         tree_data: &[u8],
         config: StoreConfig,
     ) -> Result<BinaryMerkleTree<K>> {
