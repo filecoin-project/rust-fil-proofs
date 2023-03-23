@@ -1,14 +1,14 @@
 use std::fs::remove_file;
 
 use blstrs::Scalar as Fr;
-use ff::{Field, PrimeField};
+use ff::Field;
 use filecoin_hashers::{
     blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
 };
 use fr32::fr_into_bytes;
 use generic_array::typenum::{U0, U2, U4, U8};
 use glob::glob;
-use merkletree::store::{Store, StoreConfig};
+use merkletree::store::StoreConfig;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
@@ -19,12 +19,12 @@ use storage_proofs_core::{
     proof::ProofScheme,
     table_tests,
     test_helper::setup_replica,
-    util::{default_rows_to_discard, NODE_SIZE},
+    util::default_rows_to_discard,
     TEST_SEED,
 };
 use storage_proofs_porep::stacked::{
-    LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedBucketGraph, StackedDrg,
-    TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
+    LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedDrg, TemporaryAux,
+    TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
 };
 use tempfile::tempdir;
 
@@ -440,121 +440,4 @@ fn test_stacked_porep_setup_terminates() {
     // When working as designed, the call to setup returns without error.
     let _pp = StackedDrg::<DiskTree<Sha256Hasher, U8, U0, U0>, Blake2sHasher>::setup(&sp)
         .expect("setup failed");
-}
-
-#[test]
-fn test_stacked_porep_generate_labels() {
-    let layers = 11;
-    let nodes_2k = 1 << 11;
-    let nodes_4k = 1 << 12;
-    let replica_id = [9u8; 32];
-    let legacy_porep_id = [0; 32];
-    let porep_id = [123; 32];
-    test_generate_labels_aux(
-        nodes_2k,
-        layers,
-        replica_id,
-        legacy_porep_id,
-        ApiVersion::V1_0_0,
-        Fr::from_u64s_le(&[
-            0xd3faa96b9a0fba04,
-            0xea81a283d106485e,
-            0xe3d51b9afa5ac2b3,
-            0x0462f4f4f1a68d37,
-        ])
-        .unwrap(),
-    );
-
-    test_generate_labels_aux(
-        nodes_4k,
-        layers,
-        replica_id,
-        legacy_porep_id,
-        ApiVersion::V1_0_0,
-        Fr::from_u64s_le(&[
-            0x7e191e52c4a8da86,
-            0x5ae8a1c9e6fac148,
-            0xce239f3b88a894b8,
-            0x234c00d1dc1d53be,
-        ])
-        .unwrap(),
-    );
-
-    test_generate_labels_aux(
-        nodes_2k,
-        layers,
-        replica_id,
-        porep_id,
-        ApiVersion::V1_1_0,
-        Fr::from_u64s_le(&[
-            0xabb3f38bb70defcf,
-            0x777a2e4d7769119f,
-            0x3448959d495490bc,
-            0x06021188c7a71cb5,
-        ])
-        .unwrap(),
-    );
-
-    test_generate_labels_aux(
-        nodes_4k,
-        layers,
-        replica_id,
-        porep_id,
-        ApiVersion::V1_1_0,
-        Fr::from_u64s_le(&[
-            0x22ab81cf68c4676d,
-            0x7a77a82fc7c9c189,
-            0xc6c03d32c1e42d23,
-            0x0f777c18cc2c55bd,
-        ])
-        .unwrap(),
-    );
-}
-
-fn test_generate_labels_aux(
-    sector_size: usize,
-    layers: usize,
-    replica_id: [u8; 32],
-    porep_id: [u8; 32],
-    api_version: ApiVersion,
-    expected_last_label: Fr,
-) {
-    let nodes = sector_size / NODE_SIZE;
-
-    let cache_dir = tempdir().expect("tempdir failure");
-    let config = StoreConfig::new(
-        cache_dir.path(),
-        CacheKey::CommDTree.to_string(),
-        nodes.trailing_zeros() as usize,
-    );
-
-    let graph = StackedBucketGraph::<PoseidonHasher>::new(
-        None,
-        nodes,
-        BASE_DEGREE,
-        EXP_DEGREE,
-        porep_id,
-        api_version,
-    )
-    .unwrap();
-
-    let unused_layer_challenges = LayerChallenges::new(layers, 0);
-
-    let labels = StackedDrg::<
-        // Although not generally correct for every size, the hasher shape is not used,
-        // so for purposes of testing label creation, it is safe to supply a dummy.
-        DiskTree<PoseidonHasher, U8, U8, U2>,
-        Sha256Hasher,
-    >::generate_labels_for_decoding(
-        &graph,
-        &unused_layer_challenges,
-        &<PoseidonHasher as Hasher>::Domain::try_from_bytes(&replica_id).unwrap(),
-        config,
-    )
-    .unwrap();
-
-    let final_labels = labels.labels_for_last_layer().unwrap();
-    let last_label = final_labels.read_at(nodes - 1).unwrap();
-
-    assert_eq!(expected_last_label.to_repr(), last_label.0);
 }

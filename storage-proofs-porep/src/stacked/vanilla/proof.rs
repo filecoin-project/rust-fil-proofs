@@ -369,7 +369,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     }
 
     /// Generates the layers, as needed for decoding.
-    pub fn generate_labels_for_decoding(
+    fn generate_labels_for_decoding(
         graph: &StackedBucketGraph<Tree::Hasher>,
         layer_challenges: &LayerChallenges,
         replica_id: &<Tree::Hasher as Hasher>::Domain,
@@ -1726,5 +1726,137 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         };
 
         Ok((comm_r, p_aux))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::stacked::EXP_DEGREE;
+    use filecoin_hashers::sha256::Sha256Hasher;
+    use storage_proofs_core::{api_version::ApiVersion, drgraph::BASE_DEGREE};
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_stacked_porep_generate_labels() {
+        let layers = 11;
+        let nodes_2k = 1 << 11;
+        let nodes_4k = 1 << 12;
+        let replica_id = [9u8; 32];
+        let legacy_porep_id = [0; 32];
+        let porep_id = [123; 32];
+        test_generate_labels_aux(
+            nodes_2k,
+            layers,
+            replica_id,
+            legacy_porep_id,
+            ApiVersion::V1_0_0,
+            Fr::from_u64s_le(&[
+                0xd3faa96b9a0fba04,
+                0xea81a283d106485e,
+                0xe3d51b9afa5ac2b3,
+                0x0462f4f4f1a68d37,
+            ])
+            .unwrap(),
+        );
+
+        test_generate_labels_aux(
+            nodes_4k,
+            layers,
+            replica_id,
+            legacy_porep_id,
+            ApiVersion::V1_0_0,
+            Fr::from_u64s_le(&[
+                0x7e191e52c4a8da86,
+                0x5ae8a1c9e6fac148,
+                0xce239f3b88a894b8,
+                0x234c00d1dc1d53be,
+            ])
+            .unwrap(),
+        );
+
+        test_generate_labels_aux(
+            nodes_2k,
+            layers,
+            replica_id,
+            porep_id,
+            ApiVersion::V1_1_0,
+            Fr::from_u64s_le(&[
+                0xabb3f38bb70defcf,
+                0x777a2e4d7769119f,
+                0x3448959d495490bc,
+                0x06021188c7a71cb5,
+            ])
+            .unwrap(),
+        );
+
+        test_generate_labels_aux(
+            nodes_4k,
+            layers,
+            replica_id,
+            porep_id,
+            ApiVersion::V1_1_0,
+            Fr::from_u64s_le(&[
+                0x22ab81cf68c4676d,
+                0x7a77a82fc7c9c189,
+                0xc6c03d32c1e42d23,
+                0x0f777c18cc2c55bd,
+            ])
+            .unwrap(),
+        );
+    }
+
+    fn test_generate_labels_aux(
+        sector_size: usize,
+        layers: usize,
+        replica_id: [u8; 32],
+        porep_id: [u8; 32],
+        api_version: ApiVersion,
+        expected_last_label: Fr,
+    ) {
+        let nodes = sector_size / NODE_SIZE;
+
+        let cache_dir = tempdir().expect("tempdir failure");
+        let config = StoreConfig::new(
+            cache_dir.path(),
+            CacheKey::CommDTree.to_string(),
+            nodes.trailing_zeros() as usize,
+        );
+
+        let graph = StackedBucketGraph::<PoseidonHasher>::new(
+            None,
+            nodes,
+            BASE_DEGREE,
+            EXP_DEGREE,
+            porep_id,
+            api_version,
+        )
+        .expect("failed to create graph");
+
+        let unused_layer_challenges = LayerChallenges::new(layers, 0);
+
+        let labels = StackedDrg::<
+            // Although not generally correct for every size, the hasher shape is not used,
+            // so for purposes of testing label creation, it is safe to supply a dummy.
+            DiskTree<PoseidonHasher, U8, U8, U2>,
+            Sha256Hasher,
+        >::generate_labels_for_decoding(
+            &graph,
+            &unused_layer_challenges,
+            &<PoseidonHasher as Hasher>::Domain::try_from_bytes(&replica_id)
+                .expect("failed conversion to bytes"),
+            config,
+        )
+        .expect("failed to create labels");
+
+        let final_labels = labels
+            .labels_for_last_layer()
+            .expect("failed to get labels");
+        let last_label = final_labels
+            .read_at(nodes - 1)
+            .expect("failed to get last label");
+
+        assert_eq!(expected_last_label.to_repr(), last_label.0);
     }
 }
