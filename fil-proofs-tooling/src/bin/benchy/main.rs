@@ -82,6 +82,14 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
+            Arg::new("task_numbers")
+                .long("task-numbers")
+                .required(false)
+                .help("The window-post parallels task numbers")
+                .default_value("1")
+                .takes_value(true),
+        )
+        .arg(
             Arg::new("api_version")
                 .long("api-version")
                 .help("The api_version to use (default: 1.1.0)")
@@ -221,17 +229,48 @@ fn main() -> Result<()> {
             let cache_dir = m.value_of_t::<String>("cache")?;
             let sector_size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;
             let api_version = ApiVersion::from_str(&m.value_of_t::<String>("api_version")?)?;
-            window_post::run(
-                sector_size,
-                api_version,
-                cache_dir,
-                preserve_cache,
-                skip_precommit_phase1,
-                skip_precommit_phase2,
-                skip_commit_phase1,
-                skip_commit_phase2,
-                test_resume,
-            )?;
+            let task_numbers = m.value_of_t::<usize>("task_numbers")?;
+
+            if task_numbers == 1 {
+                window_post::run(
+                    sector_size,
+                    api_version,
+                    cache_dir,
+                    preserve_cache,
+                    skip_precommit_phase1,
+                    skip_precommit_phase2,
+                    skip_commit_phase1,
+                    skip_commit_phase2,
+                    test_resume,
+                )?;
+            } else {
+                let cache_dir: Vec<&str> = cache_dir.split(',').collect();
+                if cache_dir.len() != task_numbers {
+                    panic!("cache_dir.len() != task_numbers");
+                }
+                let mut children = Vec::new();
+                for i in 0..task_numbers {
+                    let task_dir = String::from(cache_dir[i]);
+                    let t = std::thread::spawn( move || {
+                        window_post::run(
+                            sector_size,
+                            api_version,
+                            task_dir,
+                            preserve_cache,
+                            skip_precommit_phase1,
+                            skip_precommit_phase2,
+                            skip_commit_phase1,
+                            skip_commit_phase2,
+                            test_resume,
+                        ).expect("window_post run error");
+                    });
+                    children.push(t);
+                }
+
+                for child in children {
+                child.join().expect("oops! the child thread panicked");
+                }
+            }
         }
         Some(("winning-post", m)) => {
             let sector_size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;

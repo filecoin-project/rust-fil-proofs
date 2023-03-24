@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::fs::{create_dir, read, read_to_string, remove_dir_all, File, OpenOptions};
+use std::fs::{create_dir_all, read, read_to_string, remove_dir_all, File, OpenOptions};
 use std::io::{stdout, Seek, Write};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -616,7 +616,7 @@ pub fn run(
     };
 
     if !cache_dir.exists() {
-        create_dir(&cache_dir)?;
+        create_dir_all(&cache_dir)?;
     }
     info!("Using cache directory {:?}", cache_dir);
 
