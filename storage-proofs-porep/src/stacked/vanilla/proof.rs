@@ -1,12 +1,13 @@
 use std::any::TypeId;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::marker::PhantomData;
 use std::panic::panic_any;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use anyhow::Context;
-use bincode::deserialize;
+use bincode::{deserialize, serialize};
 use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
 use ff::PrimeField;
@@ -40,7 +41,7 @@ use yastl::Pool;
 use crate::{
     encode::{decode, encode, encode_fr},
     stacked::vanilla::{
-        challenges::LayerChallenges,
+        challenges::{synthetic::SYNTHETIC_POREP_VANILLA_PROOFS_KEY, LayerChallenges},
         column::Column,
         create_label,
         graph::StackedBucketGraph,
@@ -146,12 +147,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 .collect()
         };
 
-        (0..partition_count)
+        let vanilla_proofs = (0..partition_count)
             .map(|k| {
                 trace!("proving partition {}/{}", k + 1, partition_count);
 
                 // Derive the set of challenges we are proving over.
-                let challenges = pub_inputs.challenges(layer_challenges, graph_size, Some(k));
+                let challenges = pub_inputs.challenges(layer_challenges, graph_size, Some(k), partition_count);
+                trace!("[Vanilla] Partition {} / {}, Nodes {}, RequiredChallengesPerPartition {}, NumChallengesGenerated {}", k, partition_count, graph_size / NODE_SIZE, layer_challenges.challenges_count_all(), challenges.len());
 
                 // Stacked commitment specifics
                 challenges
@@ -287,7 +289,37 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     })
                     .collect()
             })
-            .collect()
+            .collect::<Result<Vec<Vec<Proof<Tree, G>>>>>();
+
+        // If we are using Synthetic PoRep, we need to persist all of
+        // the vanilla proofs here.
+        let vanilla_proofs = if layer_challenges.use_synthetic && vanilla_proofs.is_ok() {
+            let cache_path = t_aux
+                .t_aux
+                .tree_d_config
+                .path
+                .clone()
+                .join(SYNTHETIC_POREP_VANILLA_PROOFS_KEY);
+
+            trace!("Storing all synthetic vanilla proofs at {:?}", cache_path);
+            let mut f_syn_vanilla_proofs = File::create(&cache_path)
+                .with_context(|| format!("could not create file {:?}", cache_path))?;
+            let vp = vanilla_proofs
+                .expect("failed to retrieve vanilla proofs")
+                .clone();
+            let syn_vanilla_proofs_bytes = serialize(&vp)?;
+            f_syn_vanilla_proofs
+                .write_all(&syn_vanilla_proofs_bytes)
+                .with_context(|| format!("could not write to file {:?}", cache_path))?;
+
+            trace!("Stored all synthetic vanilla proofs at {:?}", cache_path);
+
+            Ok(vp)
+        } else {
+            vanilla_proofs
+        };
+
+        vanilla_proofs
     }
 
     pub(crate) fn extract_and_invert_transform_layers(

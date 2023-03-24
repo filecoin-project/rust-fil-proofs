@@ -28,6 +28,10 @@ impl<H: Hasher> EncodingProof<H> {
         }
     }
 
+    pub fn node(&self) -> u64 {
+        self.node
+    }
+
     fn create_key(&self, replica_id: &H::Domain) -> H::Domain {
         let mut hasher = Sha256::new();
         let mut buffer = [0u8; 64];

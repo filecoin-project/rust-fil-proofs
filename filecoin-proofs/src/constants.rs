@@ -54,7 +54,7 @@ impl PorepMinimumChallenges {
             [
                 (SECTOR_SIZE_2_KIB, 2),
                 (SECTOR_SIZE_4_KIB, 2),
-                (SECTOR_SIZE_16_KIB, 2),
+                (SECTOR_SIZE_16_KIB, 176),
                 (SECTOR_SIZE_32_KIB, 2),
                 (SECTOR_SIZE_8_MIB, 2),
                 (SECTOR_SIZE_16_MIB, 2),
@@ -92,7 +92,7 @@ lazy_static! {
         [
             (SECTOR_SIZE_2_KIB, 1),
             (SECTOR_SIZE_4_KIB, 1),
-            (SECTOR_SIZE_16_KIB, 1),
+            (SECTOR_SIZE_16_KIB, 10),
             (SECTOR_SIZE_32_KIB, 1),
             (SECTOR_SIZE_8_MIB, 1),
             (SECTOR_SIZE_16_MIB, 1),
@@ -109,7 +109,7 @@ lazy_static! {
         [
             (SECTOR_SIZE_2_KIB, 2),
             (SECTOR_SIZE_4_KIB, 2),
-            (SECTOR_SIZE_16_KIB, 2),
+            (SECTOR_SIZE_16_KIB, 11),
             (SECTOR_SIZE_32_KIB, 2),
             (SECTOR_SIZE_8_MIB, 2),
             (SECTOR_SIZE_16_MIB, 2),

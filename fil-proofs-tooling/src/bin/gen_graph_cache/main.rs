@@ -7,8 +7,8 @@ use anyhow::Result;
 use clap::{Arg, Command};
 use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_proofs::{
-    with_shape, DRG_DEGREE, EXP_DEGREE, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB,
-    SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
+    with_shape, DRG_DEGREE, EXP_DEGREE, SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB, SECTOR_SIZE_8_MIB,
 };
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{api_version::ApiVersion, merkle::MerkleTreeTrait, proof::ProofScheme};
@@ -97,7 +97,7 @@ fn main() -> Result<()> {
     // If this value changes, previously existing cache files will no longer be
     // used and new cache files will be generated.
     let sector_sizes_and_porep_ids: Vec<(u64, [u8; 32], ApiVersion)> = vec![
-        (
+        /*        (
             SECTOR_SIZE_2_KIB,
             [
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -176,6 +176,15 @@ fn main() -> Result<()> {
                 0, 0, 0, 0,
             ],
             ApiVersion::V1_1_0,
+        ),*/
+        (
+            // FIXME: TESTING ONLY
+            SECTOR_SIZE_16_KIB, // v1.2.0
+            [
+                129, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0,
+            ],
+            ApiVersion::V1_2_0,
         ),
     ];
 

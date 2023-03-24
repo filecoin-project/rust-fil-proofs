@@ -130,10 +130,17 @@ impl<T: Domain, S: Domain> PublicInputs<T, S> {
         layer_challenges: &LayerChallenges,
         leaves: usize,
         partition_k: Option<usize>,
+        partition_count: usize,
     ) -> Vec<usize> {
         let k = partition_k.unwrap_or(0);
 
-        layer_challenges.derive::<T>(leaves, &self.replica_id, &self.seed, k as u8)
+        layer_challenges.derive::<T>(
+            leaves,
+            &self.replica_id,
+            &self.seed,
+            k as u8,
+            partition_count,
+        )
     }
 }
 

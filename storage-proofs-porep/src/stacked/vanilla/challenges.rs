@@ -21,7 +21,7 @@ pub struct LayerChallenges {
     layers: usize,
     /// The maximum count of challenges
     max_count: usize,
-    use_synthetic: bool,
+    pub use_synthetic: bool,
 }
 
 /// Note that since this is used in the PublicParams 'identifier'
@@ -54,10 +54,6 @@ impl LayerChallenges {
         self.max_count
     }
 
-    pub fn use_synthetic(&self) -> bool {
-        self.use_synthetic
-    }
-
     /// Derive all challenges.
     pub fn derive<D: Domain>(
         &self,
@@ -65,10 +61,11 @@ impl LayerChallenges {
         replica_id: &D,
         seed: &[u8; 32],
         k: u8,
+        partition_count: usize,
     ) -> Vec<usize> {
         if self.use_synthetic {
             trace!("LayerChallenges using Synthetic Challenges");
-            self.derive_synthetic_internal(leaves, replica_id)
+            self.derive_synthetic_internal(leaves, replica_id, k, partition_count)
         } else {
             trace!("LayerChallenges using Layer Challenges");
             self.derive_internal(self.challenges_count_all(), leaves, replica_id, seed, k)
@@ -105,16 +102,42 @@ impl LayerChallenges {
         &self,
         leaves: usize,
         replica_id: &D,
+        k: u8,
+        partition_count: usize,
     ) -> Vec<usize> {
         use blstrs::Scalar as Fr;
         assert!(leaves > 2, "Too few leaves: {}", leaves);
 
-        // FIXME: better way to convert Domain to Scalar?
         let mut id = [0u8; 32];
         id[..].copy_from_slice(&replica_id.into_bytes());
-        let generator = SynthChallenges::default_chacha20(leaves, &Fr::from_bytes_le(&id).unwrap());
 
-        generator.collect()
+        let mut generator =
+            SynthChallenges::default_chacha20(leaves, &Fr::from_bytes_le(&id).unwrap());
+
+        let total_challenges = SynthChallenges::get_challenge_count(leaves);
+        let start_offset = (total_challenges / self.challenges_count_all()) * (k as usize);
+
+        trace!(
+            "GENERATOR IS SEEKING TO {} FROM SPECIFIED PARTITION {}",
+            start_offset,
+            k
+        );
+        generator.seek(start_offset);
+
+        let challenges: Vec<usize> = generator.collect();
+
+        if k == 0 && partition_count == 1 {
+            // For test sectors with a single partition, we return ALL synth challenges here.
+            challenges
+        } else {
+            // For production sectors with multiple partitions, we
+            // return only the synth challenges required for this
+            // partition here.
+            challenges
+                .into_iter()
+                .take(self.challenges_count_all())
+                .collect()
+        }
     }
 }
 
@@ -139,6 +162,8 @@ pub mod synthetic {
     const DEFAULT_SYNTH_CHALLENGE_COUNT: usize = 1 << 14;
     const CHACHA20_NONCE: [u8; 12] = [0; 12];
     const CHACHA20_BLOCK_SIZE: u32 = 64;
+
+    pub const SYNTHETIC_POREP_VANILLA_PROOFS_KEY: &str = "SynPoRepVanillaProofs";
 
     // The psuedo-random function used to generate synthetic challenges.
     pub enum Prf {
@@ -246,15 +271,23 @@ pub mod synthetic {
         }
 
         #[inline]
-        pub fn default_sha256(sector_nodes: usize, replica_id: &Fr) -> Self {
+        pub fn get_challenge_count(sector_nodes: usize) -> usize {
             // If the default synthethic challenge count exceeds the number of sector nodes, then
             // challenge all sector nodes.
-            let num_synth_challenges = if sector_nodes < DEFAULT_SYNTH_CHALLENGE_COUNT {
+            if sector_nodes < DEFAULT_SYNTH_CHALLENGE_COUNT {
                 sector_nodes
             } else {
                 DEFAULT_SYNTH_CHALLENGE_COUNT
-            };
-            Self::new_sha256(sector_nodes, replica_id, num_synth_challenges)
+            }
+        }
+
+        #[inline]
+        pub fn default_sha256(sector_nodes: usize, replica_id: &Fr) -> Self {
+            Self::new_sha256(
+                sector_nodes,
+                replica_id,
+                Self::get_challenge_count(sector_nodes),
+            )
         }
 
         #[inline]
@@ -266,7 +299,11 @@ pub mod synthetic {
             } else {
                 DEFAULT_SYNTH_CHALLENGE_COUNT
             };
-            Self::new_chacha20(sector_nodes, replica_id, num_synth_challenges)
+            Self::new_chacha20(
+                sector_nodes,
+                replica_id,
+                Self::get_challenge_count(sector_nodes),
+            )
         }
 
         // Returns the `i`-th synthetic challenge.
@@ -403,7 +440,7 @@ mod test {
         for _layer in 1..=layers {
             let mut histogram = HashMap::new();
             for k in 0..partitions {
-                let challenges = challenges.derive(leaves, &replica_id, &seed, k as u8);
+                let challenges = challenges.derive(leaves, &replica_id, &seed, k as u8, partitions);
 
                 for challenge in challenges {
                     let counter = histogram.entry(challenge).or_insert(0);
@@ -474,7 +511,7 @@ mod test {
 
         for _layer in 1..=layers {
             let one_partition_challenges = LayerChallenges::new(layers, total_challenges, false)
-                .derive(leaves, &replica_id, &seed, 0);
+                .derive(leaves, &replica_id, &seed, 0, partitions);
             let many_partition_challenges = (0..partitions)
                 .flat_map(|k| {
                     LayerChallenges::new(layers, n, false).derive(
@@ -482,6 +519,7 @@ mod test {
                         &replica_id,
                         &seed,
                         k as u8,
+                        partitions,
                     )
                 })
                 .collect::<Vec<_>>();
