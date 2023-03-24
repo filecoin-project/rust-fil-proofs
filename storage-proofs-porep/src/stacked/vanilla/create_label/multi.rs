@@ -29,13 +29,17 @@ use storage_proofs_core::{
 use crate::stacked::vanilla::{
     cache::ParentCache,
     cores::{bind_core, checkout_core_group, CoreIndex},
-    create_label::{prepare_layers, read_layer, write_layer},
+    create_label::{prepare_layers, read_layer, write_layer, mz_write_layer, mz_read_layer_node},
     graph::{StackedBucketGraph, DEGREE, EXP_DEGREE},
     memory_handling::{setup_create_label_memory, CacheReader},
     params::{Labels, LabelsCache},
     proof::LayerState,
     utils::{memset, prepare_block, BitMask, RingBuf, UnsafeSlice},
 };
+
+//////// MZ PATCH ///////////
+use crate::stacked::vanilla::memory_handling::mz_setup_create_label_memory;
+//////// MZ PATCH END ///////////
 
 const MIN_BASE_PARENT_NODE: u64 = 2000;
 
@@ -631,6 +635,531 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
     Ok(LabelsCache::<Tree> { labels })
 }
+
+//////// MZ PATCH ///////////
+#[inline]
+fn mz_fill_buffer(
+    cur_node: u64,
+    parents_cache: &CacheReader<u32>,
+    mut cur_parent: &[u32], // parents for this node
+    layer_labels: &UnsafeSlice<'_, u32>,
+    exp_labels: Option<&UnsafeSlice<'_, u32>>, // None for layer0
+    buf: &mut [u8],
+    base_parent_missing: &mut BitMask,
+    layer_config: &StoreConfig,
+) {
+    let cur_node_swap = cur_node.to_be_bytes(); // Note switch to big endian
+    buf[36..44].copy_from_slice(&cur_node_swap); // update buf with current node
+
+    let layer_labels_size = 
+        unsafe { layer_labels.as_slice().len() * std::mem::size_of::<u32>() };
+
+    // Perform the first hash
+    let cur_node_ptr =
+        unsafe { &mut layer_labels.as_mut_slice()[(cur_node as usize * NODE_WORDS) % layer_labels_size..] };
+
+    cur_node_ptr[..8].copy_from_slice(&SHA256_INITIAL_DIGEST);
+    compress256!(cur_node_ptr, buf, 1);
+
+    // Fill in the base parents
+    // Node 5 (prev node) will always be missing, and there tend to be
+    // frequent close references.
+    if cur_node > MIN_BASE_PARENT_NODE {
+        // Mark base parent 5 as missing
+        // base_parent_missing.set_all(0x20);
+        base_parent_missing.set(5);
+
+        // Skip the last base parent - it always points to the preceding node,
+        // which we know is not ready and will be filled in the main loop
+        for k in 0..BASE_DEGREE - 1 {
+            unsafe {
+                if cur_parent[0] as u64 >= parents_cache.get_consumer() {
+                    // Node is not ready
+                    base_parent_missing.set(k);
+                } else {
+                    let mut data = vec![0u8; 4];
+                    let parent_data = {
+                        let offset = cur_parent[0] as usize * NODE_WORDS;
+
+                        let cur_and_parent_len = cur_node as usize * NODE_WORDS - offset;
+                        if cur_and_parent_len < layer_labels_size {
+                            // Hit layer_labels cache
+                            let relative_offset = offset % layer_labels_size;
+                            &layer_labels.as_slice()[relative_offset..relative_offset + NODE_WORDS].as_byte_slice()
+
+                        } else {
+                            // From disk
+                            mz_read_layer_node(layer_config, &mut data[..], offset as u64).expect("failed to read label node");
+                            &data[..]
+                        }
+                    };
+                    let a = SHA_BLOCK_SIZE + (NODE_SIZE * k);
+                    buf[a..a + NODE_SIZE].copy_from_slice(parent_data);
+                };
+
+                // Advance pointer for the last base parent
+                cur_parent = &cur_parent[1..];
+            }
+        }
+        // Advance pointer for the last base parent
+        cur_parent = &cur_parent[1..];
+    } else {
+        base_parent_missing.set_upto(BASE_DEGREE as u8);
+        cur_parent = &cur_parent[BASE_DEGREE..];
+    }
+
+    if let Some(exp_labels) = exp_labels {
+        // Read from each of the expander parent nodes
+        for k in BASE_DEGREE..DEGREE {
+            let parent_data = unsafe {
+                let offset = cur_parent[0] as usize * NODE_WORDS;
+                &exp_labels.as_slice()[offset..offset + NODE_WORDS]
+            };
+            let a = SHA_BLOCK_SIZE + (NODE_SIZE * k);
+            buf[a..a + NODE_SIZE].copy_from_slice(parent_data.as_byte_slice());
+            cur_parent = &cur_parent[1..];
+        }
+    }
+}
+
+// This implements a producer, i.e. a thread that pre-fills the buffer
+// with parent node data.
+// - cur_consumer - The node currently being processed (consumed) by the
+//                  hashing thread
+// - cur_producer - The next node to be filled in by producer threads. The
+//                  hashing thread can not yet work on this node.
+// - cur_awaiting - The first not not currently being filled by any producer
+//                  thread.
+// - stride       - Each producer fills in this many nodes at a time. Setting
+//                  this too small with cause a lot of time to be spent in
+//                  thread synchronization
+// - lookahead    - ring_buf size, in nodes
+// - base_parent_missing - Bit mask of any base parent nodes that could not
+//                         be filled in. This is an array of size lookahead.
+// - is_layer0    - Indicates first (no expander parents) or subsequent layer
+#[allow(clippy::too_many_arguments)]
+fn mz_create_label_runner(
+    parents_cache: &CacheReader<u32>,
+    layer_labels: &UnsafeSlice<'_, u32>,
+    exp_labels: Option<&UnsafeSlice<'_, u32>>, // None for layer 0
+    num_nodes: u64,
+    cur_producer: &AtomicU64,
+    cur_awaiting: &AtomicU64,
+    stride: u64,
+    lookahead: u64,
+    ring_buf: &RingBuf,
+    base_parent_missing: &UnsafeSlice<'_, BitMask>,
+    layer_config: &StoreConfig,
+) {
+    info!("created label runner");
+    // Label data bytes per node
+    loop {
+        // Get next work items
+        let work = cur_awaiting.fetch_add(stride, SeqCst);
+        if work >= num_nodes {
+            break;
+        }
+        let count = if work + stride > num_nodes {
+            num_nodes - work
+        } else {
+            stride
+        };
+
+        // Do the work of filling the buffers
+        for cur_node in work..work + count {
+            // Determine which node slot in the ring_buffer to use
+            // Note that node 0 does not use a buffer slot
+            let cur_slot = (cur_node - 1) % lookahead;
+
+            // Don't overrun the buffer
+            while cur_node > (parents_cache.get_consumer() + lookahead - 1) {
+                thread::sleep(Duration::from_micros(10));
+            }
+
+            let buf = unsafe { ring_buf.slot_mut(cur_slot as usize) };
+            let bpm = unsafe { base_parent_missing.get_mut(cur_slot as usize) };
+
+            let pc = unsafe { parents_cache.slice_at(cur_node as usize * DEGREE) };
+            mz_fill_buffer(
+                cur_node,
+                parents_cache,
+                pc,
+                layer_labels,
+                exp_labels,
+                buf,
+                bpm,
+                layer_config,
+            );
+        }
+
+        // Wait for the previous node to finish
+        while work > (cur_producer.load(SeqCst) + 1) {
+            thread::sleep(Duration::from_micros(10));
+        }
+
+        // Mark our work as done
+        cur_producer.fetch_add(count, SeqCst);
+    }
+}
+
+fn mz_create_layer_labels(
+    parents_cache: &CacheReader<u32>,
+    replica_id: &[u8],
+    layer_labels: &mut MmapMut,
+    exp_labels: Option<&mut MmapMut>,
+    num_nodes: u64,
+    cur_layer: u32,
+    core_group: Arc<Option<MutexGuard<'_, Vec<CoreIndex>>>>,
+    layer_config: &StoreConfig,
+) {
+    info!("Creating labels for layer {}", cur_layer);
+    // num_producers is the number of producer threads
+    let (lookahead, num_producers, producer_stride) = {
+        let settings = &SETTINGS;
+        let lookahead = settings.multicore_sdr_lookahead;
+        let num_producers = settings.multicore_sdr_producers;
+        // NOTE: Stride must not exceed the number of nodes in parents_cache's window. If it does, the process will deadlock
+        // with producers and consumers waiting for each other.
+        let producer_stride = settings
+            .multicore_sdr_producer_stride
+            .min(parents_cache.window_nodes() as u64);
+
+        (lookahead, num_producers, producer_stride)
+    };
+
+    const BYTES_PER_NODE: usize = (NODE_SIZE * DEGREE) + SHA_BLOCK_SIZE;
+
+    let mut ring_buf = RingBuf::new(BYTES_PER_NODE, lookahead);
+    let mut base_parent_missing = vec![BitMask::default(); lookahead];
+
+    // Fill in the fixed portion of all buffers
+    for buf in ring_buf.iter_slot_mut() {
+        prepare_block(replica_id, cur_layer, buf);
+    }
+
+    // Highest node that is ready from the producer
+    let cur_producer = AtomicU64::new(0);
+    // Next node to be filled
+    let cur_awaiting = AtomicU64::new(1);
+
+    // These UnsafeSlices are managed through the 2 Atomics above and the `CacheReader`, to
+    // minimize any locking overhead.
+    let layer_labels = UnsafeSlice::from_slice(
+        layer_labels
+            .as_mut_slice_of::<u32>()
+            .expect("failed as mut slice of"),
+    );
+    let exp_labels = exp_labels.map(|m| {
+        UnsafeSlice::from_slice(m.as_mut_slice_of::<u32>().expect("failed as mut slice of"))
+    });
+    let base_parent_missing = UnsafeSlice::from_slice(&mut base_parent_missing);
+
+    let layer_labels_len = unsafe { layer_labels.as_slice().len() };
+    let layer_labels_ptr = unsafe { std::mem::transmute::<&[u32], &[u8]>(layer_labels.as_mut_slice()) };
+
+    crossbeam::thread::scope(|s| {
+        let mut runners = Vec::with_capacity(num_producers);
+
+        for i in 0..num_producers {
+            let layer_labels = &layer_labels;
+            let exp_labels = exp_labels.as_ref();
+            let cur_producer = &cur_producer;
+            let cur_awaiting = &cur_awaiting;
+            let ring_buf = &ring_buf;
+            let base_parent_missing = &base_parent_missing;
+
+            let core_index = if let Some(cg) = &*core_group {
+                cg.get(i + 1)
+            } else {
+                None
+            };
+            runners.push(s.spawn(move |_| {
+                // This could fail, but we will ignore the error if so.
+                // It will be logged as a warning by `bind_core`.
+                debug!("binding core in producer thread {}", i);
+                // When `_cleanup_handle` is dropped, the previous binding of thread will be restored.
+                let _cleanup_handle = core_index.map(|c| bind_core(*c));
+
+                mz_create_label_runner(
+                    parents_cache,
+                    layer_labels,
+                    exp_labels,
+                    num_nodes,
+                    cur_producer,
+                    cur_awaiting,
+                    producer_stride,
+                    lookahead as u64,
+                    ring_buf,
+                    base_parent_missing,
+                    layer_config,
+                )
+            }));
+        }
+
+        let mut cur_node_ptr = unsafe { layer_labels.as_mut_slice() };
+        let mut cur_parent_ptr = unsafe { parents_cache.consumer_slice_at(DEGREE) };
+        let mut cur_parent_ptr_offset = DEGREE;
+
+        // Calculate node 0 (special case with no parents)
+        // Which is replica_id || cur_layer || 0
+        // TODO - Hash and save intermediate result: replica_id || cur_layer
+        let mut buf = [0u8; (NODE_SIZE * DEGREE) + 64];
+        prepare_block(replica_id, cur_layer, &mut buf);
+
+        cur_node_ptr[..8].copy_from_slice(&SHA256_INITIAL_DIGEST);
+        compress256!(cur_node_ptr, buf, 2);
+
+        // Fix endianess
+        cur_node_ptr[..8].iter_mut().for_each(|x| *x = x.to_be());
+
+        cur_node_ptr[7] &= 0x3FFF_FFFF; // Strip last two bits to ensure in Fr
+
+        // Keep track of which node slot in the ring_buffer to use
+        let mut cur_slot = 0;
+        let mut count_not_ready = 0;
+
+        // Calculate nodes 1 to n
+
+        // Skip first node.
+        parents_cache.store_consumer(1);
+        let mut i = 1;
+        while i < num_nodes {
+            // Ensure next buffer is ready
+            let mut counted = false;
+            let mut producer_val = cur_producer.load(SeqCst);
+
+            while producer_val < i {
+                if !counted {
+                    counted = true;
+                    count_not_ready += 1;
+                }
+                thread::sleep(Duration::from_micros(10));
+                producer_val = cur_producer.load(SeqCst);
+            }
+
+            // Process as many nodes as are ready
+            let ready_count = producer_val - i + 1;
+            for _count in 0..ready_count {
+                // If we have used up the last cache window's parent data, get some more.
+                if cur_parent_ptr.is_empty() {
+                    // Safety: values read from `cur_parent_ptr` before calling `increment_consumer`
+                    // must not be read again after.
+                    unsafe {
+                        cur_parent_ptr = parents_cache.consumer_slice_at(cur_parent_ptr_offset);
+                    }
+                }
+
+                // Only layer_labels buffer is not full, do increase.  
+                if (i % layer_labels_len as u64) != 0 {
+                    cur_node_ptr = &mut cur_node_ptr[8..];
+                }
+
+                // Grab the current slot of the ring_buf
+                let buf = unsafe { ring_buf.slot_mut(cur_slot) };
+                // Fill in the base parents
+                for k in 0..BASE_DEGREE {
+                    let bpm = unsafe { base_parent_missing.get(cur_slot) };
+                    if bpm.get(k) {
+                        let source = unsafe {
+                            // Sure, hit layer_labels cache
+                            let layer_labels_size = layer_labels.as_slice().len() * std::mem::size_of::<u32>();
+
+                            let start = (cur_parent_ptr[0] as usize * NODE_WORDS) % layer_labels_size;
+                            let end = start + NODE_WORDS;
+                            &layer_labels.as_slice()[start..end]
+                        };
+
+                        buf[64 + (NODE_SIZE * k)..64 + (NODE_SIZE * (k + 1))]
+                            .copy_from_slice(source.as_byte_slice());
+                    }
+                    cur_parent_ptr = &cur_parent_ptr[1..];
+                    cur_parent_ptr_offset += 1;
+                }
+
+                // Expanders are already all filled in (layer 1 doesn't use expanders)
+                cur_parent_ptr = &cur_parent_ptr[EXP_DEGREE..];
+                cur_parent_ptr_offset += EXP_DEGREE;
+
+                if cur_layer == 1 {
+                    // Six rounds of all base parents
+                    for _j in 0..6 {
+                        compress256!(cur_node_ptr, &buf[64..], 3);
+                    }
+
+                    // round 7 is only first parent
+                    memset(&mut buf[96..128], 0); // Zero out upper half of last block
+                    buf[96] = 0x80; // Padding
+                    buf[126] = 0x27; // Length (0x2700 = 9984 bits -> 1248 bytes)
+                    compress256!(cur_node_ptr, &buf[64..], 1);
+                } else {
+                    // Two rounds of all parents
+                    let blocks = [
+                        *GenericArray::<u8, U64>::from_slice(&buf[64..128]),
+                        *GenericArray::<u8, U64>::from_slice(&buf[128..192]),
+                        *GenericArray::<u8, U64>::from_slice(&buf[192..256]),
+                        *GenericArray::<u8, U64>::from_slice(&buf[256..320]),
+                        *GenericArray::<u8, U64>::from_slice(&buf[320..384]),
+                        *GenericArray::<u8, U64>::from_slice(&buf[384..448]),
+                        *GenericArray::<u8, U64>::from_slice(&buf[448..512]),
+                    ];
+                    sha2::compress256(
+                        (&mut cur_node_ptr[..8])
+                            .try_into()
+                            .expect("compress failed"),
+                        &blocks,
+                    );
+                    sha2::compress256(
+                        (&mut cur_node_ptr[..8])
+                            .try_into()
+                            .expect("compress failed"),
+                        &blocks,
+                    );
+
+                    // Final round is only nine parents
+                    memset(&mut buf[352..384], 0); // Zero out upper half of last block
+                    buf[352] = 0x80; // Padding
+                    buf[382] = 0x27; // Length (0x2700 = 9984 bits -> 1248 bytes)
+                    compress256!(cur_node_ptr, &buf[64..], 5);
+                }
+
+                // Fix endianess
+                cur_node_ptr[..8].iter_mut().for_each(|x| *x = x.to_be());
+
+                cur_node_ptr[7] &= 0x3FFF_FFFF; // Strip last two bits to fit in Fr
+
+                // Safety:
+                // It's possible that this increment will trigger moving the cache window.
+                // In that case, we must not access `parents_cache` again but instead replace it.
+                // This will happen above because `parents_cache` will now be empty, if we have
+                // correctly advanced it so far.
+                unsafe {
+                    parents_cache.increment_consumer();
+                }
+
+                // Only layer_labels buffer is full, flush to disk and reset cur_node_ptr
+                if ((i+1) % layer_labels_len as u64) == 0 {
+
+                    cur_node_ptr = unsafe { layer_labels.as_mut_slice() };
+
+                    if (i+1) == num_nodes {
+                        mz_write_layer(layer_labels_ptr, i, true, layer_config).expect("failed to store labels");
+                    } else {
+                        mz_write_layer(layer_labels_ptr, i, false, layer_config).expect("failed to store labels");
+                    }
+                }
+
+                i += 1;
+                cur_slot = (cur_slot + 1) % lookahead;
+            }
+        }
+
+        debug!("PRODUCER NOT READY: {} times", count_not_ready);
+
+        for runner in runners {
+            runner.join().expect("join failed");
+        }
+    })
+    .expect("crossbeam scope failure");
+}
+
+#[allow(clippy::type_complexity)]
+pub fn mz_create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
+    graph: &StackedBucketGraph<Tree::Hasher>,
+    parents_cache: &ParentCache,
+    layers: usize,
+    replica_id: T,
+    config: StoreConfig,
+) -> Result<(Labels<Tree>, Vec<LayerState>)> {
+    info!("mz_create_labels_for_encoding create labels");
+
+    let layer_states = prepare_layers::<Tree>(graph, &config, layers);
+
+    let sector_size = graph.size() * NODE_SIZE;
+    let node_count = graph.size() as u64;
+    let cache_window_nodes = SETTINGS.sdr_parents_cache_size as usize;
+    let cache_label_size = SETTINGS.sdr_label_cache_size as usize;
+
+    let default_cache_size = DEGREE * 4 * cache_window_nodes;
+
+    let core_group = Arc::new(checkout_core_group());
+
+    // When `_cleanup_handle` is dropped, the previous binding of thread will be restored.
+    let _cleanup_handle = (*core_group).as_ref().map(|group| {
+        // This could fail, but we will ignore the error if so.
+        // It will be logged as a warning by `bind_core`.
+        debug!("binding core in main thread");
+        group.get(0).map(|core_index| bind_core(*core_index))
+    });
+
+    // NOTE: this means we currently keep CACHE_LABEL_SIZE+sector_size size around, to improve speed
+    let (parents_cache, mut layer_labels, mut exp_labels) = mz_setup_create_label_memory(
+        cache_label_size,
+        sector_size,
+        DEGREE,
+        Some(default_cache_size),
+        &parents_cache.path,
+    )?;
+
+    for (layer, layer_state) in (1..=layers).zip(layer_states.iter()) {
+        info!("Layer {}", layer);
+
+        if layer_state.generated {
+            info!("skipping layer {}, already generated", layer);
+
+            continue;
+        }
+
+        // load the already generated last layer into exp_labels but the first.
+        if layer != 1 {
+            read_layer(&layer_states[layer - 2].config, &mut exp_labels)?;
+        }
+
+        // Cache reset happens in two parts.
+        // The second part (the finish) happens before each layer but the first.
+        if layers != 1 {
+            parents_cache.finish_reset()?;
+        }
+
+        if layer == 1 {
+            mz_create_layer_labels(
+                &parents_cache,
+                replica_id.as_ref(),
+                &mut exp_labels, // layer_labels borrow exp_labels for layer 1
+                None,
+                node_count,
+                layer as u32,
+                core_group.clone(),
+                &layer_state.config,
+            );
+        } else {
+            mz_create_layer_labels(
+                &parents_cache,
+                replica_id.as_ref(),
+                &mut layer_labels,
+                Some(&mut exp_labels),
+                node_count,
+                layer as u32,
+                core_group.clone(),
+                &layer_state.config,
+            );
+        }
+
+        // Cache reset happens in two parts.
+        // The first part (the start) happens after each layer but the last.
+        if layer != layers {
+            parents_cache.start_reset()?;
+        }
+    }
+
+    Ok((
+        Labels::<Tree> {
+            labels: layer_states.iter().map(|s| s.config.clone()).collect(),
+            _h: PhantomData,
+        },
+        layer_states,
+    ))
+}
+//////// MZ PATCH END ///////////
 
 #[cfg(test)]
 mod tests {

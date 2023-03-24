@@ -304,3 +304,19 @@ pub fn setup_create_label_memory(
 
     Ok((parents_cache, layer_labels, exp_labels))
 }
+
+//////// MZ PATCH ///////////
+pub fn mz_setup_create_label_memory(
+    label_cache_size: usize,
+    sector_size: usize,
+    degree: usize,
+    window_size: Option<usize>,
+    cache_path: &Path,
+) -> Result<(CacheReader<u32>, MmapMut, MmapMut)> {
+    let parents_cache = CacheReader::new(cache_path, window_size, degree)?;
+    let layer_labels = allocate_layer(label_cache_size)?;
+    let exp_labels = allocate_layer(sector_size)?;
+
+    Ok((parents_cache, layer_labels, exp_labels))
+}
+//////// MZ PATCH END ///////////

@@ -101,3 +101,42 @@ pub fn is_layer_written<Tree: 'static + MerkleTreeTrait>(
 
     Ok(true)
 }
+
+//////// MZ PATCH ///////////
+use std::io::prelude::*;
+/// Stores a layer, by writing first to `.tmp` and then renaming.
+pub fn mz_write_layer(data: &[u8], offset: u64, finish: bool, config: &StoreConfig) -> Result<()> {
+    let data_path = StoreConfig::data_path(&config.path, &config.id);
+    let tmp_data_path = data_path.with_extension(".tmp");
+
+    if let Some(parent) = data_path.parent() {
+        create_dir_all(parent).context("failed to create parent directories")?;
+    }
+
+    let mut file = std::fs::OpenOptions::new()
+                                .write(true)
+                                .open(&tmp_data_path)
+                                .context("failed to open layer data")?;
+    file.seek(std::io::SeekFrom::Start(offset)).context("failed to seek layer data")?;
+    file.write_all(data).context("failed to write layer data")?;
+    file.flush().context("failed to flush layer data")?;
+
+    if finish {
+        rename(tmp_data_path, data_path).context("failed to rename tmp data")?;
+    }
+    
+    Ok(())
+}
+
+/// Read a layer node from disk '.tmp', into the provided slice.
+pub fn mz_read_layer_node(config: &StoreConfig, data: &mut [u8], offset: u64) -> Result<()> {
+    let data_path = StoreConfig::data_path(&config.path, &config.id);
+    let tmp_data_path = data_path.with_extension(".tmp");
+
+    let mut file = File::open(tmp_data_path).context("failed to open layer")?;
+    file.seek(std::io::SeekFrom::Start(offset)).context("failed to seek read layer data")?;
+    file.read(&mut data[..]).context("failed to read layer data")?;
+
+    Ok(())
+}
+//////// MZ PATCH END ///////////

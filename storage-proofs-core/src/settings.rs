@@ -23,6 +23,7 @@ pub struct Settings {
     pub max_gpu_tree_batch_size: u32,
     pub rows_to_discard: u32,
     pub sdr_parents_cache_size: u32,
+    pub sdr_label_cache_size: u64,
     pub window_post_synthesis_num_cpus: u32,
     pub parameter_cache: String,
     pub parent_cache: String,
@@ -44,6 +45,7 @@ impl Default for Settings {
             max_gpu_tree_batch_size: 700_000,
             rows_to_discard: 2,
             sdr_parents_cache_size: 2_048,
+            sdr_label_cache_size: 4 * 1024 * 1024 * 1024, // 4G buff
             window_post_synthesis_num_cpus: num_cpus::get() as u32,
             // `parameter_cache` does not use the cache() mechanism because it is now used
             // for durable, canonical Groth parameters and verifying keys.

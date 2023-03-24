@@ -337,13 +337,24 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         {
             if SETTINGS.use_multicore_sdr {
                 info!("multi core replication");
-                create_label::multi::create_labels_for_encoding(
-                    graph,
-                    &parent_cache,
-                    layer_challenges.layers(),
-                    replica_id,
-                    config,
-                )
+                if graph.size() >= (1 << 30) {
+                    create_label::multi::mz_create_labels_for_encoding(
+                        graph,
+                        &parent_cache,
+                        layer_challenges.layers(),
+                        replica_id,
+                        config,
+                    )
+                } else {
+                    create_label::multi::create_labels_for_encoding(
+                        graph,
+                        &parent_cache,
+                        layer_challenges.layers(),
+                        replica_id,
+                        config,
+                    )
+                }
+                
             } else {
                 info!("single core replication");
                 create_label::single::create_labels_for_encoding(
