@@ -89,12 +89,9 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
             return Ok(false);
         };
 
+        let partitions = partition_proofs.len();
         let res = partition_proofs.par_iter().enumerate().all(|(k, proofs)| {
-            trace!(
-                "verifying partition proof {}/{}",
-                k + 1,
-                partition_proofs.len()
-            );
+            trace!("verifying partition proof {}/{}", k + 1, partitions);
 
             trace!("verify comm_r");
             let actual_comm_r: <Tree::Hasher as Hasher>::Domain = {
@@ -107,8 +104,12 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                 return false;
             }
 
-            let challenges =
-                pub_inputs.challenges(&pub_params.layer_challenges, graph.size(), Some(k));
+            let challenges = pub_inputs.challenges(
+                &pub_params.layer_challenges,
+                graph.size(),
+                Some(k),
+                partitions,
+            );
 
             proofs.par_iter().enumerate().all(|(i, proof)| {
                 trace!("verify challenge {}/{}", i + 1, challenges.len());

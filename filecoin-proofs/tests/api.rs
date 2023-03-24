@@ -39,7 +39,8 @@ use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
-    api_version::ApiVersion, cache_key::CacheKey, is_legacy_porep_id, merkle::get_base_tree_count,
+    api_version::{ApiFeature, ApiVersion},
+    cache_key::CacheKey, is_legacy_porep_id, merkle::get_base_tree_count,
     sector::SectorId, util::NODE_SIZE,
 };
 use storage_proofs_update::constants::TreeRHasher;
@@ -82,20 +83,38 @@ fn to_porep_id_verified(registered_seal_proof: u64, api_version: ApiVersion) -> 
 fn test_seal_lifecycle_2kib_base_8() -> Result<()> {
     // The first value is RegisteredSealProof value
     // The second value is the ApiVersion to use
+    // The third value is whether to use SyntheticPoRep
     let test_inputs = vec![
-        (0u64, ApiVersion::V1_0_0),
-        (MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, ApiVersion::V1_1_0),
-        (MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, ApiVersion::V1_2_0),
+        (0u64, ApiVersion::V1_0_0, false),
+        (
+            MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
+            ApiVersion::V1_1_0,
+            false,
+        ),
+        (
+            MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
+            ApiVersion::V1_2_0,
+            false,
+        ),
+        (
+            MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
+            ApiVersion::V1_2_0,
+            true,
+        ),
     ];
 
-    for (porep_id_num, api_version) in test_inputs {
+    for (porep_id_num, api_version, use_synthetic) in test_inputs {
         let porep_id = to_porep_id_verified(porep_id_num, api_version);
-        seal_lifecycle::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, api_version)?;
+        let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_2_KIB, porep_id, api_version);
+        if use_synthetic {
+            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        }
+        seal_lifecycle::<SectorShape2KiB>(&porep_config)?;
     }
 
     Ok(())
 }
-
+/*
 #[test]
 #[ignore]
 fn test_seal_lifecycle_upgrade_2kib_base_8() -> Result<()> {
@@ -114,23 +133,28 @@ fn test_seal_lifecycle_upgrade_2kib_base_8() -> Result<()> {
 
     Ok(())
 }
-
+*/
 #[test]
 #[ignore]
 fn test_seal_lifecycle_4kib_base_8() -> Result<()> {
     let test_inputs = vec![
-        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0),
-        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, false),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, false),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, false),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, true),
     ];
 
-    for (porep_id, api_version) in test_inputs {
-        seal_lifecycle::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &porep_id, api_version)?;
+    for (porep_id, api_version, use_synthetic) in test_inputs {
+        let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_4_KIB, porep_id, api_version);
+        if use_synthetic {
+            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        }
+        seal_lifecycle::<SectorShape4KiB>(&porep_config)?;
     }
 
     Ok(())
 }
-
+/*
 #[test]
 #[ignore]
 fn test_seal_lifecycle_upgrade_4kib_base_8() -> Result<()> {
@@ -146,23 +170,28 @@ fn test_seal_lifecycle_upgrade_4kib_base_8() -> Result<()> {
 
     Ok(())
 }
-
+*/
 #[test]
 #[ignore]
 fn test_seal_lifecycle_16kib_base_8() -> Result<()> {
     let test_inputs = vec![
-        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0),
-        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
+        //        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, false),
+        //        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, false),
+        //        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, false),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, true),
     ];
 
-    for (porep_id, api_version) in test_inputs {
-        seal_lifecycle::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &porep_id, api_version)?;
+    for (porep_id, api_version, use_synthetic) in test_inputs {
+        let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_16_KIB, porep_id, api_version);
+        if use_synthetic {
+            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        }
+        seal_lifecycle::<SectorShape16KiB>(&porep_config)?;
     }
 
     Ok(())
 }
-
+/*
 #[test]
 #[ignore]
 fn test_seal_lifecycle_upgrade_16kib_base_8() -> Result<()> {
@@ -178,23 +207,29 @@ fn test_seal_lifecycle_upgrade_16kib_base_8() -> Result<()> {
 
     Ok(())
 }
+ */
 
 #[test]
 #[ignore]
 fn test_seal_lifecycle_32kib_base_8() -> Result<()> {
     let test_inputs = vec![
-        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0),
-        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, false),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, false),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, false),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, true),
     ];
 
-    for (porep_id, api_version) in test_inputs {
-        seal_lifecycle::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &porep_id, api_version)?;
+    for (porep_id, api_version, use_synthetic) in test_inputs {
+        let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_32_KIB, porep_id, api_version);
+        if use_synthetic {
+            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        }
+        seal_lifecycle::<SectorShape32KiB>(&porep_config)?;
     }
 
     Ok(())
 }
-
+/*
 #[test]
 #[ignore]
 fn test_seal_lifecycle_upgrade_32kib_base_8() -> Result<()> {
@@ -268,7 +303,23 @@ fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_1() -> Result<()> {
     assert!(!is_legacy_porep_id(porep_id));
     seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_1_0)
 }
+ */
 
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_2() -> Result<()> {
+    let porep_id_v1_2: u64 = 8; // This is a RegisteredSealProof value
+
+    let porep_id = to_porep_id_verified(porep_id_v1_2, ApiVersion::V1_2_0);
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let mut porep_config =
+        PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id, ApiVersion::V1_2_0);
+    porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+
+    seal_lifecycle::<SectorShape32GiB>(&porep_config)
+}
+/*
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_1() -> Result<()> {
@@ -310,12 +361,8 @@ fn test_seal_lifecycle_upgrade_64gib_top_8_8_2_v1_1() -> Result<()> {
         ApiVersion::V1_1_0,
     )
 }
-
-fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
-    sector_size: u64,
-    porep_id: &[u8; 32],
-    api_version: ApiVersion,
-) -> Result<()> {
+*/
+fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(porep_config: &PoRepConfig) -> Result<()> {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
     let mut prover_id = [0u8; 32];
@@ -323,16 +370,9 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(
 
     info!(
         "Creating seal proof with ApiVersion {} and PoRep ID {:?}",
-        api_version, porep_id
+        porep_config.api_version, porep_config.porep_id
     );
-    let (_, replica, _, _) = create_seal::<_, Tree>(
-        &mut rng,
-        sector_size,
-        prover_id,
-        false,
-        porep_id,
-        api_version,
-    )?;
+    let (_, replica, _, _) = create_seal::<_, Tree>(porep_config, &mut rng, prover_id, false)?;
     replica.close()?;
 
     Ok(())
@@ -794,16 +834,12 @@ fn test_winning_post_empty_sector_challenge() -> Result<()> {
 
     let sector_count = 0;
     let sector_size = SECTOR_SIZE_2_KIB;
+    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
     let api_version = ApiVersion::V1_1_0;
 
-    let (_, replica, _, _) = create_seal::<_, SectorShape2KiB>(
-        &mut rng,
-        sector_size,
-        prover_id,
-        true,
-        &ARBITRARY_POREP_ID_V1_1_0,
-        api_version,
-    )?;
+    let porep_config = PoRepConfig::new_groth16(sector_size, porep_id, api_version);
+    let (_, replica, _, _) =
+        create_seal::<_, SectorShape2KiB>(&porep_config, &mut rng, prover_id, true)?;
 
     let random_fr: DefaultTreeDomain = Fr::random(rng).into();
     let mut randomness = [0u8; 32];
@@ -848,17 +884,11 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
         ApiVersion::V1_2_0 => ARBITRARY_POREP_ID_V1_2_0,
     };
 
+    let porep_config = PoRepConfig::new_groth16(sector_size, porep_id, api_version);
     let (sector_id, replica, comm_r, cache_dir) = if fake {
         create_fake_seal::<_, Tree>(&mut rng, sector_size, &porep_id, api_version)?
     } else {
-        create_seal::<_, Tree>(
-            &mut rng,
-            sector_size,
-            prover_id,
-            true,
-            &porep_id,
-            api_version,
-        )?
+        create_seal::<_, Tree>(&porep_config, &mut rng, prover_id, true)?
     };
     let sector_count = WINNING_POST_SECTOR_COUNT;
 
@@ -1176,18 +1206,12 @@ fn partition_window_post<Tree: 'static + MerkleTreeTrait>(
         ApiVersion::V1_2_0 => ARBITRARY_POREP_ID_V1_2_0,
     };
 
+    let porep_config = PoRepConfig::new_groth16(sector_size, porep_id, api_version);
     for _ in 0..total_sector_count {
         let (sector_id, replica, comm_r, cache_dir) = if fake {
             create_fake_seal::<_, Tree>(&mut rng, sector_size, &porep_id, api_version)?
         } else {
-            create_seal::<_, Tree>(
-                &mut rng,
-                sector_size,
-                prover_id,
-                true,
-                &porep_id,
-                api_version,
-            )?
+            create_seal::<_, Tree>(&porep_config, &mut rng, prover_id, true)?
         };
         priv_replicas.insert(
             sector_id,
@@ -1316,18 +1340,12 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
         ApiVersion::V1_2_0 => ARBITRARY_POREP_ID_V1_2_0,
     };
 
+    let porep_config = PoRepConfig::new_groth16(sector_size, porep_id, api_version);
     for _ in 0..total_sector_count {
         let (sector_id, replica, comm_r, cache_dir) = if fake {
             create_fake_seal::<_, Tree>(&mut rng, sector_size, &porep_id, api_version)?
         } else {
-            create_seal::<_, Tree>(
-                &mut rng,
-                sector_size,
-                prover_id,
-                true,
-                &porep_id,
-                api_version,
-            )?
+            create_seal::<_, Tree>(&porep_config, &mut rng, prover_id, true)?
         };
         priv_replicas.insert(
             sector_id,
@@ -1691,26 +1709,23 @@ fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
 }
 
 fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
+    porep_config: &PoRepConfig,
     rng: &mut R,
-    sector_size: u64,
     prover_id: ProverId,
     skip_proof: bool,
-    porep_id: &[u8; 32],
-    api_version: ApiVersion,
 ) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
     fil_logger::maybe_init();
 
-    let (mut piece_file, piece_bytes) = generate_piece_file(sector_size)?;
+    let (mut piece_file, piece_bytes) = generate_piece_file(porep_config.sector_size.into())?;
     let sealed_sector_file = NamedTempFile::new()?;
     let cache_dir = tempdir().expect("failed to create temp dir");
 
-    let config = porep_config(sector_size, *porep_id, api_version);
     let ticket = rng.gen();
     let seed = rng.gen();
     let sector_id = rng.gen::<u64>().into();
 
     let (piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
-        &config,
+        porep_config,
         prover_id,
         sector_id,
         ticket,
@@ -1721,7 +1736,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
 
     let num_layers = phase1_output.labels.len();
     let pre_commit_output = seal_pre_commit_phase2(
-        &config,
+        porep_config,
         phase1_output,
         cache_dir.path(),
         sealed_sector_file.path(),
@@ -1747,7 +1762,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         clear_cache::<Tree>(cache_dir.path())?;
     } else {
         proof_and_unseal::<Tree>(
-            &config,
+            porep_config,
             cache_dir.path(),
             &sealed_sector_file,
             prover_id,

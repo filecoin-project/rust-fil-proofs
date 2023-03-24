@@ -1,5 +1,5 @@
 use anyhow::{ensure, Result};
-use storage_proofs_core::proof::ProofScheme;
+use storage_proofs_core::{api_version::ApiFeature, proof::ProofScheme};
 use storage_proofs_porep::stacked::{self, LayerChallenges, StackedDrg};
 use storage_proofs_post::fallback::{self, FallbackPoSt};
 
@@ -68,7 +68,7 @@ pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupPara
 }
 
 pub fn setup_params(porep_config: &PoRepConfig) -> Result<stacked::SetupParams> {
-    let use_synthetic = false; // FIXME
+    let use_synthetic = porep_config.feature_enabled(ApiFeature::SyntheticPoRep);
     let sector_bytes = porep_config.padded_bytes_amount();
     let layer_challenges = select_challenges(
         usize::from(porep_config.partitions),

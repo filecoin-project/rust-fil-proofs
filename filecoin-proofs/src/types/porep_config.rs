@@ -81,7 +81,14 @@ impl PoRepConfig {
 
     #[inline]
     pub fn enable_feature(&mut self, feat: ApiFeature) {
-        self.api_features.push(feat);
+        if !self.feature_enabled(feat) {
+            self.api_features.push(feat);
+        }
+    }
+
+    #[inline]
+    pub fn feature_enabled(&self, feat: ApiFeature) -> bool {
+        self.api_features.contains(&feat)
     }
 
     #[inline]
