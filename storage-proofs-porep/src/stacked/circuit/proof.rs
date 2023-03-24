@@ -244,7 +244,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             // based on the specific partition that we're processing now
             let cur_k = k.unwrap_or(0) as usize;
             let count = pub_params.layer_challenges.challenges_count_all();
-            let nodes = graph.size() / NODE_SIZE;
+            let nodes = graph.size();
             let start_offset = (nodes / count) * cur_k;
             let all_challenges = Vec::from_iter(
                 all_challenges[start_offset..start_offset + count]
