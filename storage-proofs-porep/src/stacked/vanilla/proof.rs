@@ -293,7 +293,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         // If we are using Synthetic PoRep, we need to persist all of
         // the vanilla proofs here.
-        let vanilla_proofs = if layer_challenges.use_synthetic && vanilla_proofs.is_ok() {
+        let vanilla_proofs = if layer_challenges.use_synthetic {
             let cache_path = t_aux
                 .t_aux
                 .tree_d_config
@@ -304,9 +304,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             trace!("Storing all synthetic vanilla proofs at {:?}", cache_path);
             let mut f_syn_vanilla_proofs = File::create(&cache_path)
                 .with_context(|| format!("could not create file {:?}", cache_path))?;
-            let vp = vanilla_proofs
-                .expect("failed to retrieve vanilla proofs")
-                .clone();
+            let vp = vanilla_proofs.expect("failed to retrieve vanilla proofs");
             let syn_vanilla_proofs_bytes = serialize(&vp)?;
             f_syn_vanilla_proofs
                 .write_all(&syn_vanilla_proofs_bytes)
@@ -1035,7 +1033,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     {
         use std::cmp::min;
         use std::fs::OpenOptions;
-        use std::io::Write;
         use std::sync::mpsc::sync_channel as channel;
 
         use fr32::fr_into_bytes;
@@ -1545,7 +1542,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         TreeArity: PoseidonArity,
     {
         use std::fs::OpenOptions;
-        use std::io::Write;
 
         use ff::Field;
         use fr32::fr_into_bytes;

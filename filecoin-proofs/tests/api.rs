@@ -227,23 +227,8 @@ fn test_seal_lifecycle_32kib_base_8() -> Result<()> {
 
     Ok(())
 }
+
 /*
-#[test]
-#[ignore]
-fn test_seal_lifecycle_upgrade_32kib_base_8() -> Result<()> {
-    let test_inputs = vec![
-        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0),
-        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
-    ];
-
-    for (porep_id, api_version) in test_inputs {
-        seal_lifecycle_upgrade::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &porep_id, api_version)?;
-    }
-
-    Ok(())
-}
-
 // These tests are good to run, but take a long time.
 
 #[cfg(feature = "big-tests")]
@@ -301,7 +286,6 @@ fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_1() -> Result<()> {
     assert!(!is_legacy_porep_id(porep_id));
     seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_1_0)
 }
- */
 
 #[cfg(feature = "big-tests")]
 #[test]
@@ -317,7 +301,7 @@ fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_2() -> Result<()> {
 
     seal_lifecycle::<SectorShape32GiB>(&porep_config)
 }
-/*
+
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_1() -> Result<()> {
@@ -359,7 +343,8 @@ fn test_seal_lifecycle_upgrade_64gib_top_8_8_2_v1_1() -> Result<()> {
         ApiVersion::V1_1_0,
     )
 }
-*/
+ */
+
 fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(porep_config: &PoRepConfig) -> Result<()> {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();

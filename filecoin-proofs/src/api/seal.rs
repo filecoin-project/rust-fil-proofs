@@ -468,10 +468,6 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
 
-    info!(
-        "**** There are {} vanilla proofs at c2 call ****",
-        vanilla_proofs[0].len()
-    );
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d_safe = DefaultPieceDomain::try_from_bytes(&comm_d)?;
 
@@ -485,31 +481,19 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
         seed,
     };
 
-    /* FIXME: Skip params for now
-        let groth_params = get_stacked_params::<Tree>(porep_config)?;
+    let groth_params = get_stacked_params::<Tree>(porep_config)?;
 
-        trace!(
-            "got groth params ({}) while sealing",
-            u64::from(porep_config.padded_bytes_amount())
-        );
-
-        let compound_setup_params = compound_proof::SetupParams {
-            vanilla_params: setup_params(porep_config)?,
-            partitions: Some(usize::from(porep_config.partitions)),
-            priority: false,
-        };
-
-        let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-            StackedDrg<'_, Tree, DefaultPieceHasher>,
-            _,
-        >>::setup(&compound_setup_params)?;
-    */
+    trace!(
+        "got groth params ({}) while sealing",
+        u64::from(porep_config.padded_bytes_amount())
+    );
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
+
     let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
         StackedDrg<'_, Tree, DefaultPieceHasher>,
         _,
@@ -532,9 +516,9 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
         // FIXME: Need to properly iterate the partitions and map the challenges properly
         let mut new_vanilla_proofs: Vec<Vec<storage_proofs_porep::stacked::Proof<Tree, _>>> =
             Vec::with_capacity(vanilla_proofs.len());
-        for cur_proofs in vanilla_proofs {
+        for partition_proofs in vanilla_proofs {
             new_vanilla_proofs.push(
-                cur_proofs
+                partition_proofs
                     .clone()
                     .into_iter()
                     .take(
@@ -548,7 +532,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
         }
 
         trace!(
-            "Edited and returning {} group of {} vanilla proofs",
+            "Edited and returning {} groups of {} vanilla proofs",
             new_vanilla_proofs.len(),
             new_vanilla_proofs[0].len()
         );
@@ -560,20 +544,6 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
         "From the sealing api there are now {} edited vanilla proofs",
         vanilla_proofs[0].len()
     );
-
-    // FIXME: REMOVE THIS
-    let groth_params = get_stacked_params::<Tree>(porep_config)?;
-
-    trace!(
-        "got groth params ({}) while sealing",
-        u64::from(porep_config.padded_bytes_amount())
-    );
-
-    let compound_public_params = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-        StackedDrg<'_, Tree, DefaultPieceHasher>,
-        _,
-    >>::setup(&compound_setup_params)?;
-    // REMOVE UP TO HERE
 
     trace!("snark_proof:start");
     let groth_proofs = StackedCompound::<Tree, DefaultPieceHasher>::circuit_proofs(

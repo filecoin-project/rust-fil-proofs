@@ -285,18 +285,16 @@ pub fn main() {
         spinner.set_message(message);
         spinner.enable_steady_tick(100);
 
-        generate_params_porep(sector_size, api_version); //DEBUG ONLY, REMOVE
-                                                         /*
-                                                         if opts.only_sector_update {
-                                                             generate_params_empty_sector_update(sector_size, api_version);
-                                                         } else {
-                                                             generate_params_post(sector_size, api_version);
+        if opts.only_sector_update {
+            generate_params_empty_sector_update(sector_size, api_version);
+        } else {
+            generate_params_post(sector_size, api_version);
 
-                                                             if !opts.only_post {
-                                                                 generate_params_porep(sector_size, api_version);
-                                                                 generate_params_empty_sector_update(sector_size, api_version);
-                                                             }
-                                                         }*/
+            if !opts.only_post {
+                generate_params_porep(sector_size, api_version);
+                generate_params_empty_sector_update(sector_size, api_version);
+            }
+        }
 
         spinner.finish_with_message(format!("✔ Generated sector size: {}", human_size));
     }
