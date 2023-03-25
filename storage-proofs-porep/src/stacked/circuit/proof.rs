@@ -16,7 +16,7 @@ use storage_proofs_core::{
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por::{self, PoR},
     proof::ProofScheme,
-    util::{reverse_bit_numbering, NODE_SIZE},
+    util::reverse_bit_numbering,
 };
 
 use crate::stacked::{circuit::params::Proof, StackedDrg};
@@ -242,7 +242,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             // set the partition_count to 0 to retrieve ALL possible
             // synthetic challenges and then take only the subset required
             // based on the specific partition that we're processing now
-            let cur_k = k.unwrap_or(0) as usize;
+            let cur_k = k.unwrap_or(0);
             let count = pub_params.layer_challenges.challenges_count_all();
             let nodes = graph.size();
             let start_offset = (nodes / count) * cur_k;

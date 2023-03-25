@@ -292,13 +292,6 @@ pub mod synthetic {
 
         #[inline]
         pub fn default_chacha20(sector_nodes: usize, replica_id: &Fr) -> Self {
-            // If the default synthethic challenge count exceeds the number of sector nodes, then
-            // challenge all sector nodes.
-            let num_synth_challenges = if sector_nodes < DEFAULT_SYNTH_CHALLENGE_COUNT {
-                sector_nodes
-            } else {
-                DEFAULT_SYNTH_CHALLENGE_COUNT
-            };
             Self::new_chacha20(
                 sector_nodes,
                 replica_id,
