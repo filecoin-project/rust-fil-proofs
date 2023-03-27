@@ -288,6 +288,7 @@ fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_1() -> Result<()> {
     assert!(!is_legacy_porep_id(porep_id));
     seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_1_0)
 }
+*/
 
 #[cfg(feature = "big-tests")]
 #[test]
@@ -303,7 +304,7 @@ fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_2() -> Result<()> {
 
     seal_lifecycle::<SectorShape32GiB>(&porep_config)
 }
-
+/*
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_1() -> Result<()> {
