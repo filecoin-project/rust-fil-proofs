@@ -245,7 +245,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             let cur_k = k.unwrap_or(0);
             let count = pub_params.layer_challenges.challenges_count_all();
             let nodes = graph.size();
-            let start_offset = (nodes / count) * cur_k;
+            let start_offset = (all_challenges.len() / count) * cur_k;
             let all_challenges = Vec::from_iter(
                 all_challenges[start_offset..start_offset + count]
                     .iter()
@@ -253,9 +253,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             );
 
             trace!(
-                "[Circuit] Partition {}, Nodes {}, NumChallenges {}, Challenge Range {}-{}",
+                "[Circuit] Partition {}, Nodes {}, AllChallenges {}, NumChallenges {}, Challenge Range {}-{}",
                 cur_k,
                 nodes,
+                all_challenges.len(),
                 count,
                 start_offset,
                 start_offset + count
