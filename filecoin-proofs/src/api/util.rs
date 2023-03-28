@@ -9,7 +9,10 @@ use filecoin_hashers::{Domain, Hasher};
 use fr32::{bytes_into_fr, fr_into_bytes};
 use memmap2::MmapOptions;
 use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};
-use storage_proofs_core::merkle::{get_base_tree_count, MerkleTreeTrait};
+use storage_proofs_core::{
+    merkle::{get_base_tree_count, MerkleTreeTrait},
+    util::NODE_SIZE,
+};
 use typenum::Unsigned;
 
 use crate::types::{Commitment, SectorSize};
@@ -50,8 +53,8 @@ pub fn read_nodes_from_file<D: Domain>(path: &Path, node_range: Range<usize>) ->
         .open(path)
         .with_context(|| format!("failed to open file: {}", path.display()))?;
 
-    let byte_offset = node_range.start << 5;
-    let byte_len = (node_range.end - node_range.start) << 5;
+    let byte_offset = node_range.start * NODE_SIZE;
+    let byte_len = (node_range.end - node_range.start) * NODE_SIZE;
     let bytes = unsafe {
         MmapOptions::new()
             .offset(byte_offset as u64)
@@ -61,7 +64,7 @@ pub fn read_nodes_from_file<D: Domain>(path: &Path, node_range: Range<usize>) ->
     };
 
     bytes
-        .chunks(32)
+        .chunks(NODE_SIZE)
         .map(D::try_from_bytes)
         .collect::<Result<Vec<D>>>()
         .with_context(|| "failed to convert file chunk into domain")

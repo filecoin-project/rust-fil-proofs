@@ -14,6 +14,8 @@ pub mod stacked;
 
 mod encode;
 
+pub use self::encode::{decode, encode};
+
 pub const MAX_LEGACY_POREP_REGISTERED_PROOF_ID: u64 = 4;
 
 pub trait PoRep<'a, H: Hasher, G: Hasher>: ProofScheme<'a> {

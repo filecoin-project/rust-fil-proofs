@@ -560,6 +560,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     Ok(out)
 }
 
+/// Returns the path to the sealing key (i.e. last replication layer) stored on disk.
 #[inline]
 pub fn sealing_key_path<Tree: MerkleTreeTrait>(
     pc1_output: &SealPreCommitPhase1Output<Tree>,
@@ -572,9 +573,9 @@ pub fn sealing_key_path<Tree: MerkleTreeTrait>(
         .with_context(|| "PC1 output's label store is empty")
 }
 
-// Returns a range of sealing key (i.e. last layer) nodes stored on disk.
+/// Returns a range of nodes read from the sealing key (i.e. last replication layer) stored on disk.
 #[inline]
-pub fn seal_read_key_range<Tree: MerkleTreeTrait>(
+pub fn read_sealing_key_range<Tree: MerkleTreeTrait>(
     pc1_output: &SealPreCommitPhase1Output<Tree>,
     node_range: Range<usize>,
 ) -> anyhow::Result<Vec<<Tree::Hasher as Hasher>::Domain>> {
@@ -585,9 +586,9 @@ pub fn seal_read_key_range<Tree: MerkleTreeTrait>(
         .with_context(|| "failed to read sealing key range")
 }
 
-// Returns a range of unreplicated data nodes stored on disk.
+/// Returns a range of nodes from unreplicated data stored on disk.
 #[inline]
-pub fn seal_read_data_range<Tree: MerkleTreeTrait>(
+pub fn read_sealing_data_range<Tree: MerkleTreeTrait>(
     pc1_output: &SealPreCommitPhase1Output<Tree>,
     node_range: Range<usize>,
 ) -> anyhow::Result<Vec<DefaultPieceDomain>> {
@@ -597,46 +598,48 @@ pub fn seal_read_data_range<Tree: MerkleTreeTrait>(
     )
 }
 
-// Returns a range of replica nodes stored on disk.
+/// Returns a range of nodes from a replica stored on disk.
 #[inline]
-pub fn seal_read_replica_range<Tree: MerkleTreeTrait>(
+pub fn read_replica_range<Tree: MerkleTreeTrait>(
     replica_path: &Path,
     node_range: Range<usize>,
 ) -> Result<Vec<<Tree::Hasher as Hasher>::Domain>> {
     read_nodes_from_file(replica_path, node_range)
 }
 
-// Computes a range of replica nodes using the unreplicated data and sealing key stored on disk.
-pub fn seal_encode_range<Tree: MerkleTreeTrait>(
+/// Encodes a range of unreplicated data nodes (stored on disk) into replica nodes using the last
+/// sealing layer as the encoding key.
+pub fn encode_data_range<Tree: MerkleTreeTrait>(
     pc1_output: &SealPreCommitPhase1Output<Tree>,
     node_range: Range<usize>,
 ) -> Result<Vec<<Tree::Hasher as Hasher>::Domain>> {
-    let data_nodes = seal_read_data_range(pc1_output, node_range.clone())?;
-    let key = seal_read_key_range(pc1_output, node_range)?;
+    let data_nodes = read_sealing_data_range(pc1_output, node_range.clone())?;
+    let key = read_sealing_key_range(pc1_output, node_range)?;
     data_nodes
         .into_iter()
         .zip(key)
         .map(|(data_node, key)| {
             <Tree::Hasher as Hasher>::Domain::try_from_bytes(data_node.as_ref())
                 .with_context(|| "failed to convert TreeD leaf bytes into TreeR domain")
-                .map(|data_node| stacked::encode(key, data_node))
+                .map(|data_node| storage_proofs_porep::encode(key, data_node))
         })
         .collect()
 }
 
-// Computes a range of unreplicated nodes using the replica and sealing key stored on disk.
-pub fn seal_decode_range<Tree: MerkleTreeTrait>(
+/// Decodes a range of replica nodes (stored on disk) into unreplicated data nodes using the last
+/// sealing layer as the encoding key.
+pub fn decode_replica_range<Tree: MerkleTreeTrait>(
     pc1_output: &SealPreCommitPhase1Output<Tree>,
     replica_path: &Path,
     node_range: Range<usize>,
 ) -> Result<Vec<DefaultPieceDomain>> {
-    let replica_nodes = seal_read_replica_range::<Tree>(replica_path, node_range.clone())?;
-    let key = seal_read_key_range(pc1_output, node_range)?;
+    let replica_nodes = read_replica_range::<Tree>(replica_path, node_range.clone())?;
+    let key = read_sealing_key_range(pc1_output, node_range)?;
     replica_nodes
         .into_iter()
         .zip(key)
         .map(|(replica_node, key)| {
-            let data_node = stacked::decode(key, replica_node);
+            let data_node = storage_proofs_porep::decode(key, replica_node);
             DefaultPieceDomain::try_from_bytes(data_node.as_ref())
                 .with_context(|| "failed to convert TreeR domain into TreeD domain")
         })

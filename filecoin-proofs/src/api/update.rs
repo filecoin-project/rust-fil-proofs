@@ -19,6 +19,7 @@ use storage_proofs_core::{
     merkle::{get_base_tree_count, MerkleTreeTrait},
     multi_proof::MultiProof,
     proof::ProofScheme,
+    util::NODE_SIZE,
 };
 use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
 use storage_proofs_update::{
@@ -287,29 +288,29 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
     Ok(())
 }
 
-// Returns a range of nodes read from an old/new unreplicated data file stored on disk.
+/// Returns a range of nodes read from update data (old or new) stored on disk.
 #[inline]
-pub fn update_read_data_range(
+pub fn read_updated_data_range(
     data_path: &Path,
     node_range: Range<usize>,
 ) -> Result<Vec<DefaultPieceDomain>> {
     read_nodes_from_file(data_path, node_range)
 }
 
-// Returns a range of nodes read from an old/new replica file stored on disk.
-// Note: this returns the sector update key when `replica_path` points to replica-old.
+/// Returns a range of nodes read from an update replica (old or new) stored on disk.
 #[inline]
-pub fn update_read_replica_range(
+pub fn read_updated_replica_range(
     replica_path: &Path,
     node_range: Range<usize>,
 ) -> Result<Vec<<TreeRHasher as Hasher>::Domain>> {
     read_nodes_from_file(replica_path, node_range)
 }
 
-// Encodes a range of data-new nodes using the sector update key (i.e. replica-old).
-pub fn update_encode_range(
-    replica_old_path: &Path,
+/// Encodes a range of updated data nodes (stored on disk) using the original empty sector's replica
+/// (stored on disk) as the encoding key.
+pub fn encode_updated_data_range(
     data_new_path: &Path,
+    replica_old_path: &Path,
     h: usize,
     phi: &<TreeRHasher as Hasher>::Domain,
     node_range: Range<usize>,
@@ -319,7 +320,7 @@ pub fn update_encode_range(
         .metadata()
         .expect("failed to retrieve replica-old file metadata")
         .len();
-    let sector_nodes = sector_bytes >> 5;
+    let sector_nodes = sector_bytes as usize / NODE_SIZE;
     let node_index_bit_len = sector_nodes.trailing_zeros() as usize;
     let high_shr = node_index_bit_len - h;
 
@@ -330,23 +331,23 @@ pub fn update_encode_range(
         .map(|high| (high, rho(phi, high as u32)))
         .collect();
 
-    // Sector update key is replica-old.
-    let r_old_nodes = update_read_replica_range(replica_old_path, node_range.clone())
-        .with_context(|| "failed to read node range from replica-old file")?;
-
     // Unencoded data is data-new.
-    let d_new_nodes = update_read_data_range(data_new_path, node_range.clone())
+    let d_new_nodes = read_updated_data_range(data_new_path, node_range.clone())
         .with_context(|| "failed to read node range from data-new file")?;
+
+    // Sector update key is replica-old.
+    let r_old_nodes = read_updated_replica_range(replica_old_path, node_range.clone())
+        .with_context(|| "failed to read node range from replica-old file")?;
 
     // Encode data-new nodes into replica-new nodes: `r_new = r_old + d_new * rho`.
     let r_new_nodes = node_range
-        .zip(r_old_nodes)
         .zip(d_new_nodes)
-        .map(|((node_index, r_old), d_new)| {
+        .zip(r_old_nodes)
+        .map(|((node_index, data), key)| {
             let high = node_index >> high_shr;
             let rho = rhos[&high];
-            let key: Fr = r_old.into();
-            let data: Fr = d_new.into();
+            let key: Fr = key.into();
+            let data: Fr = data.into();
             (key + data * rho).into()
         })
         .collect();
@@ -354,9 +355,11 @@ pub fn update_encode_range(
     Ok(r_new_nodes)
 }
 
-pub fn update_decode_range(
-    replica_old_path: &Path,
+/// Decodes a range of updated replica nodes (stored on disk) using the original empty sector's
+/// replica (stored on disk) as the encoding key.
+pub fn decode_updated_replica_range(
     replica_new_path: &Path,
+    replica_old_path: &Path,
     h: usize,
     phi: &<TreeRHasher as Hasher>::Domain,
     node_range: Range<usize>,
@@ -366,7 +369,7 @@ pub fn update_decode_range(
         .metadata()
         .expect("failed to retrieve replica-old file metadata")
         .len();
-    let sector_nodes = sector_bytes >> 5;
+    let sector_nodes = sector_bytes as usize / NODE_SIZE;
     let node_index_bit_len = sector_nodes.trailing_zeros() as usize;
     let high_shr = node_index_bit_len - h;
 
@@ -377,23 +380,23 @@ pub fn update_decode_range(
         .map(|high| (high, rho(phi, high as u32).invert().unwrap()))
         .collect();
 
-    // Sector update key is replica-old.
-    let r_old_nodes = update_read_replica_range(replica_old_path, node_range.clone())
-        .with_context(|| "failed to read node range from replica-old file")?;
-
-    // Enocded data is replica-new.
-    let r_new_nodes = update_read_replica_range(replica_new_path, node_range.clone())
+    // Encoded data is replica-new.
+    let r_new_nodes = read_updated_replica_range(replica_new_path, node_range.clone())
         .with_context(|| "failed to read node range from replica-new file")?;
+
+    // Sector update key is replica-old.
+    let r_old_nodes = read_updated_replica_range(replica_old_path, node_range.clone())
+        .with_context(|| "failed to read node range from replica-old file")?;
 
     // Decode replica-new nodes into data-new nodes: `d_new = (r_new - r_old) * rho^1`.
     let d_new_nodes = node_range
-        .zip(r_old_nodes)
         .zip(r_new_nodes)
-        .map(|((node_index, r_old), r_new)| {
+        .zip(r_old_nodes)
+        .map(|((node_index, replica), key)| {
             let high = node_index >> high_shr;
             let rho_inv = rho_invs[&high];
-            let key: Fr = r_old.into();
-            let replica: Fr = r_new.into();
+            let replica: Fr = replica.into();
+            let key: Fr = key.into();
             ((replica - key) * rho_inv).into()
         })
         .collect();

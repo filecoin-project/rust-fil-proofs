@@ -36,7 +36,9 @@ use log::info;
 use memmap2::MmapOptions;
 use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
-use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::SectorId};
+use storage_proofs_core::{
+    api_version::ApiVersion, is_legacy_porep_id, sector::SectorId, util::NODE_SIZE,
+};
 use storage_proofs_update::{constants::TreeRHasher, phi};
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
@@ -2139,31 +2141,37 @@ fn test_sealing_encode_decode_ranges<R: Rng, Tree: MerkleTreeTrait>(
     pc1_output: &SealPreCommitPhase1Output<Tree>,
     replica_path: &Path,
 ) -> Result<()> {
-    let sector_nodes = (sector_size >> 5) as usize;
-    let node_range_len = 11;
+    use filecoin_proofs::{
+        decode_replica_range, encode_data_range, read_nodes_from_file, read_replica_range,
+        read_sealing_data_range, read_sealing_key_range, sealing_key_path,
+    };
 
-    for _ in 0..5 {
+    let sector_nodes = sector_size as usize / NODE_SIZE;
+
+    // Test an arbitrarily chosen number of node ranges.
+    let node_range_len = 11;
+    let num_test_ranges = 5;
+
+    for _ in 0..num_test_ranges {
         let start_node = rng.gen::<usize>() % (sector_nodes - node_range_len);
         let node_range = start_node..start_node + node_range_len;
 
         // Verify decoded data against unreplicated file.
-        let data_range = filecoin_proofs::seal_read_data_range(pc1_output, node_range.clone())?;
-        let decoded_range =
-            filecoin_proofs::seal_decode_range(pc1_output, replica_path, node_range.clone())?;
+        let data_range = read_sealing_data_range(pc1_output, node_range.clone())?;
+        let decoded_range = decode_replica_range(pc1_output, replica_path, node_range.clone())?;
         assert_eq!(data_range, decoded_range);
 
         // Verify encoded data against replica file.
-        let replica_range =
-            filecoin_proofs::seal_read_replica_range::<Tree>(replica_path, node_range.clone())?;
-        let encoded_range = filecoin_proofs::seal_encode_range(pc1_output, node_range.clone())?;
+        let replica_range = read_replica_range::<Tree>(replica_path, node_range.clone())?;
+        let encoded_range = encode_data_range(pc1_output, node_range.clone())?;
         assert_eq!(replica_range, encoded_range);
 
         // Verify data read from sealing key file matches encoding/decoding key.
-        let key_path = filecoin_proofs::sealing_key_path(pc1_output)?;
-        let key_range_from_file = filecoin_proofs::read_nodes_from_file::<
-            <Tree::Hasher as Hasher>::Domain,
-        >(key_path.as_path(), node_range.clone())?;
-        let key_range = filecoin_proofs::seal_read_key_range(pc1_output, node_range)?;
+        let key_range_from_file = read_nodes_from_file::<<Tree::Hasher as Hasher>::Domain>(
+            sealing_key_path(pc1_output)?.as_path(),
+            node_range.clone(),
+        )?;
+        let key_range = read_sealing_key_range(pc1_output, node_range)?;
         assert_eq!(key_range_from_file, key_range);
     }
 
@@ -2178,32 +2186,35 @@ fn test_update_encode_decode_ranges(
     comm_r_old: &Commitment,
     comm_d_new: &Commitment,
 ) -> Result<()> {
-    let sector_nodes = (u64::from(config.sector_size) >> 5) as usize;
-    let node_index_bit_len = sector_nodes.trailing_zeros() as usize;
+    use filecoin_proofs::{
+        decode_updated_replica_range, encode_updated_data_range, read_updated_data_range,
+        read_updated_replica_range, DefaultPieceDomain,
+    };
+
+    let sector_nodes = u64::from(config.sector_size) as usize / NODE_SIZE;
     let h = usize::from(config.h_select);
 
+    let comm_d_new = DefaultPieceDomain::try_from_bytes(comm_d_new)
+        .with_context(|| "failed to convert CommDNew bytes into TreeD domain")?;
     let comm_r_old = <TreeRHasher as Hasher>::Domain::try_from_bytes(comm_r_old)
         .with_context(|| "failed to convert CommROld bytes into TreeR domain")?;
-    let comm_d_new = filecoin_proofs::DefaultPieceDomain::try_from_bytes(comm_d_new)
-        .with_context(|| "failed to convert CommDNew bytes into TreeD domain")?;
     let phi = phi(&comm_d_new, &comm_r_old);
 
-    // Largest node index having `high = 0`.
-    let node_index_no_high_bits = (1 << (node_index_bit_len - h)) - 1;
-    // Take a range of 11 nodes where the last node in the range has a `high` value that is one
-    // greater than the first node's `high` value.
-    let mut first_node = node_index_no_high_bits - 5;
-    let mut last_node = node_index_no_high_bits + 5;
+    // Node index where all bits are zero except for the least significant high bit.
+    let mut node_range_center = sector_nodes >> h;
 
+    // Test node ranges that cross each of the `h` high bits.
     for _ in 0..h {
+        // The choice of an 11-node range length is arbitrary, however this choice ensures that
+        // the node range does under/overflow testing and production sector sizes.
+        let (first_node, last_node) = (node_range_center - 5, node_range_center + 5);
         let node_range = first_node..last_node + 1;
 
         // Verify decoded data against data-new file.
-        let data_new_range =
-            filecoin_proofs::update_read_data_range(data_new_path, node_range.clone())?;
-        let decoded_range = filecoin_proofs::update_decode_range(
-            replica_old_path,
+        let data_new_range = read_updated_data_range(data_new_path, node_range.clone())?;
+        let decoded_range = decode_updated_replica_range(
             replica_new_path,
+            replica_old_path,
             h,
             &phi,
             node_range.clone(),
@@ -2211,19 +2222,13 @@ fn test_update_encode_decode_ranges(
         assert_eq!(data_new_range, decoded_range);
 
         // Verify encoded data against replica-new file.
-        let replica_new_range =
-            filecoin_proofs::update_read_replica_range(replica_new_path, node_range.clone())?;
-        let encoded_range = filecoin_proofs::update_encode_range(
-            replica_old_path,
-            data_new_path,
-            h,
-            &phi,
-            node_range,
-        )?;
+        let replica_new_range = read_updated_replica_range(replica_new_path, node_range.clone())?;
+        let encoded_range =
+            encode_updated_data_range(data_new_path, replica_old_path, h, &phi, node_range)?;
         assert_eq!(replica_new_range, encoded_range);
 
-        first_node = (first_node << 1) + 1;
-        last_node = (last_node << 1) + 1;
+        // The next range of nodes tested should contain a new set of high values.
+        node_range_center <<= 1;
     }
 
     Ok(())
