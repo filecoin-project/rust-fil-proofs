@@ -43,6 +43,8 @@ impl fmt::Debug for SdrParameters {
     }
 }
 
+// TODO vmx 2023-03-29: The output layers filenames might not be needed as those are hard-coded
+// names only depending on the number of layers.
 #[derive(Debug, Deserialize, Serialize)]
 struct SdrOutput {
     layers: Vec<PathBuf>,
