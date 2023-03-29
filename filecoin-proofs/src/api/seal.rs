@@ -305,7 +305,7 @@ where
         labels,
         data,
         Some(data_tree),
-        config,
+        cache_path.as_ref().to_path_buf(),
         replica_path.as_ref().to_path_buf(),
     )?;
 

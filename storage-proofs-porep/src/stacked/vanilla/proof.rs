@@ -1227,7 +1227,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         layer_challenges: &LayerChallenges,
         mut data: Data<'_>,
         data_tree: Option<BinaryMerkleTree<G>>,
-        config: StoreConfig,
+        // The directory where the files we operate on are stored.
+        cache_path: PathBuf,
         replica_path: PathBuf,
         label_configs: Labels<Tree>,
     ) -> Result<TransformedLayers<Tree, G>> {
@@ -1262,38 +1263,39 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         // Generate all store configs that we need based on the
         // cache_path in the specified config.
-        let mut tree_d_config = StoreConfig::from_config(
-            &config,
-            CacheKey::CommDTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, BINARY_ARITY)?),
-        );
-        tree_d_config.rows_to_discard = default_rows_to_discard(nodes_count, BINARY_ARITY);
+        let tree_d_config = StoreConfig {
+            path: cache_path.clone(),
+            id: CacheKey::CommDTree.to_string(),
+            size: Some(get_merkle_tree_len(nodes_count, BINARY_ARITY)?),
+            rows_to_discard: default_rows_to_discard(nodes_count, BINARY_ARITY),
+        };
 
-        let mut tree_r_last_config = StoreConfig::from_config(
-            &config,
-            CacheKey::CommRLastTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
-        );
+        let rows_to_discard = default_rows_to_discard(nodes_count, Tree::Arity::to_usize());
+        let size = Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?);
 
-        // A default 'rows_to_discard' value will be chosen for tree_r_last, unless the user overrides this value via the
-        // environment setting (FIL_PROOFS_ROWS_TO_DISCARD).  If this value is specified, no checking is done on it and it may
-        // result in a broken configuration.  Use with caution.  It must be noted that if/when this unchecked value is passed
-        // through merkle_light, merkle_light now does a check that does not allow us to discard more rows than is possible
-        // to discard.
-        tree_r_last_config.rows_to_discard =
-            default_rows_to_discard(nodes_count, Tree::Arity::to_usize());
+        let tree_r_last_config = StoreConfig {
+            path: cache_path.clone(),
+            id: CacheKey::CommRLastTree.to_string(),
+            size,
+            // A default 'rows_to_discard' value will be chosen for tree_r_last, unless the user
+            // overrides this value via the environment setting (FIL_PROOFS_ROWS_TO_DISCARD). If
+            // this value is specified, no checking is done on it and it may result in a broken
+            // configuration. *Use with caution*. It must be noted that if/when this unchecked
+            // value is passed through merkle_light, merkle_light now does a check that does not
+            // allow us to discard more rows than is possible to discard.
+            rows_to_discard,
+        };
         trace!(
             "tree_r_last using rows_to_discard={}",
             tree_r_last_config.rows_to_discard
         );
 
-        let mut tree_c_config = StoreConfig::from_config(
-            &config,
-            CacheKey::CommCTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
-        );
-        tree_c_config.rows_to_discard =
-            default_rows_to_discard(nodes_count, Tree::Arity::to_usize());
+        let tree_c_config = StoreConfig {
+            path: cache_path,
+            id: CacheKey::CommCTree.to_string(),
+            size,
+            rows_to_discard,
+        };
 
         let labels =
             LabelsCache::<Tree>::new(&label_configs).context("failed to create labels cache")?;
@@ -1357,7 +1359,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 })?
             }
         };
-        tree_d_config.size = Some(tree_d.len());
         assert_eq!(
             tree_d_config.size.expect("config size failure"),
             tree_d.len()
@@ -1434,7 +1435,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         label_configs: Labels<Tree>,
         data: Data<'a>,
         data_tree: Option<BinaryMerkleTree<G>>,
-        config: StoreConfig,
+        cache_path: PathBuf,
         replica_path: PathBuf,
     ) -> Result<(
         Tau<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
@@ -1450,7 +1451,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             &pp.layer_challenges,
             data,
             data_tree,
-            config,
+            cache_path,
             replica_path,
             label_configs,
         )?;
