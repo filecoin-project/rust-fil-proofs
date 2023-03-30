@@ -5,6 +5,6 @@
 
 pub mod stacked;
 
-mod encode;
+pub mod encode;
 
 pub const MAX_LEGACY_POREP_REGISTERED_PROOF_ID: u64 = 4;

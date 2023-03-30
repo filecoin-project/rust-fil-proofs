@@ -10,6 +10,7 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 anyhow = "1.0.70"
 blstrs = { version = "0.6.1", default-features = false }
 fil_logger = "0.1.7"
+filecoin-hashers = { path = "../filecoin-hashers", version = "~9.0.0", default-features = false }
 filecoin-proofs = { path = "../filecoin-proofs", version = "~14.0.0", default-features = false }
 fr32 = { path = "../fr32", version = "~7.0.0", default-features = false }
 hex = { version = "0.4.3", features = ["serde"] }
