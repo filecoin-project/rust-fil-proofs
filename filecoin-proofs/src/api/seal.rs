@@ -1,12 +1,13 @@
+use std::convert::TryInto;
 use std::fs::{self, metadata, File, OpenOptions};
-use std::io::Write;
-use std::ops::Range;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bellperson::groth16;
 use bincode::{deserialize, serialize};
 use blstrs::{Bls12, Scalar as Fr};
+use ff::PrimeField;
 use filecoin_hashers::{Domain, Hasher};
 use log::{info, trace};
 use memmap2::MmapOptions;
@@ -23,7 +24,7 @@ use storage_proofs_core::{
     parameter_cache::SRS_MAX_PROOFS_TO_AGGREGATE,
     proof::ProofScheme,
     sector::SectorId,
-    util::default_rows_to_discard,
+    util::{default_rows_to_discard, NODE_SIZE},
     Data,
 };
 use storage_proofs_porep::stacked::{
@@ -33,10 +34,7 @@ use storage_proofs_porep::stacked::{
 
 use crate::POREP_MINIMUM_CHALLENGES;
 use crate::{
-    api::{
-        as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size,
-        read_nodes_from_file,
-    },
+    api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size},
     caches::{
         get_stacked_params, get_stacked_srs_key, get_stacked_srs_verifier_key,
         get_stacked_verifying_key,
@@ -560,90 +558,113 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     Ok(out)
 }
 
-/// Returns the path to the sealing key (i.e. last replication layer) stored on disk.
-#[inline]
-pub fn sealing_key_path<Tree: MerkleTreeTrait>(
-    pc1_output: &SealPreCommitPhase1Output<Tree>,
-) -> anyhow::Result<PathBuf> {
-    pc1_output
-        .labels
-        .labels
-        .last()
-        .map(|layer_store| StoreConfig::data_path(&layer_store.path, &layer_store.id))
-        .with_context(|| "PC1 output's label store is empty")
+/// Computes and returns the PoRep encoding of the next `num_nodes` of the provided unreplicated
+/// data file.
+///
+/// This function assumes that both the data file and sealing key file (i.e. last labeling layer
+/// file) have been seeked (by this function's caller) to the desired offset.
+pub fn encode_data_range(
+    data_file: &mut File,
+    sealing_key_file: &mut File,
+    num_nodes: usize,
+) -> Result<Vec<u8>> {
+    let num_bytes = num_nodes * NODE_SIZE;
+
+    let data_bytes = {
+        let mut buf = vec![0u8; num_bytes];
+        data_file
+            .read_exact(&mut buf)
+            .with_context(|| format!("failed to read {} bytes from data file", num_bytes))?;
+        buf
+    };
+
+    // Key bytes will also be used to store the encoded data.
+    let mut key_bytes = {
+        let mut buf = vec![0u8; num_bytes];
+        sealing_key_file
+            .read_exact(&mut buf)
+            .with_context(|| format!("failed to read {} bytes from sealing key file", num_bytes))?;
+        buf
+    };
+
+    for (data_bytes, key_bytes) in data_bytes
+        .chunks(NODE_SIZE)
+        .zip(key_bytes.chunks_mut(NODE_SIZE))
+    {
+        let data_fr = Fr::from_repr_vartime(
+            data_bytes
+                .try_into()
+                .expect("32-byte slice to array conversion should not fail"),
+        )
+        .with_context(|| "32-byte chunk of data file is invalid field repr")?;
+
+        let mut key_fr = Fr::from_repr_vartime(
+            key_bytes
+                .try_into()
+                .expect("32-byte slice to array conversion, should not fail"),
+        )
+        .with_context(|| "32-byte chunk of sealing key file is invalid field repr")?;
+
+        storage_proofs_porep::encode_fr(&mut key_fr, data_fr);
+        key_bytes.copy_from_slice(&key_fr.to_repr());
+    }
+
+    let replica_bytes = key_bytes;
+    Ok(replica_bytes)
 }
 
-/// Returns a range of nodes read from the sealing key (i.e. last replication layer) stored on disk.
-#[inline]
-pub fn read_sealing_key_range<Tree: MerkleTreeTrait>(
-    pc1_output: &SealPreCommitPhase1Output<Tree>,
-    node_range: Range<usize>,
-) -> anyhow::Result<Vec<<Tree::Hasher as Hasher>::Domain>> {
-    pc1_output
-        .labels
-        .labels_for_last_layer()?
-        .read_range(node_range)
-        .with_context(|| "failed to read sealing key range")
-}
+/// Computes and returns the PoRep decoding of the next `num_nodes` of the provided replica file.
+///
+/// This function assumes that both the replica file and sealing key file (i.e. last labeling layer
+/// file) have been seeked (by this function's caller) to the desired offset.
+pub fn decode_replica_range(
+    replica_file: &mut File,
+    sealing_key_file: &mut File,
+    num_nodes: usize,
+) -> Result<Vec<u8>> {
+    let num_bytes = num_nodes * NODE_SIZE;
 
-/// Returns a range of nodes from unreplicated data stored on disk.
-#[inline]
-pub fn read_sealing_data_range<Tree: MerkleTreeTrait>(
-    pc1_output: &SealPreCommitPhase1Output<Tree>,
-    node_range: Range<usize>,
-) -> anyhow::Result<Vec<DefaultPieceDomain>> {
-    read_nodes_from_file(
-        StoreConfig::data_path(&pc1_output.config.path, &pc1_output.config.id).as_path(),
-        node_range,
-    )
-}
+    let replica_bytes = {
+        let mut buf = vec![0u8; num_bytes];
+        replica_file
+            .read_exact(&mut buf)
+            .with_context(|| format!("failed to read {} bytes from replica file", num_bytes))?;
+        buf
+    };
 
-/// Returns a range of nodes from a replica stored on disk.
-#[inline]
-pub fn read_replica_range<Tree: MerkleTreeTrait>(
-    replica_path: &Path,
-    node_range: Range<usize>,
-) -> Result<Vec<<Tree::Hasher as Hasher>::Domain>> {
-    read_nodes_from_file(replica_path, node_range)
-}
+    // Key bytes will also be used to store the decoded data.
+    let mut key_bytes = {
+        let mut buf = vec![0u8; num_bytes];
+        sealing_key_file
+            .read_exact(&mut buf)
+            .with_context(|| format!("failed to read {} bytes from sealing key file", num_bytes))?;
+        buf
+    };
 
-/// Encodes a range of unreplicated data nodes (stored on disk) into replica nodes using the last
-/// sealing layer as the encoding key.
-pub fn encode_data_range<Tree: MerkleTreeTrait>(
-    pc1_output: &SealPreCommitPhase1Output<Tree>,
-    node_range: Range<usize>,
-) -> Result<Vec<<Tree::Hasher as Hasher>::Domain>> {
-    let data_nodes = read_sealing_data_range(pc1_output, node_range.clone())?;
-    let key = read_sealing_key_range(pc1_output, node_range)?;
-    data_nodes
-        .into_iter()
-        .zip(key)
-        .map(|(data_node, key)| {
-            <Tree::Hasher as Hasher>::Domain::try_from_bytes(data_node.as_ref())
-                .with_context(|| "failed to convert TreeD leaf bytes into TreeR domain")
-                .map(|data_node| storage_proofs_porep::encode(key, data_node))
-        })
-        .collect()
-}
+    for (replica_bytes, key_bytes) in replica_bytes
+        .chunks(NODE_SIZE)
+        .zip(key_bytes.chunks_mut(NODE_SIZE))
+    {
+        let replica_fr = Fr::from_repr_vartime(
+            replica_bytes
+                .try_into()
+                .expect("32-byte slice to array conversion should not fail"),
+        )
+        .with_context(|| "32-byte chunk of replica file is invalid field repr")?;
 
-/// Decodes a range of replica nodes (stored on disk) into unreplicated data nodes using the last
-/// sealing layer as the encoding key.
-pub fn decode_replica_range<Tree: MerkleTreeTrait>(
-    pc1_output: &SealPreCommitPhase1Output<Tree>,
-    replica_path: &Path,
-    node_range: Range<usize>,
-) -> Result<Vec<DefaultPieceDomain>> {
-    let replica_nodes = read_replica_range::<Tree>(replica_path, node_range.clone())?;
-    let key = read_sealing_key_range(pc1_output, node_range)?;
-    replica_nodes
-        .into_iter()
-        .zip(key)
-        .map(|(replica_node, key)| {
-            let data_node = storage_proofs_porep::decode(key, replica_node);
-            DefaultPieceDomain::try_from_bytes(data_node.as_ref())
-                .with_context(|| "failed to convert TreeR domain into TreeD domain")
-        })
-        .collect()
+        let mut key_fr = Fr::from_repr_vartime(
+            key_bytes
+                .try_into()
+                .expect("32-byte slice to array conversion should not fail"),
+        )
+        .with_context(|| "32-byte chunk of sealing key file is invalid field repr")?;
+
+        storage_proofs_porep::decode_fr(&mut key_fr, replica_fr);
+        key_bytes.copy_from_slice(&key_fr.to_repr());
+    }
+
+    let data_bytes = key_bytes;
+    Ok(data_bytes)
 }
 
 /// Given the specified arguments, this method returns the inputs that were used to

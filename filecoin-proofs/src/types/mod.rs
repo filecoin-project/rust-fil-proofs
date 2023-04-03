@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 pub use merkletree::store::StoreConfig;
 pub use storage_proofs_core::merkle::{MerkleProof, MerkleTreeTrait};
 pub use storage_proofs_porep::stacked::{Labels, PersistentAux, TemporaryAux};
@@ -95,6 +97,21 @@ impl<Tree: MerkleTreeTrait> Clone for SealPreCommitPhase1Output<Tree> {
             config: self.config.clone(),
             comm_d: self.comm_d,
         }
+    }
+}
+
+impl<Tree: MerkleTreeTrait> SealPreCommitPhase1Output<Tree> {
+    /// Returns the path on disk to the unreplicated data file.
+    #[inline]
+    pub fn data_path(&self) -> PathBuf {
+        StoreConfig::data_path(&self.config.path, &self.config.id)
+    }
+
+    /// Returns the path on disk to the sealing key file (i.e. last sealing layer).
+    pub fn key_path(&self) -> PathBuf {
+        let num_layers = self.labels.labels.len();
+        let last_layer_config = &self.labels.labels[num_layers - 1];
+        StoreConfig::data_path(&last_layer_config.path, &last_layer_config.id)
     }
 }
 

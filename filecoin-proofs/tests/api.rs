@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
-use std::fs::{metadata, read_dir, remove_file, OpenOptions};
-use std::io::{Read, Seek, Write};
+use std::fs::{metadata, read_dir, remove_file, File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Error, Result};
@@ -8,7 +8,7 @@ use bellperson::groth16;
 use bincode::serialize;
 use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
-use filecoin_hashers::{Domain, Hasher};
+use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, decode_from, encode_into,
     fauxrep_aux, generate_empty_sector_update_proof,
@@ -39,7 +39,7 @@ use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
     api_version::ApiVersion, is_legacy_porep_id, sector::SectorId, util::NODE_SIZE,
 };
-use storage_proofs_update::{constants::TreeRHasher, phi};
+use storage_proofs_update::constants::TreeRHasher;
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
 use filecoin_proofs::constants::MAX_LEGACY_REGISTERED_SEAL_PROOF_ID;
@@ -1723,7 +1723,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         sealed_sector_file.path(),
     )?;
 
-    test_sealing_encode_decode_ranges(rng, sector_size, &phase1_output, sealed_sector_file.path())?;
+    test_sealing_encode_decode_range(rng, sector_size, &phase1_output, sealed_sector_file.path())?;
 
     let comm_r = pre_commit_output.comm_r;
 
@@ -1921,9 +1921,9 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     let r_old_path = sealed_sector_file.path();
     let d_new_path = new_staged_sector_file.path();
     let r_new_path = new_sealed_sector_file.path();
-    let comm_r_old = &comm_r;
-    let comm_d_new = &encoded.comm_d_new;
-    test_update_encode_decode_ranges(
+    let comm_r_old = comm_r;
+    let comm_d_new = encoded.comm_d_new;
+    test_update_encode_decode_range(
         &config, r_old_path, d_new_path, r_new_path, comm_r_old, comm_d_new,
     )?;
 
@@ -2135,100 +2135,171 @@ fn test_aggregate_proof_encode_decode() -> Result<()> {
     Ok(())
 }
 
-fn test_sealing_encode_decode_ranges<R: Rng, Tree: MerkleTreeTrait>(
+// Tests manual encoding/decoding ranges of sealing data/replica files.
+fn test_sealing_encode_decode_range<R: Rng, Tree: MerkleTreeTrait>(
     rng: &mut R,
     sector_size: u64,
-    pc1_output: &SealPreCommitPhase1Output<Tree>,
+    pc1: &SealPreCommitPhase1Output<Tree>,
     replica_path: &Path,
 ) -> Result<()> {
-    use filecoin_proofs::{
-        decode_replica_range, encode_data_range, read_nodes_from_file, read_replica_range,
-        read_sealing_data_range, read_sealing_key_range, sealing_key_path,
-    };
-
     let sector_nodes = sector_size as usize / NODE_SIZE;
 
-    // Test an arbitrarily chosen number of node ranges.
-    let node_range_len = 11;
-    let num_test_ranges = 5;
+    let mut data_file = File::open(pc1.data_path()).with_context(|| "failed to open data file")?;
+    let mut replica_file =
+        File::open(replica_path).with_context(|| "failed to open replica file")?;
+    let mut key_file = File::open(pc1.key_path()).with_context(|| "failed to open key file")?;
 
-    for _ in 0..num_test_ranges {
-        let start_node = rng.gen::<usize>() % (sector_nodes - node_range_len);
-        let node_range = start_node..start_node + node_range_len;
+    // Test arbitrarily chosen node ranges.
+    let num_ranges = 5;
+    let num_nodes = 55;
+    let num_bytes = num_nodes * NODE_SIZE;
 
-        // Verify decoded data against unreplicated file.
-        let data_range = read_sealing_data_range(pc1_output, node_range.clone())?;
-        let decoded_range = decode_replica_range(pc1_output, replica_path, node_range.clone())?;
-        assert_eq!(data_range, decoded_range);
+    for _ in 0..num_ranges {
+        let start_node = rng.gen::<usize>() % (sector_nodes - num_nodes);
+        let byte_offset = (start_node * NODE_SIZE) as u64;
 
-        // Verify encoded data against replica file.
-        let replica_range = read_replica_range::<Tree>(replica_path, node_range.clone())?;
-        let encoded_range = encode_data_range(pc1_output, node_range.clone())?;
-        assert_eq!(replica_range, encoded_range);
+        // Read actual data/replica file bytes.
+        let data_bytes = {
+            data_file
+                .seek(SeekFrom::Start(byte_offset))
+                .with_context(|| "failed to seek data file to node range")?;
+            let mut buf = vec![0u8; num_bytes];
+            data_file
+                .read_exact(&mut buf)
+                .with_context(|| "failed to read node range from data file")?;
+            buf
+        };
+        let replica_bytes = {
+            replica_file
+                .seek(SeekFrom::Start(byte_offset))
+                .with_context(|| "failed to seek replica file to node range")?;
+            let mut buf = vec![0u8; num_bytes];
+            replica_file
+                .read_exact(&mut buf)
+                .with_context(|| "failed to read node range from replica file")?;
+            buf
+        };
 
-        // Verify data read from sealing key file matches encoding/decoding key.
-        let key_range_from_file = read_nodes_from_file::<<Tree::Hasher as Hasher>::Domain>(
-            sealing_key_path(pc1_output)?.as_path(),
-            node_range.clone(),
-        )?;
-        let key_range = read_sealing_key_range(pc1_output, node_range)?;
-        assert_eq!(key_range_from_file, key_range);
+        // Perform manual encoding/decoding on data/replica files.
+        let decoded_bytes = {
+            replica_file
+                .seek(SeekFrom::Start(byte_offset))
+                .with_context(|| "failed to seek replica file to node range")?;
+            key_file
+                .seek(SeekFrom::Start(byte_offset))
+                .with_context(|| "failed to seek key file to node range")?;
+            filecoin_proofs::decode_replica_range(&mut replica_file, &mut key_file, num_nodes)
+                .with_context(|| "failed to decode node range")?
+        };
+        let encoded_bytes = {
+            data_file
+                .seek(SeekFrom::Start(byte_offset))
+                .with_context(|| "failed to seek data file to node range")?;
+            key_file
+                .seek(SeekFrom::Start(byte_offset))
+                .with_context(|| "failed to seek key file to node range")?;
+            filecoin_proofs::encode_data_range(&mut data_file, &mut key_file, num_nodes)
+                .with_context(|| "failed to encode node range")?
+        };
+
+        assert_eq!(decoded_bytes, data_bytes);
+        assert_eq!(encoded_bytes, replica_bytes);
     }
 
     Ok(())
 }
 
-fn test_update_encode_decode_ranges(
+// Tests manual encoding/decoding ranges of empty-sector-update data/replica files.
+fn test_update_encode_decode_range(
     config: &SectorUpdateConfig,
     replica_old_path: &Path,
     data_new_path: &Path,
     replica_new_path: &Path,
-    comm_r_old: &Commitment,
-    comm_d_new: &Commitment,
+    comm_r_old: Commitment,
+    comm_d_new: Commitment,
 ) -> Result<()> {
-    use filecoin_proofs::{
-        decode_updated_replica_range, encode_updated_data_range, read_updated_data_range,
-        read_updated_replica_range, DefaultPieceDomain,
-    };
-
     let sector_nodes = u64::from(config.sector_size) as usize / NODE_SIZE;
+    let node_index_bit_len = sector_nodes.trailing_zeros() as usize;
     let h = usize::from(config.h_select);
+    // Left-shifts an `h`-bit integer to the high bits of a node index.
+    let high_shl = node_index_bit_len - h;
 
-    let comm_d_new = DefaultPieceDomain::try_from_bytes(comm_d_new)
-        .with_context(|| "failed to convert CommDNew bytes into TreeD domain")?;
-    let comm_r_old = <TreeRHasher as Hasher>::Domain::try_from_bytes(comm_r_old)
-        .with_context(|| "failed to convert CommROld bytes into TreeR domain")?;
-    let phi = phi(&comm_d_new, &comm_r_old);
+    let mut replica_old_file =
+        File::open(replica_old_path).with_context(|| "failed to open replica-old file")?;
+    let mut data_new_file =
+        File::open(data_new_path).with_context(|| "failed to open data-new file")?;
+    let mut replica_new_file =
+        File::open(replica_new_path).with_context(|| "failed to open replica-new file")?;
 
-    // Node index where all bits are zero except for the least significant high bit.
-    let mut node_range_center = sector_nodes >> h;
+    // Test node ranges of an arbitrarily chosen length.
+    let num_nodes = 20;
+    let half_num_nodes = num_nodes / 2;
+    let num_bytes = num_nodes * NODE_SIZE;
 
-    // Test node ranges that cross each of the `h` high bits.
-    for _ in 0..h {
-        // The choice of an 11-node range length is arbitrary, however this choice ensures that
-        // the node range does under/overflow testing and production sector sizes.
-        let (first_node, last_node) = (node_range_center - 5, node_range_center + 5);
-        let node_range = first_node..last_node + 1;
+    // Test node ranges where each's midpoint has a distinct `high` value.
+    for high in 1..1 << h {
+        let center_node = high << high_shl;
+        let start_node = center_node - half_num_nodes;
+        let byte_offset = (start_node * NODE_SIZE) as u64;
 
-        // Verify decoded data against data-new file.
-        let data_new_range = read_updated_data_range(data_new_path, node_range.clone())?;
-        let decoded_range = decode_updated_replica_range(
-            replica_new_path,
-            replica_old_path,
-            h,
-            &phi,
-            node_range.clone(),
-        )?;
-        assert_eq!(data_new_range, decoded_range);
+        let data_bytes = {
+            data_new_file
+                .seek(SeekFrom::Start(byte_offset))
+                .with_context(|| "failed to seek data-new file to node range")?;
+            let mut buf = vec![0u8; num_bytes];
+            data_new_file
+                .read_exact(&mut buf)
+                .with_context(|| "failed to read node range from data-new file")?;
+            buf
+        };
+        let replica_bytes = {
+            replica_new_file
+                .seek(SeekFrom::Start(byte_offset))
+                .with_context(|| "failed to seek replica-new file to node range")?;
+            let mut buf = vec![0u8; num_bytes];
+            replica_new_file
+                .read_exact(&mut buf)
+                .with_context(|| "failed to read node range from replica-new file")?;
+            buf
+        };
 
-        // Verify encoded data against replica-new file.
-        let replica_new_range = read_updated_replica_range(replica_new_path, node_range.clone())?;
-        let encoded_range =
-            encode_updated_data_range(data_new_path, replica_old_path, h, &phi, node_range)?;
-        assert_eq!(replica_new_range, encoded_range);
+        let decoded_bytes = {
+            replica_new_file
+                .seek(SeekFrom::Start(byte_offset))
+                .with_context(|| "failed to seek replica-new file to node range")?;
+            replica_old_file
+                .seek(SeekFrom::Start(byte_offset))
+                .with_context(|| "failed to seek replica-old file to node range")?;
+            filecoin_proofs::decode_updated_replica_range(
+                &mut replica_new_file,
+                &mut replica_old_file,
+                num_nodes,
+                config,
+                comm_d_new,
+                comm_r_old,
+            )
+            .with_context(|| "failed to decode node range")?
+        };
+        let encoded_bytes = {
+            data_new_file
+                .seek(SeekFrom::Start(byte_offset))
+                .with_context(|| "failed to seek data-new file to node range")?;
+            replica_old_file
+                .seek(SeekFrom::Start(byte_offset))
+                .with_context(|| "failed to seek replica-old file to node range")?;
+            filecoin_proofs::encode_updated_data_range(
+                &mut data_new_file,
+                &mut replica_old_file,
+                num_nodes,
+                config,
+                comm_d_new,
+                comm_r_old,
+            )
+            .with_context(|| "failed to encode node range")?
+        };
 
-        // The next range of nodes tested should contain a new set of high values.
-        node_range_center <<= 1;
+        assert_eq!(decoded_bytes, data_bytes);
+        assert_eq!(encoded_bytes, replica_bytes);
     }
 
     Ok(())

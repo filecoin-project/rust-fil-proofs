@@ -14,9 +14,13 @@ pub fn encode_fr(key: &mut Fr, value: Fr) {
 }
 
 pub fn decode<T: Domain>(key: T, value: T) -> T {
-    let mut result: Fr = value.into();
-    let key: Fr = key.into();
+    let value: Fr = value.into();
+    let mut result: Fr = key.into();
 
-    result -= key;
+    decode_fr(&mut result, value);
     result.into()
+}
+
+pub fn decode_fr(key: &mut Fr, value: Fr) {
+    *key = value - *key;
 }

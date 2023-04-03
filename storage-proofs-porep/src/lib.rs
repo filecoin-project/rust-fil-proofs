@@ -14,7 +14,7 @@ pub mod stacked;
 
 mod encode;
 
-pub use self::encode::{decode, encode};
+pub use self::encode::{decode_fr, encode_fr};
 
 pub const MAX_LEGACY_POREP_REGISTERED_PROOF_ID: u64 = 4;
 
