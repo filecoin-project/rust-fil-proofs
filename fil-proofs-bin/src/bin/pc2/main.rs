@@ -26,7 +26,6 @@ struct Pc2Parameters {
     num_layers: usize,
     /// The directory where the temporary files are stored and the new files are written in.
     output_dir: String,
-    partitions: usize,
     /// This is a path to a copy of the original sector data that will be manipulated in-place.
     replica_path: String,
     sector_size: u64,
@@ -38,7 +37,6 @@ impl fmt::Debug for Pc2Parameters {
             .field("comm_d", &format!("0x{}", hex::encode(self.comm_d)))
             .field("num_layers", &self.num_layers)
             .field("output_dir", &self.output_dir)
-            .field("partitions", &self.partitions)
             .field("replica_path", &self.replica_path)
             .field("sector_size", &self.sector_size)
             .finish()
