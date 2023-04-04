@@ -16,6 +16,9 @@ use storage_proofs_core::{
 };
 use storage_proofs_porep::stacked::{Labels, BINARY_ARITY};
 
+// For PC2 the PoRep ID is not used anywhere, hence we can use an arbitray one.
+const ARBITRARY_POREP_ID: [u8; 32] = [0; 32];
+
 #[derive(Deserialize, Serialize)]
 struct Pc2Parameters {
     #[serde(with = "SerHex::<StrictPfx>")]
@@ -24,8 +27,6 @@ struct Pc2Parameters {
     /// The directory where the temporary files are stored and the new files are written in.
     output_dir: String,
     partitions: usize,
-    #[serde(with = "SerHex::<StrictPfx>")]
-    porep_id: [u8; 32],
     /// This is a path to a copy of the original sector data that will be manipulated in-place.
     replica_path: String,
     sector_size: u64,
@@ -38,7 +39,6 @@ impl fmt::Debug for Pc2Parameters {
             .field("num_layers", &self.num_layers)
             .field("output_dir", &self.output_dir)
             .field("partitions", &self.partitions)
-            .field("porep_id", &format!("0x{}", hex::encode(self.porep_id)))
             .field("replica_path", &self.replica_path)
             .field("sector_size", &self.sector_size)
             .finish()
@@ -77,7 +77,7 @@ fn main() -> Result<()> {
     info!("{:?}", params);
 
     let porep_config =
-        PoRepConfig::new_groth16(params.sector_size, params.porep_id, ApiVersion::V1_2_0);
+        PoRepConfig::new_groth16(params.sector_size, ARBITRARY_POREP_ID, ApiVersion::V1_2_0);
 
     let base_tree_size = get_base_tree_size::<DefaultBinaryTree>(params.sector_size.into())?;
     let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
