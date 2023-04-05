@@ -903,7 +903,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     }
 
     #[cfg(any(feature = "cuda", feature = "opencl"))]
-    pub fn generate_tree_r_last<TreeArity>(
+    pub fn generate_tree_r_last(
         data: &mut Data<'_>,
         nodes_count: usize,
         tree_count: usize,
@@ -912,8 +912,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         source: &DiskStore<<Tree::Hasher as Hasher>::Domain>,
         callback: Option<PrepareTreeRDataCallback<Tree>>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
-    where
-        TreeArity: PoseidonArity,
     {
         let encode_data = match callback {
             Some(x) => x,
@@ -921,7 +919,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         };
 
         if SETTINGS.use_gpu_tree_builder::<Tree>() {
-            Self::generate_tree_r_last_gpu::<TreeArity>(
+            Self::generate_tree_r_last_gpu(
                 data,
                 nodes_count,
                 tree_count,
@@ -931,7 +929,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 encode_data,
             )
         } else {
-            Self::generate_tree_r_last_cpu::<TreeArity>(
+            Self::generate_tree_r_last_cpu(
                 data,
                 nodes_count,
                 tree_count,
@@ -944,7 +942,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     }
 
     #[cfg(not(any(feature = "cuda", feature = "opencl")))]
-    pub fn generate_tree_r_last<TreeArity>(
+    pub fn generate_tree_r_last(
         data: &mut Data<'_>,
         nodes_count: usize,
         tree_count: usize,
@@ -953,15 +951,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         source: &DiskStore<<Tree::Hasher as Hasher>::Domain>,
         callback: Option<PrepareTreeRDataCallback<Tree>>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
-    where
-        TreeArity: PoseidonArity,
     {
         let encode_data = match callback {
             Some(x) => x,
             None => Self::prepare_tree_r_data,
         };
 
-        Self::generate_tree_r_last_cpu::<TreeArity>(
+        Self::generate_tree_r_last_cpu(
             data,
             nodes_count,
             tree_count,
@@ -973,7 +969,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     }
 
     #[cfg(any(feature = "cuda", feature = "opencl"))]
-    fn generate_tree_r_last_gpu<TreeArity>(
+    fn generate_tree_r_last_gpu(
         data: &mut Data<'_>,
         nodes_count: usize,
         tree_count: usize,
@@ -982,8 +978,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         source: &DiskStore<<Tree::Hasher as Hasher>::Domain>,
         callback: PrepareTreeRDataCallback<Tree>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
-    where
-        TreeArity: PoseidonArity,
     {
         use std::cmp::min;
         use std::fs::OpenOptions;
@@ -1152,7 +1146,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         )
     }
 
-    fn generate_tree_r_last_cpu<TreeArity>(
+    fn generate_tree_r_last_cpu(
         data: &mut Data<'_>,
         nodes_count: usize,
         tree_count: usize,
@@ -1161,8 +1155,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         source: &DiskStore<<Tree::Hasher as Hasher>::Domain>,
         callback: PrepareTreeRDataCallback<Tree>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
-    where
-        TreeArity: PoseidonArity,
     {
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
@@ -1372,7 +1364,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         info!("building tree_r_last");
         let tree_r_last = measure_op(Operation::GenerateTreeRLast, || {
-            Self::generate_tree_r_last::<Tree::Arity>(
+            Self::generate_tree_r_last(
                 &mut data,
                 nodes_count,
                 tree_count,
