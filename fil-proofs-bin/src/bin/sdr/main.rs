@@ -18,7 +18,11 @@ use storage_proofs_porep::stacked::{
     LayerChallenges, SetupParams, StackedDrg, BINARY_ARITY, EXP_DEGREE,
 };
 
-type DefaultStackedDrg<'a> = StackedDrg<'a, DefaultBinaryTree, DefaultPieceHasher>;
+/// For SDR we use the `DefaultBinaryTree` as the tree to built upon. This is technically not
+/// correct. The current sealing code expects using the same tree shape (which depends on the
+/// secotr size) for all phases. But as we have independent binaries, it doesn't matter as we don't
+/// share Rust types accross the binary boundary.
+type SdrStackedDrg<'a> = StackedDrg<'a, DefaultBinaryTree, DefaultPieceHasher>;
 
 #[derive(Deserialize, Serialize)]
 struct SdrParameters {
@@ -96,9 +100,9 @@ fn main() -> Result<()> {
         layer_challenges: LayerChallenges::new(params.num_layers, 0),
         api_version: ApiVersion::V1_2_0,
     };
-    let public_params = DefaultStackedDrg::setup(&setup_params)?;
+    let public_params = SdrStackedDrg::setup(&setup_params)?;
 
-    let (_labels, layer_states) = DefaultStackedDrg::replicate_phase1(
+    let (_labels, layer_states) = SdrStackedDrg::replicate_phase1(
         &public_params,
         &params.replica_id.into(),
         config.clone(),
