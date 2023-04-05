@@ -156,6 +156,7 @@ pub const MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR: u64 =
 /// The minimum size a single piece must have before padding.
 pub const MIN_PIECE_SIZE: UnpaddedBytesAmount = UnpaddedBytesAmount(127);
 
+// TODO vmx 2023-04-05: Rename the hasher, domains and tree to what they do, similar to the constants in the sector update proofs. Names like `TreeD` hasher are way cleaner and easier to follow.
 /// The hasher used for creating comm_d.
 pub type DefaultPieceHasher = Sha256Hasher;
 pub type DefaultPieceDomain = <DefaultPieceHasher as Hasher>::Domain;
