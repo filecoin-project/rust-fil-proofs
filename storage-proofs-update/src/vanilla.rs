@@ -924,7 +924,7 @@ where
         // This argument is currently unused by this invocation, but required for the API.
         let mut unused_data = Data::empty();
 
-        let tree_r_last = StackedDrg::<TreeR, TreeDHasher>::generate_tree_r_last::<TreeR::Arity>(
+        let tree_r_last = StackedDrg::<TreeR, TreeDHasher>::generate_tree_r_last(
             &mut unused_data,
             base_tree_nodes_count,
             tree_count,
@@ -1187,7 +1187,7 @@ where
         // This argument is currently unused by this invocation, but required for the API.
         let mut unused_data = Data::empty();
 
-        let tree_r_last = StackedDrg::<TreeR, TreeDHasher>::generate_tree_r_last::<TreeR::Arity>(
+        let tree_r_last = StackedDrg::<TreeR, TreeDHasher>::generate_tree_r_last(
             &mut unused_data,
             base_tree_nodes_count,
             tree_count,
