@@ -3,22 +3,21 @@ use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 
 use anyhow::Result;
+use filecoin_hashers::Hasher;
 use filecoin_proofs::{
-    get_base_tree_leafs, get_base_tree_size, DefaultBinaryTree, DefaultPieceHasher,
+    get_base_tree_leafs, get_base_tree_size, with_shape, DefaultBinaryTree, DefaultPieceHasher,
 };
 use log::{info, trace};
 use merkletree::store::StoreConfig;
 use serde::{Deserialize, Serialize};
 use serde_hex::{SerHex, StrictPfx};
 use storage_proofs_core::{
-    api_version::ApiVersion, cache_key::CacheKey, drgraph::BASE_DEGREE, proof::ProofScheme,
-    util::default_rows_to_discard,
+    api_version::ApiVersion, cache_key::CacheKey, drgraph::BASE_DEGREE, merkle::MerkleTreeTrait,
+    proof::ProofScheme, util::default_rows_to_discard,
 };
 use storage_proofs_porep::stacked::{
-    LayerChallenges, SetupParams, StackedDrg, BINARY_ARITY, EXP_DEGREE,
+    LayerChallenges, LayerState, SetupParams, StackedDrg, BINARY_ARITY, EXP_DEGREE,
 };
-
-type DefaultStackedDrg<'a> = StackedDrg<'a, DefaultBinaryTree, DefaultPieceHasher>;
 
 #[derive(Deserialize, Serialize)]
 struct SdrParameters {
@@ -68,6 +67,22 @@ fn print_line<W: Write, S: Serialize>(output: &mut W, data: S) -> Result<()> {
     Ok(())
 }
 
+// Wrap it in a function with `Tree` as single generic, so that it can be called via the
+// `with_shape!()` macro.
+fn replicate_phase1<Tree: 'static + MerkleTreeTrait>(
+    setup_params: &SetupParams,
+    replica_id: &<Tree::Hasher as Hasher>::Domain,
+    config: StoreConfig,
+) -> Result<Vec<LayerState>> {
+    let public_params = StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params)?;
+    let (_labels, layer_states) = StackedDrg::<Tree, DefaultPieceHasher>::replicate_phase1(
+        &public_params,
+        replica_id,
+        config,
+    )?;
+    Ok(layer_states)
+}
+
 fn main() -> Result<()> {
     fil_logger::maybe_init();
 
@@ -96,10 +111,11 @@ fn main() -> Result<()> {
         layer_challenges: LayerChallenges::new(params.num_layers, 0),
         api_version: ApiVersion::V1_2_0,
     };
-    let public_params = DefaultStackedDrg::setup(&setup_params)?;
 
-    let (_labels, layer_states) = DefaultStackedDrg::replicate_phase1(
-        &public_params,
+    let layer_states = with_shape!(
+        params.sector_size,
+        replicate_phase1,
+        &setup_params,
         &params.replica_id.into(),
         config.clone(),
     )?;
