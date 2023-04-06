@@ -442,7 +442,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     }
 
     #[cfg(any(feature = "cuda", feature = "opencl"))]
-    fn generate_tree_c<ColumnArity, TreeArity>(
+    pub fn generate_tree_c<ColumnArity, TreeArity>(
         nodes_count: usize,
         tree_count: usize,
         configs: Vec<StoreConfig>,
@@ -470,7 +470,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     }
 
     #[cfg(not(any(feature = "cuda", feature = "opencl")))]
-    fn generate_tree_c<ColumnArity, TreeArity>(
+    pub fn generate_tree_c<ColumnArity, TreeArity>(
         nodes_count: usize,
         tree_count: usize,
         configs: Vec<StoreConfig>,
