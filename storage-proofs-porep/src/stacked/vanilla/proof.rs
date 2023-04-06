@@ -11,7 +11,7 @@ use fdlimit::raise_fd_limit;
 #[cfg(any(feature = "cuda", feature = "opencl"))]
 use ff::PrimeField;
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
-use generic_array::typenum::{Unsigned, U0, U11, U2, U8};
+use generic_array::typenum::{Unsigned, U0, U11, U2};
 use lazy_static::lazy_static;
 use log::{error, info, trace};
 #[cfg(any(feature = "cuda", feature = "opencl"))]
@@ -1317,16 +1317,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 )?;
                 tree_c.root()
             }
-            8 => {
-                let tree_c = Self::generate_tree_c::<U8, Tree::Arity>(
-                    layers,
-                    nodes_count,
-                    tree_count,
-                    configs,
-                    &labels,
-                )?;
-                tree_c.root()
-            }
             11 => {
                 let tree_c = Self::generate_tree_c::<U11, Tree::Arity>(
                     layers,
@@ -1719,6 +1709,7 @@ mod tests {
 
     use crate::stacked::EXP_DEGREE;
     use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher};
+    use generic_array::typenum::U8;
     use storage_proofs_core::{api_version::ApiVersion, drgraph::BASE_DEGREE};
     use tempfile::tempdir;
 
