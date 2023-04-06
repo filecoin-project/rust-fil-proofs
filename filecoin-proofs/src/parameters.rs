@@ -110,12 +110,13 @@ fn select_challenges(
     use_synthetic: bool,
 ) -> LayerChallenges {
     let mut count = 1;
-    let mut guess = LayerChallenges::new(layers, count, use_synthetic);
+    let mut guess = LayerChallenges::new(layers, count);
     while partitions * guess.challenges_count_all() < minimum_total_challenges {
         count += 1;
-        guess = LayerChallenges::new(layers, count, use_synthetic);
+        guess = LayerChallenges::new(layers, count);
     }
 
+    guess.use_synthetic = use_synthetic;
     guess
 }
 
