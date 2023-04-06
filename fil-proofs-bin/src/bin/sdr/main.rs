@@ -102,11 +102,8 @@ fn main() -> Result<()> {
     };
     let public_params = SdrStackedDrg::setup(&setup_params)?;
 
-    let (_labels, layer_states) = SdrStackedDrg::replicate_phase1(
-        &public_params,
-        &params.replica_id.into(),
-        config.clone(),
-    )?;
+    let (_labels, layer_states) =
+        SdrStackedDrg::replicate_phase1(&public_params, &params.replica_id.into(), config.clone())?;
     let layers = layer_states
         .iter()
         .map(|state| StoreConfig::data_path(&state.config.path, &state.config.id))
