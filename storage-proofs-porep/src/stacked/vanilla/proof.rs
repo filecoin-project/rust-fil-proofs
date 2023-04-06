@@ -8,11 +8,14 @@ use anyhow::Context;
 use bincode::deserialize;
 use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
+#[cfg(any(feature = "cuda", feature = "opencl"))]
 use ff::PrimeField;
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0, U11, U2, U8};
 use lazy_static::lazy_static;
-use log::{error, info, trace, warn};
+use log::{error, info, trace};
+#[cfg(any(feature = "cuda", feature = "opencl"))]
+use log::warn;
 use merkletree::{
     merkle::{get_merkle_tree_len, is_merkle_tree_size_valid},
     store::{DiskStore, Store, StoreConfig},
@@ -31,13 +34,14 @@ use storage_proofs_core::{
         split_config_and_replica, BinaryMerkleTree, DiskTree, LCTree, MerkleProofTrait,
         MerkleTreeTrait,
     },
-    settings::SETTINGS,
     util::{default_rows_to_discard, NODE_SIZE},
 };
+#[cfg(any(feature = "cuda", feature = "opencl"))]
+use storage_proofs_core::settings::SETTINGS;
 use yastl::Pool;
 
 use crate::{
-    encode::{decode, encode, encode_fr},
+    encode::{decode, encode},
     stacked::vanilla::{
         challenges::LayerChallenges,
         column::Column,
@@ -52,6 +56,8 @@ use crate::{
         EncodingProof, LabelingProof,
     },
 };
+#[cfg(any(feature = "cuda", feature = "opencl"))]
+use crate::encode::encode_fr;
 
 pub const TOTAL_PARENTS: usize = 37;
 

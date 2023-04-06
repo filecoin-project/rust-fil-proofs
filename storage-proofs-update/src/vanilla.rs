@@ -30,8 +30,9 @@ use storage_proofs_core::{
     },
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
-    settings::SETTINGS,
 };
+#[cfg(any(feature = "cuda", feature = "opencl"))]
+use storage_proofs_core::settings::SETTINGS;
 use storage_proofs_porep::stacked::{StackedDrg, TreeRElementData};
 
 use crate::{
