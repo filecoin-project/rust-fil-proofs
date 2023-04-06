@@ -367,6 +367,13 @@ impl From<[u8; 32]> for PoseidonDomain {
     }
 }
 
+impl From<PoseidonDomain> for [u8; 32] {
+    #[inline]
+    fn from(val: PoseidonDomain) -> Self {
+        val.0
+    }
+}
+
 impl From<PoseidonDomain> for Fr {
     #[inline]
     fn from(val: PoseidonDomain) -> Self {

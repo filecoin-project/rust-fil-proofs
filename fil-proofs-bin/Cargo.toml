@@ -13,6 +13,7 @@ fil_logger = "0.1.7"
 filecoin-hashers = { path = "../filecoin-hashers", version = "~9.0.0", default-features = false }
 filecoin-proofs = { path = "../filecoin-proofs", version = "~14.0.0", default-features = false }
 fr32 = { path = "../fr32", version = "~7.0.0", default-features = false }
+generic-array = "0.14.7"
 hex = { version = "0.4.3", features = ["serde"] }
 log = "0.4.17"
 memmap2 = "0.5.10"
