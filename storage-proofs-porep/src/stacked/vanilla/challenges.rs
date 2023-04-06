@@ -38,11 +38,19 @@ impl fmt::Debug for LayerChallenges {
 }
 
 impl LayerChallenges {
-    pub const fn new(layers: usize, max_count: usize, use_synthetic: bool) -> Self {
+    pub const fn new(layers: usize, max_count: usize) -> Self {
         LayerChallenges {
             layers,
             max_count,
-            use_synthetic,
+            use_synthetic: false,
+        }
+    }
+
+    pub const fn new_synthetic(layers: usize, max_count: usize) -> Self {
+        LayerChallenges {
+            layers,
+            max_count,
+            use_synthetic: true,
         }
     }
 
@@ -408,7 +416,7 @@ mod test {
 
     #[test]
     fn test_calculate_fixed_challenges() {
-        let layer_challenges = LayerChallenges::new(10, 333, false);
+        let layer_challenges = LayerChallenges::new(10, 333);
         let expected = 333;
 
         let calculated_count = layer_challenges.challenges_count_all();
@@ -420,7 +428,7 @@ mod test {
         let n = 200;
         let layers = 100;
 
-        let challenges = LayerChallenges::new(layers, n, false);
+        let challenges = LayerChallenges::new(layers, n);
         let leaves = 1 << 30;
         let rng = &mut thread_rng();
         let replica_id: Sha256Domain = Sha256Domain::random(rng);
@@ -503,11 +511,11 @@ mod test {
         let total_challenges = n * partitions;
 
         for _layer in 1..=layers {
-            let one_partition_challenges = LayerChallenges::new(layers, total_challenges, false)
                 .derive(leaves, &replica_id, &seed, 0, partitions);
+            let one_partition_challenges = LayerChallenges::new(layers, total_challenges)
             let many_partition_challenges = (0..partitions)
                 .flat_map(|k| {
-                    LayerChallenges::new(layers, n, false).derive(
+                    LayerChallenges::new(layers, n).derive(
                         leaves,
                         &replica_id,
                         &seed,
