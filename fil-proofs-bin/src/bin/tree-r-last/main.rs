@@ -22,14 +22,14 @@ use storage_proofs_core::{
     merkle::{get_base_tree_count, MerkleTreeTrait},
     util::{default_rows_to_discard, NODE_SIZE},
 };
-use storage_proofs_porep::stacked::StackedDrg;
+use storage_proofs_porep::stacked::{StackedDrg, TreeRElementData};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct TreeRLastParameters {
     num_layers: usize,
     /// The directory where the temporary files are stored and the new files are written in.
     output_dir: String,
-    /// This is a path to a copy of the original sector data that will be manipulated in-place.
+    /// This is the path to the encoded replica file.
     replica_path: String,
     sector_size: u64,
 }
@@ -56,6 +56,44 @@ fn print_line<W: Write, S: Serialize>(output: &mut W, data: S) -> Result<()> {
     output.write_all(&line)?;
     output.write_all(&[b'\n'])?;
     Ok(())
+}
+
+/// By default, the `generate_last_r_tree` call encodes the replica in-place with the sector-key.
+/// With supplying this custom function we take the data as it is, without modifying it. Creating
+/// the replica is done in a separate step.
+#[cfg(any(feature = "cuda", feature = "opencl"))]
+fn prepare_tree_r_data<Tree: 'static + MerkleTreeTrait>(
+    source: &DiskStore<<Tree::Hasher as Hasher>::Domain>,
+    _data: Option<&mut Data<'_>>,
+    start: usize,
+    end: usize,
+) -> Result<TreeRElementData<Tree>> {
+    let tree_data: Vec<TreeRDomain> = source
+        .read_range(start..end)
+        .expect("failed to read from source");
+
+    if SETTINGS.use_gpu_tree_builder::<TreeR>() {
+        Ok(TreeRElementData::FrList(
+            tree_data.into_par_iter().map(|x| x.into()).collect(),
+        ))
+    } else {
+        Ok(TreeRElementData::ElementList(tree_data))
+    }
+}
+
+#[cfg(not(any(feature = "cuda", feature = "opencl")))]
+fn prepare_tree_r_data<Tree: 'static + MerkleTreeTrait>(
+    source: &DiskStore<<Tree::Hasher as Hasher>::Domain>,
+    _data: Option<&mut Data<'_>>,
+    start: usize,
+    end: usize,
+) -> Result<TreeRElementData<Tree>> {
+    //let tree_data: Vec<TreeRDomain> = source
+    let tree_data = source
+        .read_range(start..end)
+        .expect("failed to read from source");
+
+    Ok(TreeRElementData::ElementList(tree_data))
 }
 
 // Wrap it in a function with `Tree` as single generic, so that it can be called via the
@@ -115,9 +153,8 @@ fn generate_tree_r_last<Tree: 'static + MerkleTreeTrait>(
         tree_r_last_config,
         PathBuf::from(replica_path),
         &last_layer_labels,
-        // TODO vmx 2023-04-06: If we pass in an no-op function, then I think the replica is not
-        // touched.
-        None,
+        // By default, the replica file is manipulated. Don't do that.
+        Some(prepare_tree_r_data),
     )?;
     Ok(tree_r_last.root())
 }
