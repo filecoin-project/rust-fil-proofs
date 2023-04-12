@@ -405,7 +405,7 @@ fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Laye
     let pub_inputs =
         PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Blake2sHasher as Hasher>::Domain> {
             replica_id,
-            seed,
+            seed: Some(seed),
             tau: Some(tau),
             k: None,
         };

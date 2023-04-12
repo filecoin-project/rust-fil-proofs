@@ -6,7 +6,7 @@ use std::panic::panic_any;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use anyhow::Context;
+use anyhow::{ensure, Context};
 use bincode::{deserialize, serialize};
 use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
@@ -41,7 +41,7 @@ use yastl::Pool;
 use crate::{
     encode::{decode, encode, encode_fr},
     stacked::vanilla::{
-        challenges::{synthetic::SYNTHETIC_POREP_VANILLA_PROOFS_KEY, LayerChallenges},
+        challenges::LayerChallenges,
         column::Column,
         create_label,
         graph::StackedBucketGraph,
@@ -117,6 +117,35 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             t_aux.tree_d.root()
         );
 
+        // If synthetic vanilla proofs are stored on disk, read and return the proofs corresponding
+        // to the porep challlenge set.
+        let read_synth_proofs = layer_challenges.use_synthetic && pub_inputs.seed.is_some();
+        if read_synth_proofs {
+            let read_res = Self::read_porep_proofs_from_synth(
+                graph_size,
+                pub_inputs,
+                layer_challenges,
+                t_aux,
+                partition_count,
+            );
+            if read_res.is_ok() {
+                return read_res;
+            }
+            info!(
+                "failed to read porep proofs from synthetic proofs file: {:?}",
+                t_aux.synth_proofs_path(),
+            );
+            info!("skipping synthetic proving; generating non-synthetic vanilla proofs");
+        }
+
+        // If generating vanilla proofs for the synthetic challenge set, generate those proofs in a
+        // single partition (otherwise we must ensure tha the synthetic challenge count is divisible
+        // by the porep partition count).
+        let gen_synth_proofs = layer_challenges.use_synthetic && pub_inputs.seed.is_none();
+        if gen_synth_proofs {
+            info!("generating synthetic vanilla proofs in a single partition");
+        }
+
         let get_drg_parents_columns = |x: usize| -> Result<Vec<Column<Tree::Hasher>>> {
             let base_degree = graph.base_graph().degree();
 
@@ -152,8 +181,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 trace!("proving partition {}/{}", k + 1, partition_count);
 
                 // Derive the set of challenges we are proving over.
-                let challenges = pub_inputs.challenges(layer_challenges, graph_size, Some(k), partition_count);
-                trace!("[Vanilla] Partition {} / {}, Nodes {}, RequiredChallengesPerPartition {}, NumChallengesGenerated {}", k, partition_count, graph_size / NODE_SIZE, layer_challenges.challenges_count_all(), challenges.len());
+                let challenges = pub_inputs.challenges(layer_challenges, graph_size, Some(k));
 
                 // Stacked commitment specifics
                 challenges
@@ -289,35 +317,97 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     })
                     .collect()
             })
-            .collect::<Result<Vec<Vec<Proof<Tree, G>>>>>();
+            .collect::<Result<Vec<Vec<Proof<Tree, G>>>>>()?;
 
-        // If we are using Synthetic PoRep, we need to persist all of
-        // the vanilla proofs here.
-        let vanilla_proofs = if layer_challenges.use_synthetic {
-            let cache_path = t_aux
-                .t_aux
-                .tree_d_config
-                .path
-                .clone()
-                .join(SYNTHETIC_POREP_VANILLA_PROOFS_KEY);
+        // If synthetic vanilla proofs were generated, persist them here.
+        if gen_synth_proofs {
+            assert!(
+                vanilla_proofs.iter().skip(1).all(Vec::is_empty),
+                "synthetic proofs should be generated in a single partition",
+            );
+            let synth_proofs = &vanilla_proofs[0];
+            Self::write_synth_proofs(synth_proofs, pub_inputs, graph, layer_challenges, t_aux)?;
+            return Ok(vec![vec![]; partition_count]);
+        }
 
-            trace!("Storing all synthetic vanilla proofs at {:?}", cache_path);
-            let mut f_syn_vanilla_proofs = File::create(&cache_path)
-                .with_context(|| format!("could not create file {:?}", cache_path))?;
-            let vp = vanilla_proofs.expect("failed to retrieve vanilla proofs");
-            let syn_vanilla_proofs_bytes = serialize(&vp)?;
-            f_syn_vanilla_proofs
-                .write_all(&syn_vanilla_proofs_bytes)
-                .with_context(|| format!("could not write to file {:?}", cache_path))?;
+        Ok(vanilla_proofs)
+    }
 
-            trace!("Stored all synthetic vanilla proofs at {:?}", cache_path);
+    fn write_synth_proofs(
+        synth_proofs: &[Proof<Tree, G>],
+        pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
+        graph: &StackedBucketGraph<Tree::Hasher>,
+        layer_challenges: &LayerChallenges,
+        t_aux: &TemporaryAuxCache<Tree, G>,
+    ) -> Result<()> {
+        use crate::stacked::vanilla::SynthChallenges;
 
-            Ok(vp)
-        } else {
-            vanilla_proofs
-        };
+        // Verify synth proofs prior to writing because `ProofScheme`'s verification API is not
+        // amenable to prover-only verification (i.e. the API uses public values, whereas synthetic
+        // proofs are known only to the prover).
+        let pub_params = PublicParams::<Tree>::new(graph.clone(), layer_challenges.clone());
+        let replica_id: Fr = pub_inputs.replica_id.into();
+        let synth_challenges = SynthChallenges::default_chacha20(graph.size(), &replica_id);
+        assert_eq!(synth_proofs.len(), synth_challenges.num_synth_challenges);
+        for (challenge, proof) in synth_challenges.zip(synth_proofs) {
+            assert!(proof.verify(&pub_params, pub_inputs, challenge, graph));
+        }
 
-        vanilla_proofs
+        let path = t_aux.synth_proofs_path();
+        info!("writing synth-porep vanilla proofs to file: {:?}", path);
+        let mut file = File::create(&path).with_context(|| {
+            format!(
+                "failed to create synth-porep vanilla proofs file: {:?}",
+                path,
+            )
+        })?;
+        let synth_proofs_bytes = serialize(&synth_proofs)
+            .with_context(|| "failed to serialize synth-porep vanilla proofs")?;
+        file.write_all(&synth_proofs_bytes).with_context(|| {
+            format!(
+                "failed to write synth-porep vanilla proofs to file: {:?}",
+                path,
+            )
+        })?;
+        info!(
+            "successfully stored synth-porep vanilla proofs to file: {:?}",
+            path,
+        );
+        Ok(())
+    }
+
+    fn read_porep_proofs_from_synth(
+        sector_nodes: usize,
+        pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
+        layer_challenges: &LayerChallenges,
+        t_aux: &TemporaryAuxCache<Tree, G>,
+        partition_count: usize,
+    ) -> Result<Vec<Vec<Proof<Tree, G>>>> {
+        ensure!(
+            pub_inputs.seed.is_some(),
+            "porep challenge seed must be set prior to reading porep proofs from synthetic",
+        );
+        let seed = pub_inputs
+            .seed
+            .as_ref()
+            .expect("challenge seed should be set");
+        let path = t_aux.synth_proofs_path();
+        info!("reading synthetic vanilla proofs from file: {:?}", path);
+        let proofs_bytes = fs::read(&path)
+            .with_context(|| format!("failed to read synthetic vanilla proofs file: {:?}", path))?;
+        let synth_proofs: Vec<Proof<Tree, G>> = deserialize(&proofs_bytes)
+            .with_context(|| "failed to deserialize synth-porep vanilla proofs file")?;
+        let porep_proofs = (0..partition_count as u8)
+            .map(|k| {
+                layer_challenges
+                    .derive_porep_synth_indexes(sector_nodes, &pub_inputs.replica_id, seed, k)
+                    .into_iter()
+                    .map(|i| synth_proofs[i].clone())
+                    .collect()
+            })
+            .collect::<Vec<Vec<Proof<Tree, G>>>>();
+        info!("successfully read porep vanilla proofs from synthetic file");
+        Ok(porep_proofs)
     }
 
     pub(crate) fn extract_and_invert_transform_layers(

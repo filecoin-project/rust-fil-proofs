@@ -28,6 +28,7 @@ use storage_proofs_core::{
 
 use crate::stacked::vanilla::{
     Column, ColumnProof, EncodingProof, LabelingProof, LayerChallenges, StackedBucketGraph,
+    SYNTHETIC_POREP_VANILLA_PROOFS_KEY,
 };
 
 pub const BINARY_ARITY: usize = 2;
@@ -117,7 +118,9 @@ where
 pub struct PublicInputs<T: Domain, S: Domain> {
     #[serde(bound = "")]
     pub replica_id: T,
-    pub seed: [u8; 32],
+    /// PoRep challenge generation randomness. `Some` indicates that proofs should be generated for
+    /// porep challenges; `None` indicates that proofs should be generated for synthetic challenges.
+    pub seed: Option<[u8; 32]>,
     #[serde(bound = "")]
     pub tau: Option<Tau<T, S>>,
     /// Partition index
@@ -125,22 +128,31 @@ pub struct PublicInputs<T: Domain, S: Domain> {
 }
 
 impl<T: Domain, S: Domain> PublicInputs<T, S> {
+    /// If the porep challenge randomness `self.seed` is set, this method returns the porep
+    /// challenges for partition `k`; otherwise if `self.seed` is `None`, returns the entire
+    /// synthetic challenge set. Note synthetic challenges are generated in a single partition
+    /// `k = 0`.
     pub fn challenges(
         &self,
         layer_challenges: &LayerChallenges,
-        leaves: usize,
-        partition_k: Option<usize>,
-        partition_count: usize,
+        sector_nodes: usize,
+        k: Option<usize>,
     ) -> Vec<usize> {
-        let k = partition_k.unwrap_or(0);
+        let k = k.unwrap_or(0);
 
-        layer_challenges.derive::<T>(
-            leaves,
-            &self.replica_id,
-            &self.seed,
-            k as u8,
-            partition_count,
-        )
+        if let Some(seed) = self.seed.as_ref() {
+            layer_challenges.derive(sector_nodes, &self.replica_id, seed, k as u8)
+        } else {
+            assert!(
+                layer_challenges.use_synthetic,
+                "challenge seed must be set for non-synthetic porep",
+            );
+            if k == 0 {
+                layer_challenges.derive_synthetic(sector_nodes, &self.replica_id)
+            } else {
+                vec![]
+            }
+        }
     }
 }
 
@@ -489,6 +501,13 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
 
         Ok(())
     }
+
+    pub fn synth_proofs_path(&self) -> PathBuf {
+        self.tree_d_config
+            .path
+            .clone()
+            .join(SYNTHETIC_POREP_VANILLA_PROOFS_KEY)
+    }
 }
 
 #[derive(Debug)]
@@ -587,6 +606,10 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
 
     pub fn column(&self, column_index: u32) -> Result<Column<Tree::Hasher>> {
         self.labels.column(column_index)
+    }
+
+    pub fn synth_proofs_path(&self) -> PathBuf {
+        self.t_aux.synth_proofs_path()
     }
 }
 

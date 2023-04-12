@@ -1,4 +1,3 @@
-use std::iter::FromIterator;
 use std::marker::PhantomData;
 
 use anyhow::ensure;
@@ -6,7 +5,6 @@ use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, Synthesi
 use blstrs::Scalar as Fr;
 use filecoin_hashers::{HashFunction, Hasher};
 use fr32::u64_into_fr;
-use log::trace;
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
     drgraph::Graph,
@@ -210,6 +208,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         pub_params: &<StackedDrg<'_, Tree, G> as ProofScheme<'_>>::PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Fr>> {
+        ensure!(
+            pub_in.seed.is_some(),
+            "porep challenge seed must be set prior to circuit generation",
+        );
+
         let graph = &pub_params.graph;
 
         let mut inputs = Vec::new();
@@ -231,42 +234,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         let por_params = PoR::<Tree>::setup(&por_setup_params)?;
         let por_params_d = PoR::<BinaryMerkleTree<G>>::setup(&por_setup_params)?;
 
-        let all_challenges =
-            pub_in.challenges(&pub_params.layer_challenges, graph.size(), Some(0), 1);
-
-        let all_challenges = if pub_params.layer_challenges.use_synthetic {
-            // For the Synthetic PoRep case only:
-            //
-            // Here, we don't know the partition count, but we need the
-            // specific and limited set of challenges per partition, so we
-            // set the partition_count to 0 to retrieve ALL possible
-            // synthetic challenges and then take only the subset required
-            // based on the specific partition that we're processing now
-            let cur_k = k.unwrap_or(0);
-            let count = pub_params.layer_challenges.challenges_count_all();
-            let nodes = graph.size();
-            let start_offset = (all_challenges.len() / count) * cur_k;
-            let all_challenges = Vec::from_iter(
-                all_challenges[start_offset..start_offset + count]
-                    .iter()
-                    .cloned(),
-            );
-
-            trace!(
-                "[Circuit] Partition {}, Nodes {}, AllChallenges {}, NumChallenges {}, Challenge Range {}-{}",
-                cur_k,
-                nodes,
-                all_challenges.len(),
-                count,
-                start_offset,
-                start_offset + count
-            );
-            ensure!(count == all_challenges.len(), "Challenge count mismatch");
-
-            all_challenges
-        } else {
-            all_challenges
-        };
+        let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
 
         for challenge in all_challenges.into_iter() {
             // comm_d inclusion proof for the data leaf

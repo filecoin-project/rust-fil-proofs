@@ -110,7 +110,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
     let pub_inputs =
         PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
             replica_id: replica_id.into(),
-            seed,
+            seed: Some(seed),
             tau: Some(tau),
             k: None,
         };
