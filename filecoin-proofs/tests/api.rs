@@ -14,17 +14,17 @@ use filecoin_proofs::{
     decode_from_range, encode_into, fauxrep_aux, generate_empty_sector_update_proof,
     generate_empty_sector_update_proof_with_vanilla, generate_fallback_sector_challenges,
     generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
-    generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_tree_c,
-    generate_tree_r_last, generate_window_post, generate_window_post_with_vanilla,
-    generate_winning_post, generate_winning_post_sector_challenge,
-    generate_winning_post_with_vanilla, get_num_partition_for_fallback_post, get_seal_inputs,
-    merge_window_post_partition_proofs, remove_encoded_data, seal_commit_phase1,
-    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, unseal_range,
-    validate_cache_for_commit, validate_cache_for_precommit_phase2,
-    verify_aggregate_seal_commit_proofs, verify_empty_sector_update_proof, verify_partition_proofs,
-    verify_seal, verify_single_partition_proof, verify_window_post, verify_winning_post,
-    Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
-    PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput,
+    generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_synth_proofs,
+    generate_window_post, generate_window_post_with_vanilla, generate_winning_post,
+    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla,
+    get_num_partition_for_fallback_post, get_seal_inputs, merge_window_post_partition_proofs,
+    remove_encoded_data, seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1,
+    seal_pre_commit_phase2, unseal_range, validate_cache_for_commit,
+    validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs,
+    verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
+    verify_single_partition_proof, verify_window_post, verify_winning_post, Commitment,
+    DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PoStConfig,
+    PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput,
     SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB,
     SectorShape32KiB, SectorShape4KiB, SectorUpdateConfig, UnpaddedByteIndex, UnpaddedBytesAmount,
     SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
@@ -1554,6 +1554,19 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
     pre_commit_output: &SealPreCommitOutput,
     piece_infos: &[PieceInfo],
 ) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])> {
+    if config.feature_enabled(ApiFeature::SyntheticPoRep) {
+        generate_synth_proofs::<_, Tree>(
+            config,
+            cache_dir_path,
+            sealed_sector_file.path(),
+            prover_id,
+            sector_id,
+            ticket,
+            pre_commit_output.clone(),
+            piece_infos,
+        )?;
+    }
+
     let phase1_output = seal_commit_phase1::<_, Tree>(
         config,
         cache_dir_path,

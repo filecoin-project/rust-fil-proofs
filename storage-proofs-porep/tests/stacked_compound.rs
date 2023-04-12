@@ -110,7 +110,7 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
     let public_inputs =
         PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
             replica_id: replica_id.into(),
-            seed,
+            seed: Some(seed),
             tau: Some(tau),
             k: None,
         };
