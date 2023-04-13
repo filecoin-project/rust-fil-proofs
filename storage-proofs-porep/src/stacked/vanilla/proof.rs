@@ -452,6 +452,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         ColumnArity: 'static + PoseidonArity,
         TreeArity: PoseidonArity,
     {
+        trace!("vmx: generate_tree_c parameters: node_count, trees_count, configs, labels: {:?} {:?} {:?} {:?}", nodes_count, tree_count, configs, labels);
         if SETTINGS.use_gpu_column_builder::<Tree>() {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
                 nodes_count,
@@ -538,6 +539,17 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 let (writer_tx, writer_rx) = channel::<(Vec<Fr>, Vec<Fr>)>(0);
 
                 s.execute(move || {
+trace!("vmx: allocate layer data");
+                    // Allocate the temporary vector for the field elements with the maximum batch
+                    // size only once and then re-use it within the loop. This is a performance
+                    // optimization.
+                    let mut layer_data_buffer: Vec<Vec<u8>> =
+                        vec![
+                        vec![0u8; max_gpu_column_batch_size * std::mem::size_of::<Fr>()];
+                    ColumnArity::to_usize()
+                        ];
+
+trace!("vmx: loop through the layers");
                     for i in 0..config_count {
                         let mut node_index = 0;
                         let builder_tx = builder_tx.clone();
@@ -554,13 +566,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             let columns: Vec<GenericArray<Fr, ColumnArity>> = {
                                 use fr32::bytes_into_fr;
 
-                                // Allocate layer data array and insert a placeholder for each layer.
-                                let mut layer_data: Vec<Vec<u8>> =
-                                    vec![
-                                        vec![0u8; chunked_nodes_count * std::mem::size_of::<Fr>()];
-                                        ColumnArity::to_usize()
-                                    ];
-
+                                // The buffer is allocates with the maximum size, but there might
+                                // be remainder nodes that don't fill the full buffer. Hence create
+                                // a slice matching the exact size we work on.
+                                // There is not need to zero the buffer as this slice will be fully
+                                // populated in the for loop below.
+                                let layer_data = &mut layer_data_buffer[..chunked_nodes_count];
+trace!("vmx: gather layer data");
                                 // gather all layer data.
                                 for (layer_index, layer_bytes) in
                                     layer_data.iter_mut().enumerate()
@@ -574,6 +586,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                         .expect("failed to read store range");
                                 }
 
+trace!("vmx: bytes into fr");
                                 (0..chunked_nodes_count)
                                     .into_par_iter()
                                     .map(|index| {
@@ -590,6 +603,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                     })
                                     .collect()
                             };
+trace!("vmx: column data done");
 
                             node_index += chunked_nodes_count;
                             trace!(
