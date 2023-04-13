@@ -566,10 +566,10 @@ trace!("vmx: loop through the layers");
                             let columns: Vec<GenericArray<Fr, ColumnArity>> = {
                                 use fr32::bytes_into_fr;
 
+                                use rayon::iter::IntoParallelRefMutIterator;
 trace!("vmx: gather layer data");
                                 // gather all layer data.
-                                for (layer_index, layer_bytes) in
-                                    layer_data.iter_mut().enumerate()
+                                layer_data.par_iter_mut().enumerate().for_each(|(layer_index, layer_bytes)|
                                 {
                                     let store = labels.labels_for_layer(layer_index + 1);
                                     let start = (i * nodes_count) + node_index;
@@ -578,7 +578,7 @@ trace!("vmx: gather layer data");
                                     store
                                         .read_range_into(start, end, layer_bytes)
                                         .expect("failed to read store range");
-                                }
+                                });
 
 trace!("vmx: bytes into fr");
                                 (0..chunked_nodes_count)
