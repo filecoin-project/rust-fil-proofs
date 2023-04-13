@@ -611,6 +611,7 @@ trace!("vmx: column data done");
                             builder_tx
                                 .send((columns, is_final))
                                 .expect("failed to send columns");
+trace!("vmx: sent data to builder");
                         }
                     }
                 });
@@ -647,6 +648,7 @@ trace!("vmx: loop through all trees");
                         loop {
                             let (columns, is_final): (Vec<GenericArray<Fr, ColumnArity>>, bool) =
                                 builder_rx.recv().expect("failed to recv columns");
+trace!("vmx: received builder message: final, columns len: {} {}", is_final, columns.len());
 
                             // Just add non-final column batches.
                             if !is_final {
