@@ -543,7 +543,7 @@ trace!("vmx: allocate layer data");
                     // Allocate the temporary vector for the field elements with the maximum batch
                     // size only once and then re-use it within the loop. This is a performance
                     // optimization.
-                    let mut layer_data_buffer: Vec<Vec<u8>> =
+                    let mut layer_data: Vec<Vec<u8>> =
                         vec![
                         vec![0u8; max_gpu_column_batch_size * std::mem::size_of::<Fr>()];
                     ColumnArity::to_usize()
@@ -566,12 +566,6 @@ trace!("vmx: loop through the layers");
                             let columns: Vec<GenericArray<Fr, ColumnArity>> = {
                                 use fr32::bytes_into_fr;
 
-                                // The buffer is allocates with the maximum size, but there might
-                                // be remainder nodes that don't fill the full buffer. Hence create
-                                // a slice matching the exact size we work on.
-                                // There is not need to zero the buffer as this slice will be fully
-                                // populated in the for loop below.
-                                let layer_data = &mut layer_data_buffer[..chunked_nodes_count];
 trace!("vmx: gather layer data");
                                 // gather all layer data.
                                 for (layer_index, layer_bytes) in
