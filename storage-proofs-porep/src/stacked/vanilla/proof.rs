@@ -614,8 +614,10 @@ trace!("vmx: column data done");
                         }
                     }
                 });
+trace!("vmx: execute the tree builder");
                 s.execute(move || {
                     let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
+trace!("vmx: init tree batcher");
                     let tree_batcher = match Batcher::pick_gpu(max_gpu_tree_batch_size) {
                         Ok(b) => Some(b),
                         Err(err) => {
@@ -623,6 +625,7 @@ trace!("vmx: column data done");
                             None
                         }
                     };
+trace!("vmx: init column batcher");
                     let column_batcher = match Batcher::pick_gpu(max_gpu_column_batch_size) {
                         Ok(b) => Some(b),
                         Err(err) => {
@@ -630,6 +633,7 @@ trace!("vmx: column data done");
                             None
                         }
                     };
+trace!("vmx: init column tree builder");
                     let mut column_tree_builder = ColumnTreeBuilder::<Fr, ColumnArity, TreeArity>::new(
                         column_batcher,
                         tree_batcher,
@@ -637,6 +641,7 @@ trace!("vmx: column data done");
                     )
                     .expect("failed to create ColumnTreeBuilder");
 
+trace!("vmx: loop through all trees");
                     // Loop until all trees for all configs have been built.
                     for i in 0..config_count {
                         loop {
@@ -677,6 +682,7 @@ trace!("vmx: column data done");
                     }
                 });
 
+trace!("vmx: loop through all configs");
                 for config in &configs {
                     let (base_data, tree_data) = writer_rx
                         .recv()
@@ -686,6 +692,7 @@ trace!("vmx: column data done");
                     assert_eq!(base_data.len(), nodes_count);
                     assert_eq!(tree_len, config.size.expect("config size failure"));
 
+trace!("vmx: persist trees");
                     // Persist the base and tree data to disk based using the current store config.
                     let tree_c_store_path = StoreConfig::data_path(&config.path, &config.id);
                     let tree_c_store_exists = Path::new(&tree_c_store_path).exists();
@@ -707,6 +714,7 @@ trace!("vmx: column data done");
                         )
                         .expect("failed to create DiskStore for base tree data");
 
+trace!("vmx: flatten and write store");
                     let store = Arc::new(RwLock::new(tree_c_store));
                     let batch_size = min(base_data.len(), column_write_batch_size);
                     let flatten_and_write_store = |data: &Vec<Fr>, offset| {
@@ -751,6 +759,7 @@ trace!("vmx: column data done");
                 }
             });
 
+trace!("vmx: creat disk tree");
             create_disk_tree::<
                 DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
             >(configs[0].size.expect("config size failure"), &configs)
