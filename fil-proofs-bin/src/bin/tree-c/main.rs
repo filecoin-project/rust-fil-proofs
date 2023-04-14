@@ -105,8 +105,31 @@ fn generate_tree_c<Tree: 'static + MerkleTreeTrait>(
     Ok(tree_c.root())
 }
 
+pub fn color_logger_format(
+    writer: &mut dyn std::io::Write,
+    now: &mut flexi_logger::DeferredNow,
+    record: &flexi_logger::Record,
+) -> Result<(), std::io::Error> {
+    const DEFAULT_TIME_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.3f";
+    let level = record.level();
+    write!(
+        writer,
+        "{} [{}] {} {} > {}",
+        now.now().format(DEFAULT_TIME_FORMAT),
+        flexi_logger::style(level).paint(std::thread::current().name().unwrap_or("<unnamed>")),
+        flexi_logger::style(level).paint(level.to_string()),
+        record.module_path().unwrap_or("<unnamed>"),
+        record.args(),
+    )
+}
+
+
 fn main() -> Result<()> {
-    fil_logger::maybe_init();
+    let _ = flexi_logger::Logger::try_with_env()
+        .expect("Invalid RUST_LOG")
+        .format(color_logger_format)
+        .start();
+
 
     let params = parse_line(BufReader::new(io::stdin()))?;
     info!("{:?}", params);
