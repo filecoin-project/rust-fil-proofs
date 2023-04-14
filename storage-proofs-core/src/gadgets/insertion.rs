@@ -341,7 +341,7 @@ where
     cs.enforce(
         || "pick",
         |lc| lc + b.get_variable() - a.get_variable(),
-        |_| condition.lc(CS::one(), Scalar::one()),
+        |_| condition.lc(CS::one(), Scalar::ONE),
         |lc| lc + b.get_variable() - c.get_variable(),
     );
 

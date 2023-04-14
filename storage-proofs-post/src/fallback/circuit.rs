@@ -221,7 +221,7 @@ impl<Tree: 'static + MerkleTreeTrait> FallbackPoStCircuit<Tree> {
             .par_chunks(chunk_size)
             .map(|sector_group| {
                 let mut cs = CS::new();
-                cs.alloc_input(|| "temp ONE", || Ok(Fr::one()))?;
+                cs.alloc_input(|| "temp ONE", || Ok(Fr::ONE))?;
 
                 for (i, sector) in sector_group.iter().enumerate() {
                     let mut cs = cs.namespace(|| format!("sector_{}", i));

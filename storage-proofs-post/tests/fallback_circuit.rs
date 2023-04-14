@@ -175,7 +175,7 @@ fn test_fallback_post<Tree: 'static + MerkleTreeTrait>(
             expected_constraints,
             "wrong number of constraints"
         );
-        assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+        assert_eq!(cs.get_input(0, "ONE"), Fr::ONE);
 
         let generated_inputs =
             FallbackPoStCompound::<Tree>::generate_public_inputs(&pub_inputs, &pub_params, Some(j))

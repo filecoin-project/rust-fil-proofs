@@ -134,7 +134,7 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Fr> for ElectionPoStCircuit<Tree> 
         while partial_ticket_nums.len() % arity != 0 {
             partial_ticket_nums.push(AllocatedNum::alloc(
                 cs.namespace(|| format!("padding_{}", partial_ticket_nums.len())),
-                || Ok(Fr::zero()),
+                || Ok(Fr::ZERO),
             )?);
         }
 

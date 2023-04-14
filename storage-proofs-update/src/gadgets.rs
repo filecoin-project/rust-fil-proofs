@@ -24,7 +24,7 @@ pub fn allocated_num_to_allocated_bits<CS: ConstraintSystem<Fr>>(
 
     // Assert `(2^0 * bits[0] + ... + 2^(n - 1) * bits[n]) * 1 == num`.
     let mut lc = LinearCombination::<Fr>::zero();
-    let mut pow2 = Fr::one();
+    let mut pow2 = Fr::ONE;
     for bit in bits.iter() {
         lc = lc + (pow2, bit.get_variable());
         pow2 = pow2.double();
@@ -198,7 +198,7 @@ pub fn get_challenge_high_bits<CS: ConstraintSystem<Fr>>(
                     {
                         c_high.get_value().ok_or(SynthesisError::AssignmentMissing)
                     } else {
-                        Ok(Fr::zero())
+                        Ok(Fr::ZERO)
                     }
                 },
             )?;

@@ -132,7 +132,7 @@ fn test_rational_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constrai
         expected_constraints,
         "wrong number of constraints"
     );
-    assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+    assert_eq!(cs.get_input(0, "ONE"), Fr::ONE);
 
     let generated_inputs =
         RationalPoStCompound::<Tree>::generate_public_inputs(&pub_inputs, &pub_params, None)
