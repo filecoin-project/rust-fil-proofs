@@ -608,6 +608,7 @@ trace!("vmx: column data done");
                             );
 
                             let is_final = node_index == nodes_count;
+trace!("vmx: about to send data to builder");
                             builder_tx
                                 .send((columns, is_final))
                                 .expect("failed to send columns");
