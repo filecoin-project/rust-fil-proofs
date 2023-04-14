@@ -646,6 +646,7 @@ trace!("vmx: loop through all trees");
                     // Loop until all trees for all configs have been built.
                     for i in 0..config_count {
                         loop {
+trace!("vmx: about to receive builder message: config count: {}", i);
                             let (columns, is_final): (Vec<GenericArray<Fr, ColumnArity>>, bool) =
                                 builder_rx.recv().expect("failed to recv columns");
 trace!("vmx: received builder message: final, columns len: {} {}", is_final, columns.len());
