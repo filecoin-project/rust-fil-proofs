@@ -13,3 +13,6 @@ members = [
   "storage-proofs-update",
   "fil-proofs-bin",
 ]
+
+[patch.crates-io]
+neptune = { git = "https://github.com/vmx/neptune", branch = "pc2-perf" }
