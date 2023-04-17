@@ -533,36 +533,37 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let config_count = configs.len(); // Don't move config into closure below.
 
 
-            let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
-trace!("vmx: init tree batcher");
-            let tree_batcher = match Batcher::pick_gpu(max_gpu_tree_batch_size) {
-                Ok(b) => Some(b),
-                Err(err) => {
-                    warn!("no GPU found, falling back to CPU tree builder: {}", err);
-                    None
-                }
-            };
-trace!("vmx: init column batcher");
-            let column_batcher = match Batcher::pick_gpu(max_gpu_column_batch_size) {
-                Ok(b) => Some(b),
-                Err(err) => {
-                    warn!("no GPU found, falling back to CPU tree builder: {}", err);
-                    None
-                }
-            };
-trace!("vmx: init column tree builder");
-            let mut column_tree_builder = ColumnTreeBuilder::<Fr, ColumnArity, TreeArity>::new(
-                column_batcher,
-                tree_batcher,
-                nodes_count,
-            )
-                .expect("failed to create ColumnTreeBuilder");
 
             THREAD_POOL.scoped(|s| {
                 // This channel will receive the finished tree data to be written to disk.
                 let (writer_tx, writer_rx) = channel::<(Vec<Fr>, Vec<Fr>)>(0);
 
                 s.execute(move || {
+                    let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
+trace!("vmx: init tree batcher");
+                    let tree_batcher = match Batcher::pick_gpu(max_gpu_tree_batch_size) {
+                        Ok(b) => Some(b),
+                        Err(err) => {
+                            warn!("no GPU found, falling back to CPU tree builder: {}", err);
+                            None
+                        }
+                    };
+trace!("vmx: init column batcher");
+                   let column_batcher = match Batcher::pick_gpu(max_gpu_column_batch_size) {
+                       Ok(b) => Some(b),
+                       Err(err) => {
+                           warn!("no GPU found, falling back to CPU tree builder: {}", err);
+                           None
+                       }
+                   };
+                   trace!("vmx: init column tree builder");
+                   let mut column_tree_builder = ColumnTreeBuilder::<Fr, ColumnArity, TreeArity>::new(
+                       column_batcher,
+                       tree_batcher,
+                       nodes_count,
+                   )
+                       .expect("failed to create ColumnTreeBuilder");
+
 trace!("vmx: allocate layer data");
                     // Allocate the temporary vector for the field elements with the maximum batch
                     // size only once and then re-use it within the loop. This is a performance
