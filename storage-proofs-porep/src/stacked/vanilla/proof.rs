@@ -530,10 +530,34 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
             let column_write_batch_size = SETTINGS.column_write_batch_size as usize;
 
-            // This channel will receive batches of columns and add them to the ColumnTreeBuilder.
-            let (builder_tx, builder_rx) = channel(0);
-
             let config_count = configs.len(); // Don't move config into closure below.
+
+
+            let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
+trace!("vmx: init tree batcher");
+            let tree_batcher = match Batcher::pick_gpu(max_gpu_tree_batch_size) {
+                Ok(b) => Some(b),
+                Err(err) => {
+                    warn!("no GPU found, falling back to CPU tree builder: {}", err);
+                    None
+                }
+            };
+trace!("vmx: init column batcher");
+            let column_batcher = match Batcher::pick_gpu(max_gpu_column_batch_size) {
+                Ok(b) => Some(b),
+                Err(err) => {
+                    warn!("no GPU found, falling back to CPU tree builder: {}", err);
+                    None
+                }
+            };
+trace!("vmx: init column tree builder");
+            let mut column_tree_builder = ColumnTreeBuilder::<Fr, ColumnArity, TreeArity>::new(
+                column_batcher,
+                tree_batcher,
+                nodes_count,
+            )
+                .expect("failed to create ColumnTreeBuilder");
+
             THREAD_POOL.scoped(|s| {
                 // This channel will receive the finished tree data to be written to disk.
                 let (writer_tx, writer_rx) = channel::<(Vec<Fr>, Vec<Fr>)>(0);
@@ -552,7 +576,6 @@ trace!("vmx: allocate layer data");
 trace!("vmx: loop through the layers");
                     for i in 0..config_count {
                         let mut node_index = 0;
-                        let builder_tx = builder_tx.clone();
                         while node_index != nodes_count {
                             let chunked_nodes_count =
                                 min(nodes_count - node_index, max_gpu_column_batch_size);
@@ -608,58 +631,17 @@ trace!("vmx: column data done");
                             );
 
                             let is_final = node_index == nodes_count;
-trace!("vmx: about to send data to builder");
-                            builder_tx
-                                .send((columns, is_final))
-                                .expect("failed to send columns");
-trace!("vmx: sent data to builder");
-                        }
-                    }
-                });
-trace!("vmx: execute the tree builder");
-                s.execute(move || {
-                    let _gpu_lock = GPU_LOCK.lock().expect("failed to get gpu lock");
-trace!("vmx: init tree batcher");
-                    let tree_batcher = match Batcher::pick_gpu(max_gpu_tree_batch_size) {
-                        Ok(b) => Some(b),
-                        Err(err) => {
-                            warn!("no GPU found, falling back to CPU tree builder: {}", err);
-                            None
-                        }
-                    };
-trace!("vmx: init column batcher");
-                    let column_batcher = match Batcher::pick_gpu(max_gpu_column_batch_size) {
-                        Ok(b) => Some(b),
-                        Err(err) => {
-                            warn!("no GPU found, falling back to CPU tree builder: {}", err);
-                            None
-                        }
-                    };
-trace!("vmx: init column tree builder");
-                    let mut column_tree_builder = ColumnTreeBuilder::<Fr, ColumnArity, TreeArity>::new(
-                        column_batcher,
-                        tree_batcher,
-                        nodes_count,
-                    )
-                    .expect("failed to create ColumnTreeBuilder");
-
-trace!("vmx: loop through all trees");
-                    // Loop until all trees for all configs have been built.
-                    for i in 0..config_count {
-                        loop {
-trace!("vmx: about to receive builder message: config count: {}", i);
-                            let (columns, is_final): (Vec<GenericArray<Fr, ColumnArity>>, bool) =
-                                builder_rx.recv().expect("failed to recv columns");
-trace!("vmx: received builder message: final, columns len: {} {}", is_final, columns.len());
 
                             // Just add non-final column batches.
                             if !is_final {
+trace!("vmx: about to add non final column: len: {}", columns.len());
                                 column_tree_builder
                                     .add_columns(&columns)
                                     .expect("failed to add columns");
                                 continue;
                             };
 
+trace!("vmx: about to add final columns: {}", columns.len());
                             // If we get here, this is a final column: build a sub-tree.
                             let (base_data, tree_data) = column_tree_builder
                                 .add_final_columns(&columns)
@@ -678,10 +660,11 @@ trace!("vmx: received builder message: final, columns len: {} {}", is_final, col
                                 tree_len,
                             );
 
+trace!("vmx: about to send to writer: base data len, tree data len: {} {}", base_data.len(), tree_data.len());
                             writer_tx
                                 .send((base_data, tree_data))
                                 .expect("failed to send base_data, tree_data");
-                            break;
+trace!("vmx: sent to writer");
                         }
                     }
                 });
