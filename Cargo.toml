@@ -16,3 +16,4 @@ members = [
 
 [patch.crates-io]
 neptune = { git = "https://github.com/vmx/neptune", branch = "pc2-perf" }
+rust-gpu-tools = { git = "https://github.com/filecoin-project/rust-gpu-tools", branch = "pc2-perf" }
