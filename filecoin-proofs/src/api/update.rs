@@ -104,32 +104,29 @@ fn persist_t_aux<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
 //
 // Returns a pair of the new tree_d_config and tree_r_last configs
 fn get_new_configs_from_t_aux_old<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
-    t_aux_old: &TemporaryAux<Tree, DefaultPieceHasher>,
+    t_aux: &TemporaryAux<Tree, DefaultPieceHasher>,
     new_cache_path: &Path,
     nodes_count: usize,
 ) -> Result<(StoreConfig, StoreConfig)> {
-    let mut t_aux_new = t_aux_old.clone();
-    t_aux_new.set_cache_path(new_cache_path);
-
     let tree_count = get_base_tree_count::<Tree>();
     let base_tree_nodes_count = nodes_count / tree_count;
 
-    // With the new cache path set, formulate the new tree_d and
-    // tree_r_last configs.
-    let tree_d_new_config = StoreConfig::from_config(
-        &t_aux_new.tree_d_config,
-        CacheKey::CommDTree.to_string(),
-        Some(get_merkle_tree_len(nodes_count, TreeDArity::to_usize())?),
-    );
+    let tree_d_new_config = StoreConfig {
+        path: new_cache_path.into(),
+        id: t_aux.tree_d_config.id.clone(),
+        size: Some(get_merkle_tree_len(nodes_count, TreeDArity::to_usize())?),
+        rows_to_discard: t_aux.tree_d_config.rows_to_discard,
+    };
 
-    let tree_r_last_new_config = StoreConfig::from_config(
-        &t_aux_new.tree_r_last_config,
-        CacheKey::CommRLastTree.to_string(),
-        Some(get_merkle_tree_len(
+    let tree_r_last_new_config = StoreConfig {
+        path: new_cache_path.into(),
+        id: t_aux.tree_r_last_config.id.clone(),
+        size: Some(get_merkle_tree_len(
             base_tree_nodes_count,
             Tree::Arity::to_usize(),
         )?),
-    );
+        rows_to_discard: t_aux.tree_r_last_config.rows_to_discard,
+    };
 
     Ok((tree_d_new_config, tree_r_last_new_config))
 }
