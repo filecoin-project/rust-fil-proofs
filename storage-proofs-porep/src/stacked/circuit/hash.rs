@@ -1,20 +1,27 @@
 use bellperson::{gadgets::num::AllocatedNum, ConstraintSystem, SynthesisError};
-use blstrs::Scalar as Fr;
-use filecoin_hashers::{POSEIDON_CONSTANTS_11, POSEIDON_CONSTANTS_2};
+use ff::PrimeField;
+use filecoin_hashers::get_poseidon_constants;
 use generic_array::typenum::{U11, U2};
 use neptune::circuit::poseidon_hash;
 
 /// Hash a list of bits.
-pub fn hash_single_column<CS>(
+pub fn hash_single_column<F, CS>(
     cs: CS,
-    column: &[AllocatedNum<Fr>],
-) -> Result<AllocatedNum<Fr>, SynthesisError>
+    column: &[AllocatedNum<F>],
+) -> Result<AllocatedNum<F>, SynthesisError>
 where
-    CS: ConstraintSystem<Fr>,
+    F: PrimeField,
+    CS: ConstraintSystem<F>,
 {
     match column.len() {
-        2 => poseidon_hash::<CS, Fr, U2>(cs, column.to_vec(), &*POSEIDON_CONSTANTS_2),
-        11 => poseidon_hash::<CS, Fr, U11>(cs, column.to_vec(), &*POSEIDON_CONSTANTS_11),
+        2 => {
+            let consts = get_poseidon_constants::<F, U2>();
+            poseidon_hash::<CS, F, U2>(cs, column.to_vec(), consts)
+        }
+        11 => {
+            let consts = get_poseidon_constants::<F, U11>();
+            poseidon_hash::<CS, F, U11>(cs, column.to_vec(), consts)
+        }
         _ => panic!("unsupported column size: {}", column.len()),
     }
 }
@@ -24,6 +31,7 @@ mod tests {
     use super::*;
 
     use bellperson::util_cs::test_cs::TestConstraintSystem;
+    use blstrs::Scalar as Fr;
     use ff::Field;
     use filecoin_hashers::{poseidon::PoseidonHasher, HashFunction, Hasher};
     use rand::SeedableRng;

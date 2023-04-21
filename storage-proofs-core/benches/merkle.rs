@@ -1,4 +1,5 @@
 use anyhow::Result;
+use blstrs::Scalar as Fr;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use filecoin_hashers::{
     poseidon::PoseidonDomain, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain,
@@ -45,7 +46,7 @@ fn merkle_benchmark_poseidon(c: &mut Criterion) {
             (0..n_nodes)
                 .into_iter()
                 .try_for_each(|_| -> Result<()> {
-                    let node = PoseidonDomain::random(&mut rng);
+                    let node = PoseidonDomain::<Fr>::random(&mut rng);
                     data.extend(node.into_bytes());
                     Ok(())
                 })

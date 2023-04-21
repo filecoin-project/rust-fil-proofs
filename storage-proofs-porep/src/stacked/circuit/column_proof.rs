@@ -1,5 +1,4 @@
 use bellperson::{ConstraintSystem, SynthesisError};
-use blstrs::Scalar as Fr;
 use filecoin_hashers::{Hasher, PoseidonArity};
 use storage_proofs_core::{
     drgraph::Graph,
@@ -15,19 +14,19 @@ use crate::stacked::{
 #[derive(Debug, Clone)]
 pub struct ColumnProof<
     H: Hasher,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
+    U: 'static + PoseidonArity<H::Field>,
+    V: 'static + PoseidonArity<H::Field>,
+    W: 'static + PoseidonArity<H::Field>,
 > {
-    column: Column,
+    column: Column<H::Field>,
     inclusion_path: AuthPath<H, U, V, W>,
 }
 
 impl<
         H: 'static + Hasher,
-        U: 'static + PoseidonArity,
-        V: 'static + PoseidonArity,
-        W: 'static + PoseidonArity,
+        U: 'static + PoseidonArity<H::Field>,
+        V: 'static + PoseidonArity<H::Field>,
+        W: 'static + PoseidonArity<H::Field>,
     > ColumnProof<H, U, V, W>
 {
     /// Create an empty `ColumnProof`, used in `blank_circuit`s.
@@ -44,10 +43,10 @@ impl<
     }
 
     /// Allocate the private inputs for this column proof, and return the inclusion path for verification.
-    pub fn alloc<CS: ConstraintSystem<Fr>>(
+    pub fn alloc<CS: ConstraintSystem<H::Field>>(
         self,
         mut cs: CS,
-    ) -> Result<(AllocatedColumn, AuthPath<H, U, V, W>), SynthesisError> {
+    ) -> Result<(AllocatedColumn<H::Field>, AuthPath<H, U, V, W>), SynthesisError> {
         let ColumnProof {
             inclusion_path,
             column,

@@ -364,6 +364,27 @@ mod tests {
                     chunk
                 )
             });
+
+            #[cfg(feature = "nova")]
+            {
+                use ff::PrimeField;
+                let mut repr = [0u8; 32];
+                repr.copy_from_slice(chunk);
+                assert!(
+                    pasta_curves::Fp::from_repr_vartime(repr).is_some(),
+                    "chunk {}/{} cannot be converted to valid Fp (pasta): {:?}",
+                    i + 1,
+                    chunks,
+                    chunk,
+                );
+                assert!(
+                    pasta_curves::Fq::from_repr_vartime(repr).is_some(),
+                    "chunk {}/{} cannot be converted to valid Fq (pasta): {:?}",
+                    i + 1,
+                    chunks,
+                    chunk,
+                );
+            }
         }
     }
 

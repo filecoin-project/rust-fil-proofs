@@ -7,13 +7,11 @@ use std::sync::Mutex;
 
 use anyhow::Context;
 use bincode::deserialize;
-use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
-use ff::PrimeField;
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0, U11, U2, U8};
 use lazy_static::lazy_static;
-use log::{error, info, trace, warn};
+use log::{error, info, trace};
 use merkletree::{
     merkle::{get_merkle_tree_len, is_merkle_tree_size_valid},
     store::{DiskStore, Store, StoreConfig},
@@ -38,7 +36,7 @@ use storage_proofs_core::{
 use yastl::Pool;
 
 use crate::{
-    encode::{decode, encode, encode_fr},
+    encode::{decode, encode},
     stacked::vanilla::{
         challenges::LayerChallenges,
         column::Column,
@@ -68,7 +66,7 @@ lazy_static! {
 }
 
 #[derive(Debug)]
-pub struct StackedDrg<'a, Tree: MerkleTreeTrait, G: Hasher> {
+pub struct StackedDrg<'a, Tree: MerkleTreeTrait, G: Hasher<Field = Tree::Field>> {
     _a: PhantomData<&'a Tree>,
     _b: PhantomData<&'a G>,
 }
@@ -80,7 +78,7 @@ pub struct LayerState {
 }
 
 pub enum TreeRElementData<Tree: MerkleTreeTrait> {
-    FrList(Vec<Fr>),
+    FrList(Vec<Tree::Field>),
     ElementList(Vec<<Tree::Hasher as Hasher>::Domain>),
 }
 
@@ -93,7 +91,7 @@ pub type PrepareTreeRDataCallback<Tree: 'static + MerkleTreeTrait> =
         end: usize,
     ) -> Result<TreeRElementData<Tree>>;
 
-impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tree, G> {
+impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher<Field = Tree::Field>> StackedDrg<'a, Tree, G> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn prove_layers(
         graph: &StackedBucketGraph<Tree::Hasher>,
@@ -418,7 +416,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     // storage_proofs_core::merkle::create_base_merkle_tree, this
     // method requires the data on disk to be exactly the same size as
     // the tree length / NODE_SIZE.
-    pub fn build_binary_tree<K: Hasher>(
+    pub fn build_binary_tree<K: Hasher<Field = Tree::Field>>(
         tree_data: &[u8],
         config: StoreConfig,
     ) -> Result<BinaryMerkleTree<K>> {
@@ -440,15 +438,15 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     // Even if the column builder is enabled, the GPU column builder
     // only supports Poseidon hashes.
     pub fn use_gpu_column_builder() -> bool {
-        SETTINGS.use_gpu_column_builder
-            && TypeId::of::<Tree::Hasher>() == TypeId::of::<PoseidonHasher>()
+        SETTINGS.use_gpu_column_builder &&
+            TypeId::of::<Tree::Hasher>() == TypeId::of::<PoseidonHasher<Tree::Field>>()
     }
 
     // Even if the tree builder is enabled, the GPU tree builder
     // only supports Poseidon hashes.
     pub fn use_gpu_tree_builder() -> bool {
-        SETTINGS.use_gpu_tree_builder
-            && TypeId::of::<Tree::Hasher>() == TypeId::of::<PoseidonHasher>()
+        SETTINGS.use_gpu_tree_builder &&
+            TypeId::of::<Tree::Hasher>() == TypeId::of::<PoseidonHasher<Tree::Field>>()
     }
 
     #[cfg(any(feature = "cuda", feature = "opencl"))]
@@ -460,8 +458,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: 'static + PoseidonArity,
-        TreeArity: PoseidonArity,
+        ColumnArity: 'static + PoseidonArity<Tree::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         if Self::use_gpu_column_builder() {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
@@ -491,8 +489,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: 'static + PoseidonArity,
-        TreeArity: PoseidonArity,
+        ColumnArity: 'static + PoseidonArity<Tree::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         Self::generate_tree_c_cpu::<ColumnArity, TreeArity>(
             layers,
@@ -513,19 +511,22 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: 'static + PoseidonArity,
-        TreeArity: PoseidonArity,
+        ColumnArity: 'static + PoseidonArity<Tree::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         use std::cmp::min;
         use std::sync::mpsc::sync_channel as channel;
         use std::sync::{Arc, RwLock};
 
-        use fr32::fr_into_bytes;
+        use ff::PrimeField;
         use generic_array::GenericArray;
+        use log::warn;
         use neptune::{
             batch_hasher::Batcher,
             column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait},
         };
+
+        assert_eq!(std::mem::size_of::<Tree::Field>(), NODE_SIZE);
 
         info!("generating tree c using the GPU");
         // Build the tree for CommC
@@ -551,7 +552,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             let config_count = configs.len(); // Don't move config into closure below.
             THREAD_POOL.scoped(|s| {
                 // This channel will receive the finished tree data to be written to disk.
-                let (writer_tx, writer_rx) = channel::<(Vec<Fr>, Vec<Fr>)>(0);
+                let (writer_tx, writer_rx) = channel::<(Vec<Tree::Field>, Vec<Tree::Field>)>(0);
 
                 s.execute(move || {
                     for i in 0..config_count {
@@ -567,13 +568,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 chunked_nodes_count,
                             );
 
-                            let columns: Vec<GenericArray<Fr, ColumnArity>> = {
-                                use fr32::bytes_into_fr;
-
+                            let columns: Vec<GenericArray<Tree::Field, ColumnArity>> = {
                                 // Allocate layer data array and insert a placeholder for each layer.
                                 let mut layer_data: Vec<Vec<u8>> =
                                     vec![
-                                        vec![0u8; chunked_nodes_count * std::mem::size_of::<Fr>()];
+                                        vec![0u8; chunked_nodes_count * NODE_SIZE];
                                         layers
                                     ];
 
@@ -595,14 +594,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                     .map(|index| {
                                         (0..layers)
                                             .map(|layer_index| {
-                                                bytes_into_fr(
-                                                &layer_data[layer_index][std::mem::size_of::<Fr>()
-                                                    * index
-                                                    ..std::mem::size_of::<Fr>() * (index + 1)],
-                                            )
-                                            .expect("Could not create Fr from bytes.")
+                                                let mut repr = <Tree::Field as PrimeField>::Repr::default();
+                                                repr.as_mut().copy_from_slice(
+                                                    &layer_data[layer_index][NODE_SIZE
+                                                        * index
+                                                        ..NODE_SIZE * (index + 1)],
+                                                );
+                                                Tree::Field::from_repr_vartime(repr)
+                                                    .expect("Could not create Fr from bytes.")
                                             })
-                                            .collect::<GenericArray<Fr, ColumnArity>>()
+                                            .collect::<GenericArray<Tree::Field, ColumnArity>>()
                                     })
                                     .collect()
                             };
@@ -638,7 +639,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             None
                         }
                     };
-                    let mut column_tree_builder = ColumnTreeBuilder::<Fr, ColumnArity, TreeArity>::new(
+                    let mut column_tree_builder = ColumnTreeBuilder::<Tree::Field, ColumnArity, TreeArity>::new(
                         column_batcher,
                         tree_batcher,
                         nodes_count,
@@ -648,7 +649,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     // Loop until all trees for all configs have been built.
                     for i in 0..config_count {
                         loop {
-                            let (columns, is_final): (Vec<GenericArray<Fr, ColumnArity>>, bool) =
+                            let (columns, is_final): (Vec<GenericArray<Tree::Field, ColumnArity>>, bool) =
                                 builder_rx.recv().expect("failed to recv columns");
 
                             // Just add non-final column batches.
@@ -717,7 +718,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                     let store = Arc::new(RwLock::new(tree_c_store));
                     let batch_size = min(base_data.len(), column_write_batch_size);
-                    let flatten_and_write_store = |data: &Vec<Fr>, offset| {
+                    let flatten_and_write_store = |data: &Vec<Tree::Field>, offset| {
                         data.into_par_iter()
                             .chunks(batch_size)
                             .enumerate()
@@ -725,7 +726,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 let mut buf = Vec::with_capacity(batch_size * NODE_SIZE);
 
                                 for fr in fr_elements {
-                                    buf.extend(fr_into_bytes(fr));
+                                    buf.extend(fr.to_repr().as_ref());
                                 }
                                 store
                                     .write()
@@ -773,8 +774,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         labels: &LabelsCache<Tree>,
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        ColumnArity: PoseidonArity,
-        TreeArity: PoseidonArity,
+        ColumnArity: PoseidonArity<Tree::Field>,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         info!("generating tree c using the CPU");
         measure_op(Operation::GenerateTreeC, || {
@@ -871,17 +872,25 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         end: usize,
     ) -> Result<TreeRElementData<Tree>> {
         if Self::use_gpu_tree_builder() {
-            use fr32::bytes_into_fr;
+            use ff::PrimeField;
 
-            let mut layer_bytes = vec![0u8; (end - start) * std::mem::size_of::<Fr>()];
+            use crate::encode::encoded_fr;
+
+            assert_eq!(std::mem::size_of::<Tree::Field>(), NODE_SIZE);
+
+            let mut layer_bytes = vec![0u8; (end - start) * NODE_SIZE];
             source
                 .read_range_into(start, end, &mut layer_bytes)
                 .expect("failed to read layer bytes");
 
             let encoded_data: Vec<_> = layer_bytes
                 .into_par_iter()
-                .chunks(std::mem::size_of::<Fr>())
-                .map(|chunk| bytes_into_fr(&chunk).expect("Could not create Fr from bytes."))
+                .chunks(NODE_SIZE)
+                .map(|chunk| {
+                    let mut repr = <Tree::Field as PrimeField>::Repr::default();
+                    repr.as_mut().copy_from_slice(&chunk);
+                    Tree::Field::from_repr_vartime(repr).expect("Could not create Fr from bytes.")
+                })
                 .zip(
                     data.expect("failed to unwrap data").as_mut()
                         [(start * NODE_SIZE)..(end * NODE_SIZE)]
@@ -892,8 +901,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         <Tree::Hasher as Hasher>::Domain::try_from_bytes(data_node_bytes)
                             .expect("try_from_bytes failed");
 
-                    let mut encoded_fr: Fr = key;
-                    let data_node_fr: Fr = data_node.into();
+                    let mut encoded_fr: Tree::Field = key;
+                    let data_node_fr: Tree::Field = data_node.into();
                     encode_fr(&mut encoded_fr, data_node_fr);
                     let encoded_fr_repr = encoded_fr.to_repr();
                     data_node_bytes.copy_from_slice(AsRef::<[u8]>::as_ref(&encoded_fr_repr));
@@ -929,7 +938,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         callback: Option<PrepareTreeRDataCallback<Tree>>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         let encode_data = match callback {
             Some(x) => x,
@@ -970,7 +979,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         callback: Option<PrepareTreeRDataCallback<Tree>>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         let encode_data = match callback {
             Some(x) => x,
@@ -999,14 +1008,15 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         callback: PrepareTreeRDataCallback<Tree>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         use std::cmp::min;
         use std::fs::OpenOptions;
         use std::io::Write;
         use std::sync::mpsc::sync_channel as channel;
 
-        use fr32::fr_into_bytes;
+        use ff::PrimeField;
+        use log::warn;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
             batch_hasher::Batcher,
@@ -1024,14 +1034,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
 
         // This channel will receive batches of leaf nodes and add them to the TreeBuilder.
-        let (builder_tx, builder_rx) = channel::<(Vec<Fr>, bool)>(0);
+        let (builder_tx, builder_rx) = channel::<(Vec<Tree::Field>, bool)>(0);
         let config_count = configs.len(); // Don't move config into closure below.
         let configs = &configs;
         let tree_r_last_config = &tree_r_last_config;
 
         THREAD_POOL.scoped(|s| {
             // This channel will receive the finished tree data to be written to disk.
-            let (writer_tx, writer_rx) = channel::<Vec<Fr>>(0);
+            let (writer_tx, writer_rx) = channel::<Vec<Tree::Field>>(0);
 
             s.execute(move || {
                 for i in 0..config_count {
@@ -1083,7 +1093,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         None
                     }
                 };
-                let mut tree_builder = TreeBuilder::<Fr, Tree::Arity>::new(
+                let mut tree_builder = TreeBuilder::<Tree::Field, Tree::Arity>::new(
                     batcher,
                     nodes_count,
                     tree_r_last_config.rows_to_discard,
@@ -1140,7 +1150,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                 let flat_tree_data: Vec<_> = tree_data
                     .into_par_iter()
-                    .flat_map(|el| fr_into_bytes(&el))
+                    .flat_map(|el| el.to_repr().as_ref().to_vec())
                     .collect();
 
                 // Persist the data to the store based on the current config.
@@ -1178,7 +1188,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         callback: PrepareTreeRDataCallback<Tree>,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
@@ -1511,13 +1521,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         replica_path: PathBuf,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         use std::fs::OpenOptions;
         use std::io::Write;
 
-        use ff::Field;
-        use fr32::fr_into_bytes;
+        use ff::{Field, PrimeField};
+        use log::warn;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
             batch_hasher::Batcher,
@@ -1543,7 +1553,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     None
                 }
             };
-            let mut tree_builder = TreeBuilder::<Fr, Tree::Arity>::new(
+            let mut tree_builder = TreeBuilder::<Tree::Field, Tree::Arity>::new(
                 batcher,
                 nodes_count,
                 tree_r_last_config.rows_to_discard,
@@ -1551,7 +1561,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             .expect("failed to create TreeBuilder");
 
             // Allocate zeros once and reuse.
-            let zero_leaves: Vec<Fr> = vec![Fr::zero(); max_gpu_tree_batch_size];
+            let zero_leaves: Vec<Tree::Field> = vec![Tree::Field::zero(); max_gpu_tree_batch_size];
             for (i, config) in configs.iter().enumerate() {
                 let mut consumed = 0;
                 while consumed < nodes_count {
@@ -1591,7 +1601,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                     let flat_tree_data: Vec<_> = tree_data
                         .into_par_iter()
-                        .flat_map(|el| fr_into_bytes(&el))
+                        .flat_map(|el| el.to_repr().as_ref().to_vec())
                         .collect();
 
                     // Persist the data to the store based on the current config.
@@ -1646,7 +1656,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         replica_path: PathBuf,
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
-        TreeArity: PoseidonArity,
+        TreeArity: PoseidonArity<Tree::Field>,
     {
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),

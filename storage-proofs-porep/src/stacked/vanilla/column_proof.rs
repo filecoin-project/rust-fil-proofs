@@ -1,4 +1,3 @@
-use blstrs::Scalar as Fr;
 use filecoin_hashers::Hasher;
 use log::trace;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -40,7 +39,7 @@ impl<Proof: MerkleProofTrait> ColumnProof<Proof> {
         self.column().get_node_at_layer(layer)
     }
 
-    pub fn column_hash(&self) -> Fr {
+    pub fn column_hash(&self) -> <Proof::Hasher as Hasher>::Field {
         self.column.hash()
     }
 

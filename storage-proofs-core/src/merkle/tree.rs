@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 use anyhow::Result;
+use ff::PrimeField;
 use filecoin_hashers::{Hasher, PoseidonArity};
 use generic_array::typenum::U0;
 use merkletree::{
@@ -18,10 +19,15 @@ use crate::merkle::{LCTree, MerkleProof, MerkleProofTrait};
 
 /// Trait used to abstract over the way Merkle Trees are constructed and stored.
 pub trait MerkleTreeTrait: Send + Sync + Debug {
-    type Arity: 'static + PoseidonArity;
-    type SubTreeArity: 'static + PoseidonArity;
-    type TopTreeArity: 'static + PoseidonArity;
-    type Hasher: 'static + Hasher;
+    #[cfg(not(any(feature = "cuda", feature = "opencl")))]
+    type Field: PrimeField;
+    #[cfg(any(feature = "cuda", feature = "opencl"))]
+    type Field: PrimeField + ec_gpu::GpuName;
+
+    type Arity: 'static + PoseidonArity<Self::Field>;
+    type SubTreeArity: 'static + PoseidonArity<Self::Field>;
+    type TopTreeArity: 'static + PoseidonArity<Self::Field>;
+    type Hasher: 'static + Hasher<Field = Self::Field>;
     type Store: Store<<Self::Hasher as Hasher>::Domain>;
     type Proof: MerkleProofTrait<
         Hasher = Self::Hasher,
@@ -54,9 +60,9 @@ pub trait MerkleTreeTrait: Send + Sync + Debug {
 pub struct MerkleTreeWrapper<
     H: Hasher,
     S: Store<<H as Hasher>::Domain>,
-    U: PoseidonArity,
-    V: PoseidonArity = U0,
-    W: PoseidonArity = U0,
+    U: PoseidonArity<H::Field>,
+    V: PoseidonArity<H::Field> = U0,
+    W: PoseidonArity<H::Field> = U0,
 > {
     pub inner: MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, S, U, V, W>,
     pub h: PhantomData<H>,
@@ -65,11 +71,12 @@ pub struct MerkleTreeWrapper<
 impl<
         H: 'static + Hasher,
         S: Store<<H as Hasher>::Domain>,
-        U: 'static + PoseidonArity,
-        V: 'static + PoseidonArity,
-        W: 'static + PoseidonArity,
+        U: 'static + PoseidonArity<H::Field>,
+        V: 'static + PoseidonArity<H::Field>,
+        W: 'static + PoseidonArity<H::Field>,
     > MerkleTreeTrait for MerkleTreeWrapper<H, S, U, V, W>
 {
+    type Field = H::Field;
     type Arity = U;
     type SubTreeArity = V;
     type TopTreeArity = W;
@@ -136,9 +143,9 @@ impl<
 impl<
         H: Hasher,
         S: Store<<H as Hasher>::Domain>,
-        U: PoseidonArity,
-        V: PoseidonArity,
-        W: PoseidonArity,
+        U: PoseidonArity<H::Field>,
+        V: PoseidonArity<H::Field>,
+        W: PoseidonArity<H::Field>,
     > From<MerkleTree<<H as Hasher>::Domain, <H as Hasher>::Function, S, U, V, W>>
     for MerkleTreeWrapper<H, S, U, V, W>
 {
@@ -153,9 +160,9 @@ impl<
 impl<
         H: Hasher,
         S: Store<<H as Hasher>::Domain>,
-        U: PoseidonArity,
-        V: PoseidonArity,
-        W: PoseidonArity,
+        U: PoseidonArity<H::Field>,
+        V: PoseidonArity<H::Field>,
+        W: PoseidonArity<H::Field>,
     > MerkleTreeWrapper<H, S, U, V, W>
 {
     pub fn new<I: IntoIterator<Item = H::Domain>>(data: I) -> Result<Self> {
@@ -310,9 +317,9 @@ impl<
 impl<
         H: Hasher,
         S: Store<<H as Hasher>::Domain>,
-        BaseArity: PoseidonArity,
-        SubTreeArity: PoseidonArity,
-        TopTreeArity: PoseidonArity,
+        BaseArity: PoseidonArity<H::Field>,
+        SubTreeArity: PoseidonArity<H::Field>,
+        TopTreeArity: PoseidonArity<H::Field>,
     > Debug for MerkleTreeWrapper<H, S, BaseArity, SubTreeArity, TopTreeArity>
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -326,9 +333,9 @@ impl<
 impl<
         H: Hasher,
         S: Store<<H as Hasher>::Domain>,
-        BaseArity: PoseidonArity,
-        SubTreeArity: PoseidonArity,
-        TopTreeArity: PoseidonArity,
+        BaseArity: PoseidonArity<H::Field>,
+        SubTreeArity: PoseidonArity<H::Field>,
+        TopTreeArity: PoseidonArity<H::Field>,
     > Deref for MerkleTreeWrapper<H, S, BaseArity, SubTreeArity, TopTreeArity>
 {
     type Target = MerkleTree<H::Domain, H::Function, S, BaseArity, SubTreeArity, TopTreeArity>;
@@ -341,9 +348,9 @@ impl<
 impl<
         H: Hasher,
         S: Store<<H as Hasher>::Domain>,
-        BaseArity: PoseidonArity,
-        SubTreeArity: PoseidonArity,
-        TopTreeArity: PoseidonArity,
+        BaseArity: PoseidonArity<H::Field>,
+        SubTreeArity: PoseidonArity<H::Field>,
+        TopTreeArity: PoseidonArity<H::Field>,
     > DerefMut for MerkleTreeWrapper<H, S, BaseArity, SubTreeArity, TopTreeArity>
 {
     fn deref_mut(&mut self) -> &mut Self::Target {

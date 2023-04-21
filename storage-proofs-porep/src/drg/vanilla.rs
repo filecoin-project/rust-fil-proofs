@@ -138,7 +138,7 @@ where
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DataProof<H: Hasher, U: PoseidonArity> {
+pub struct DataProof<H: Hasher, U: PoseidonArity<H::Field>> {
     #[serde(bound(
         serialize = "MerkleProof<H, U>: Serialize",
         deserialize = "MerkleProof<H, U>: Deserialize<'de>"
@@ -147,7 +147,7 @@ pub struct DataProof<H: Hasher, U: PoseidonArity> {
     pub data: H::Domain,
 }
 
-impl<H: Hasher, U: 'static + PoseidonArity> DataProof<H, U> {
+impl<H: Hasher, U: 'static + PoseidonArity<H::Field>> DataProof<H, U> {
     pub fn new(n: usize) -> Self {
         DataProof {
             proof: MerkleProof::new(n),

@@ -32,6 +32,20 @@ impl From<SectorId> for Fr {
     }
 }
 
+#[cfg(feature = "nova")]
+impl From<SectorId> for pasta_curves::Fp {
+    fn from(n: SectorId) -> Self {
+        pasta_curves::Fp::from(n.0)
+    }
+}
+
+#[cfg(feature = "nova")]
+impl From<SectorId> for pasta_curves::Fq {
+    fn from(n: SectorId) -> Self {
+        pasta_curves::Fq::from(n.0)
+    }
+}
+
 impl Display for SectorId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "SectorId({})", self.0)

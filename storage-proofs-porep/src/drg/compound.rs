@@ -53,7 +53,7 @@ where
     _g: PhantomData<G>,
 }
 
-impl<C: Circuit<Fr>, H: Hasher, G: Graph<H>, P: ParameterSetMetadata> CacheableParameters<C, P>
+impl<C: Circuit<Fr>, H: Hasher<Field = Fr>, G: Graph<H>, P: ParameterSetMetadata> CacheableParameters<C, P>
     for DrgPoRepCompound<H, G>
 where
     G::Key: AsRef<H::Domain>,
@@ -66,7 +66,7 @@ where
 impl<'a, H, G> CompoundProof<'a, DrgPoRep<'a, H, G>, DrgPoRepCircuit<'a, H>>
     for DrgPoRepCompound<H, G>
 where
-    H: 'static + Hasher,
+    H: 'static + Hasher<Field = Fr>,
     G::Key: AsRef<<H as Hasher>::Domain>,
     G: 'a + Graph<H> + ParameterSetMetadata + Sync + Send,
 {

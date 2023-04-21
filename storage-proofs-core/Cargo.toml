@@ -41,6 +41,9 @@ semver = "1.0.6"
 fr32 = { path = "../fr32", version = "~7.0.0"}
 blstrs = "0.6.0"
 cbc = { version = "0.1.2", features = ["std"] }
+ec-gpu = { version = "0.2.0", optional = true }
+pasta_curves = { version = "0.5.2", optional = true, features = ["repr-c", "serde"], package = "fil_pasta_curves" }
+nova-snark = { version = "0.20.3", optional = true }
 
 [dev-dependencies]
 proptest = "1.0.0"
@@ -60,8 +63,10 @@ big-sector-sizes-bench = []
 measurements = ["cpu-time", "gperftools"]
 profile = ["measurements"]
 
-cuda = ["bellperson/cuda", "filecoin-hashers/cuda"]
-opencl = ["bellperson/opencl", "filecoin-hashers/opencl"]
+cuda = ["bellperson/cuda", "filecoin-hashers/cuda", "nova-snark?/cuda", "ec-gpu"]
+opencl = ["bellperson/opencl", "filecoin-hashers/opencl", "nova-snark?/opencl", "ec-gpu"]
+
+nova = ["filecoin-hashers/nova", "pasta_curves", "nova-snark"]
 
 [[bench]]
 name = "sha256"

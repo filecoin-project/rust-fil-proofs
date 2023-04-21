@@ -113,7 +113,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PublicInputs<T: Domain, S: Domain> {
+pub struct PublicInputs<T: Domain, S: Domain<Field = T::Field>> {
     #[serde(bound = "")]
     pub replica_id: T,
     pub seed: [u8; 32],
@@ -123,7 +123,7 @@ pub struct PublicInputs<T: Domain, S: Domain> {
     pub k: Option<usize>,
 }
 
-impl<T: Domain, S: Domain> PublicInputs<T, S> {
+impl<T: Domain, S: Domain<Field = T::Field>> PublicInputs<T, S> {
     pub fn challenges(
         &self,
         layer_challenges: &LayerChallenges,
@@ -137,13 +137,13 @@ impl<T: Domain, S: Domain> PublicInputs<T, S> {
 }
 
 #[derive(Debug)]
-pub struct PrivateInputs<Tree: MerkleTreeTrait, G: Hasher> {
+pub struct PrivateInputs<Tree: MerkleTreeTrait, G: Hasher<Field = Tree::Field>> {
     pub p_aux: PersistentAux<<Tree::Hasher as Hasher>::Domain>,
     pub t_aux: TemporaryAuxCache<Tree, G>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
+pub struct Proof<Tree: MerkleTreeTrait, G: Hasher<Field = Tree::Field>> {
     #[serde(bound(
         serialize = "MerkleProof<G, U2>: Serialize",
         deserialize = "MerkleProof<G, U2>: Deserialize<'de>"
@@ -175,7 +175,7 @@ pub struct Proof<Tree: MerkleTreeTrait, G: Hasher> {
     pub encoding_proof: EncodingProof<Tree::Hasher>,
 }
 
-impl<Tree: MerkleTreeTrait, G: Hasher> Clone for Proof<Tree, G> {
+impl<Tree: MerkleTreeTrait, G: Hasher<Field = Tree::Field>> Clone for Proof<Tree, G> {
     fn clone(&self) -> Self {
         Self {
             comm_d_proofs: self.comm_d_proofs.clone(),
@@ -187,7 +187,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for Proof<Tree, G> {
     }
 }
 
-impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
+impl<Tree: MerkleTreeTrait, G: Hasher<Field = Tree::Field>> Proof<Tree, G> {
     pub fn comm_r_last(&self) -> <Tree::Hasher as Hasher>::Domain {
         self.comm_r_last_proof.root()
     }
@@ -330,7 +330,7 @@ pub type TransformedLayers<Tree, G> = (
 
 /// Tau for a single parition.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Tau<D: Domain, E: Domain> {
+pub struct Tau<D: Domain, E: Domain<Field = D::Field>> {
     #[serde(bound = "")]
     pub comm_d: E,
     #[serde(bound = "")]
@@ -345,7 +345,7 @@ pub struct PersistentAux<D> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TemporaryAux<Tree: MerkleTreeTrait, G: Hasher> {
+pub struct TemporaryAux<Tree: MerkleTreeTrait, G: Hasher<Field = Tree::Field>> {
     /// The encoded nodes for 1..layers.
     #[serde(bound(
         serialize = "StoreConfig: Serialize",
@@ -358,7 +358,7 @@ pub struct TemporaryAux<Tree: MerkleTreeTrait, G: Hasher> {
     pub _g: PhantomData<G>,
 }
 
-impl<Tree: MerkleTreeTrait, G: Hasher> Clone for TemporaryAux<Tree, G> {
+impl<Tree: MerkleTreeTrait, G: Hasher<Field = Tree::Field>> Clone for TemporaryAux<Tree, G> {
     fn clone(&self) -> Self {
         Self {
             labels: self.labels.clone(),
@@ -370,7 +370,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for TemporaryAux<Tree, G> {
     }
 }
 
-impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
+impl<Tree: MerkleTreeTrait, G: Hasher<Field = Tree::Field>> TemporaryAux<Tree, G> {
     pub fn set_cache_path<P: AsRef<Path>>(&mut self, cache_path: P) {
         let cp = cache_path.as_ref().to_path_buf();
         for label in self.labels.labels.iter_mut() {
@@ -484,7 +484,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
 }
 
 #[derive(Debug)]
-pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher> {
+pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher<Field = Tree::Field>> {
     /// The encoded nodes for 1..layers.
     pub labels: LabelsCache<Tree>,
     pub tree_d: BinaryMerkleTree<G>,
@@ -501,7 +501,7 @@ pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher> {
     pub replica_path: PathBuf,
 }
 
-impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
+impl<Tree: MerkleTreeTrait, G: Hasher<Field = Tree::Field>> TemporaryAuxCache<Tree, G> {
     pub fn new(t_aux: &TemporaryAux<Tree, G>, replica_path: PathBuf) -> Result<Self> {
         // tree_d_size stored in the config is the base tree size
         let tree_d_size = t_aux.tree_d_config.size.expect("config size failure");

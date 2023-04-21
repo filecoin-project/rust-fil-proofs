@@ -34,7 +34,7 @@ fn test_drg_porep_compound_poseidon() {
     drg_porep_compound::<BinaryMerkleTree<PoseidonHasher>>();
 }
 
-fn drg_porep_compound<Tree: 'static + MerkleTreeTrait>() {
+fn drg_porep_compound<Tree: 'static + MerkleTreeTrait<Field = Fr>>() {
     // femme::pretty::Logger::new()
     //     .start(log::LevelFilter::Trace)
     //     .ok();

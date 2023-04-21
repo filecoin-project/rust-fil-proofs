@@ -14,6 +14,8 @@ byteorder = "1"
 ff = "0.12.0"
 thiserror = "1.0.6"
 blstrs = "0.6.0"
+pasta_curves = { version = "0.5.2", optional = true, features = ["repr-c", "serde"], package = "fil_pasta_curves" }
+
 
 [dev-dependencies]
 bitvec = "0.17"
@@ -22,6 +24,9 @@ itertools = "0.10.3"
 pretty_assertions = "1.2.0"
 rand = "0.8"
 rand_xorshift = "0.3"
+
+[features]
+nova = ["pasta_curves"]
 
 [[bench]]
 name = "fr"

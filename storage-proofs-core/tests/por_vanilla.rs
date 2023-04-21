@@ -1,11 +1,9 @@
 use std::convert::Into;
 
-use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{
     blake2s::Blake2sHasher, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain, Hasher,
 };
-use fr32::fr_into_bytes;
 use generic_array::typenum::{U0, U2, U4};
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
@@ -24,11 +22,15 @@ type TreeBase<H, U> = MerkleTreeWrapper<H, DiskStore<<H as Hasher>::Domain>, U, 
 #[test]
 fn test_por_poseidon_base_2() {
     test_por::<TreeBase<PoseidonHasher, U2>>();
+    #[cfg(feature = "nova")]
+    test_por::<TreeBase<PoseidonHasher<pasta_curves::Fp>, U2>>();
 }
 
 #[test]
 fn test_por_sha256_base_2() {
     test_por::<TreeBase<Sha256Hasher, U2>>();
+    #[cfg(feature = "nova")]
+    test_por::<TreeBase<Sha256Hasher<pasta_curves::Fp>, U2>>();
 }
 
 #[test]
@@ -39,11 +41,15 @@ fn test_por_blake2s_base_2() {
 #[test]
 fn test_por_poseidon_base_4() {
     test_por::<TreeBase<PoseidonHasher, U4>>();
+    #[cfg(feature = "nova")]
+    test_por::<TreeBase<PoseidonHasher<pasta_curves::Fp>, U4>>();
 }
 
 #[test]
 fn test_por_sha256_base_4() {
     test_por::<TreeBase<Sha256Hasher, U4>>();
+    #[cfg(feature = "nova")]
+    test_por::<TreeBase<Sha256Hasher<pasta_curves::Fp>, U4>>();
 }
 
 #[test]
@@ -61,7 +67,7 @@ fn test_por<Tree: MerkleTreeTrait>() {
     };
 
     let data: Vec<u8> = (0..leaves)
-        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+        .flat_map(|_| <Tree::Hasher as Hasher>::Domain::random(&mut rng).into_bytes())
         .collect();
     let porep_id = [3; 32];
     let graph =
@@ -92,6 +98,8 @@ fn test_por<Tree: MerkleTreeTrait>() {
 #[test]
 fn test_por_validates_proof_sha256_base_2() {
     test_por_validates_proof::<TreeBase<Sha256Hasher, U2>>();
+    #[cfg(feature = "nova")]
+    test_por::<TreeBase<Sha256Hasher<pasta_curves::Fp>, U2>>();
 }
 
 #[test]
@@ -102,11 +110,15 @@ fn test_por_validates_proof_blake2s_base_2() {
 #[test]
 fn test_por_validates_proof_poseidon_base_2() {
     test_por_validates_proof::<TreeBase<PoseidonHasher, U2>>();
+    #[cfg(feature = "nova")]
+    test_por::<TreeBase<PoseidonHasher<pasta_curves::Fp>, U2>>();
 }
 
 #[test]
 fn test_por_validates_proof_sha256_base_4() {
     test_por_validates_proof::<TreeBase<Sha256Hasher, U4>>();
+    #[cfg(feature = "nova")]
+    test_por::<TreeBase<Sha256Hasher<pasta_curves::Fp>, U4>>();
 }
 
 #[test]
@@ -117,6 +129,8 @@ fn test_por_validates_proof_blake2s_base_4() {
 #[test]
 fn test_por_validates_proof_poseidon_base_4() {
     test_por_validates_proof::<TreeBase<PoseidonHasher, U4>>();
+    #[cfg(feature = "nova")]
+    test_por::<TreeBase<PoseidonHasher<pasta_curves::Fp>, U4>>();
 }
 
 fn test_por_validates_proof<Tree: MerkleTreeTrait>() {
@@ -129,7 +143,7 @@ fn test_por_validates_proof<Tree: MerkleTreeTrait>() {
     };
 
     let data: Vec<u8> = (0..leaves)
-        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+        .flat_map(|_| <Tree::Hasher as Hasher>::Domain::random(&mut rng).into_bytes())
         .collect();
 
     let porep_id = [99; 32];
@@ -161,8 +175,8 @@ fn test_por_validates_proof<Tree: MerkleTreeTrait>() {
     // Invalidate the proof.
     let bad_proof = {
         let mut proof = good_proof;
-        let mut bad_leaf = Into::<Fr>::into(proof.data);
-        bad_leaf += Fr::one();
+        let mut bad_leaf = Into::<Tree::Field>::into(proof.data);
+        bad_leaf += Tree::Field::one();
         proof.data = bad_leaf.into();
         proof
     };
@@ -176,6 +190,8 @@ fn test_por_validates_proof<Tree: MerkleTreeTrait>() {
 #[test]
 fn test_por_validates_challenge_sha256_base_2() {
     test_por_validates_challenge::<TreeBase<Sha256Hasher, U2>>();
+    #[cfg(feature = "nova")]
+    test_por::<TreeBase<Sha256Hasher<pasta_curves::Fp>, U2>>();
 }
 
 #[test]
@@ -186,11 +202,15 @@ fn test_por_validates_challenge_blake2s_base_2() {
 #[test]
 fn test_por_validates_challenge_poseidon_base_2() {
     test_por_validates_challenge::<TreeBase<PoseidonHasher, U2>>();
+    #[cfg(feature = "nova")]
+    test_por::<TreeBase<PoseidonHasher<pasta_curves::Fp>, U2>>();
 }
 
 #[test]
 fn test_por_validates_challenge_sha256_base_4() {
     test_por_validates_challenge::<TreeBase<Sha256Hasher, U4>>();
+    #[cfg(feature = "nova")]
+    test_por::<TreeBase<Sha256Hasher<pasta_curves::Fp>, U4>>();
 }
 
 #[test]
@@ -201,6 +221,8 @@ fn test_por_validates_challenge_blake2s_base_4() {
 #[test]
 fn test_por_validates_challenge_poseidon_base_4() {
     test_por_validates_challenge::<TreeBase<PoseidonHasher, U4>>();
+    #[cfg(feature = "nova")]
+    test_por::<TreeBase<PoseidonHasher<pasta_curves::Fp>, U4>>();
 }
 
 fn test_por_validates_challenge<Tree: MerkleTreeTrait>() {
@@ -214,7 +236,7 @@ fn test_por_validates_challenge<Tree: MerkleTreeTrait>() {
     };
 
     let data: Vec<u8> = (0..leaves)
-        .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+        .flat_map(|_| <Tree::Hasher as Hasher>::Domain::random(&mut rng).into_bytes())
         .collect();
 
     let porep_id = [32; 32];

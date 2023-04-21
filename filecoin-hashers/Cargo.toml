@@ -18,22 +18,27 @@ anyhow = "1.0.34"
 serde = "1.0.117"
 rand = "0.8.0"
 
-neptune = { version = "~8.0.0", optional = true, features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+neptune = { version = "~8.1.0", optional = true, features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 lazy_static = { version = "1.4.0", optional = true }
 blake2s_simd = { version = "1.0.0", optional = true }
 sha2 = { version = "0.10.2", optional = true }
 hex = "0.4.2"
+ec-gpu = { version = "0.2.0", optional = true }
+typemap = { version = "0.3.3", optional = true }
+pasta_curves = { version = "0.5.2", optional = true, features = ["repr-c", "serde"], package = "fil_pasta_curves" }
 
 [features]
 default = ["opencl", "blake2s", "poseidon", "sha256"]
 
-cuda = ["bellperson/cuda", "neptune/cuda"]
-opencl = ["bellperson/opencl", "neptune/opencl"]
+cuda = ["bellperson/cuda", "neptune/cuda", "ec-gpu"]
+opencl = ["bellperson/opencl", "neptune/opencl", "ec-gpu"]
 
 # available hashers
 blake2s = ["blake2s_simd"]
-poseidon = ["neptune", "lazy_static"]
+poseidon = ["neptune", "lazy_static", "typemap"]
 sha256 = ["sha2"]
+
+nova = ["poseidon", "sha256", "pasta_curves", "neptune/pasta"]
 
 [dev-dependencies]
 rand_xorshift = "0.3.0"

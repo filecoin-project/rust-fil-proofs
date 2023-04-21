@@ -20,7 +20,7 @@ use crate::{
     gadgets::{constraint, insertion::insert, variables::Root},
     merkle::{base_path_length, MerkleProofTrait, MerkleTreeTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
-    por::PoR,
+    por::{PoR, PublicInputs, PublicParams},
     proof::ProofScheme,
 };
 
@@ -34,9 +34,9 @@ use crate::{
 /// * `root` - The merkle root of the tree.
 ///
 pub struct PoRCircuit<Tree: MerkleTreeTrait> {
-    value: Root<Fr>,
+    value: Root<Tree::Field>,
     auth_path: AuthPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-    root: Root<Fr>,
+    root: Root<Tree::Field>,
     private: bool,
     _tree: PhantomData<Tree>,
 }
@@ -44,9 +44,9 @@ pub struct PoRCircuit<Tree: MerkleTreeTrait> {
 #[derive(Debug, Clone)]
 pub struct AuthPath<
     H: Hasher,
-    U: 'static + PoseidonArity,
-    V: 'static + PoseidonArity,
-    W: 'static + PoseidonArity,
+    U: 'static + PoseidonArity<H::Field>,
+    V: 'static + PoseidonArity<H::Field>,
+    W: 'static + PoseidonArity<H::Field>,
 > {
     base: SubPath<H, U>,
     sub: SubPath<H, V>,
@@ -55,12 +55,12 @@ pub struct AuthPath<
 
 impl<
         H: Hasher,
-        U: 'static + PoseidonArity,
-        V: 'static + PoseidonArity,
-        W: 'static + PoseidonArity,
-    > From<Vec<(Vec<Option<Fr>>, Option<usize>)>> for AuthPath<H, U, V, W>
+        U: 'static + PoseidonArity<H::Field>,
+        V: 'static + PoseidonArity<H::Field>,
+        W: 'static + PoseidonArity<H::Field>,
+    > From<Vec<(Vec<Option<H::Field>>, Option<usize>)>> for AuthPath<H, U, V, W>
 {
-    fn from(mut base_opts: Vec<(Vec<Option<Fr>>, Option<usize>)>) -> Self {
+    fn from(mut base_opts: Vec<(Vec<Option<H::Field>>, Option<usize>)>) -> Self {
         let has_top = W::to_usize() > 0;
         let has_sub = V::to_usize() > 0;
         let len = base_opts.len();
@@ -80,7 +80,6 @@ impl<
                 hashes,
                 index,
                 _a: Default::default(),
-                _h: Default::default(),
             })
             .collect();
 
@@ -90,7 +89,6 @@ impl<
                 hashes,
                 index,
                 _a: Default::default(),
-                _h: Default::default(),
             }]
         } else {
             Vec::new()
@@ -102,7 +100,6 @@ impl<
                 hashes,
                 index,
                 _a: Default::default(),
-                _h: Default::default(),
             }]
         } else {
             Vec::new()
@@ -119,24 +116,23 @@ impl<
 }
 
 #[derive(Debug, Clone)]
-struct SubPath<H: Hasher, Arity: 'static + PoseidonArity> {
+struct SubPath<H: Hasher, Arity: 'static + PoseidonArity<H::Field>> {
     path: Vec<PathElement<H, Arity>>,
 }
 
 #[derive(Debug, Clone)]
-struct PathElement<H: Hasher, Arity: 'static + PoseidonArity> {
-    hashes: Vec<Option<Fr>>,
+struct PathElement<H: Hasher, Arity: 'static + PoseidonArity<H::Field>> {
+    hashes: Vec<Option<H::Field>>,
     index: Option<usize>,
     _a: PhantomData<Arity>,
-    _h: PhantomData<H>,
 }
 
-impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
-    fn synthesize<CS: ConstraintSystem<Fr>>(
+impl<H: Hasher, Arity: 'static + PoseidonArity<H::Field>> SubPath<H, Arity> {
+    fn synthesize<CS: ConstraintSystem<H::Field>>(
         self,
         mut cs: CS,
-        mut cur: AllocatedNum<Fr>,
-    ) -> Result<(AllocatedNum<Fr>, Vec<Boolean>), SynthesisError> {
+        mut cur: AllocatedNum<H::Field>,
+    ) -> Result<(AllocatedNum<H::Field>, Vec<Boolean>), SynthesisError> {
         let arity = Arity::to_usize();
 
         if arity == 0 {
@@ -193,7 +189,7 @@ impl<H: Hasher, Arity: 'static + PoseidonArity> SubPath<H, Arity> {
     }
 }
 
-impl<H: Hasher, U: PoseidonArity, V: PoseidonArity, W: PoseidonArity> AuthPath<H, U, V, W> {
+impl<H: Hasher, U: PoseidonArity<H::Field>, V: PoseidonArity<H::Field>, W: PoseidonArity<H::Field>> AuthPath<H, U, V, W> {
     pub fn blank(leaves: usize) -> Self {
         let has_sub = V::to_usize() > 0;
         let has_top = W::to_usize() > 0;
@@ -204,7 +200,6 @@ impl<H: Hasher, U: PoseidonArity, V: PoseidonArity, W: PoseidonArity> AuthPath<H
                 hashes: vec![None; U::to_usize() - 1],
                 index: None,
                 _a: Default::default(),
-                _h: Default::default(),
             };
             base_elements
         ];
@@ -214,7 +209,6 @@ impl<H: Hasher, U: PoseidonArity, V: PoseidonArity, W: PoseidonArity> AuthPath<H
                 hashes: vec![None; V::to_usize() - 1],
                 index: None,
                 _a: Default::default(),
-                _h: Default::default(),
             }]
         } else {
             Vec::new()
@@ -225,7 +219,6 @@ impl<H: Hasher, U: PoseidonArity, V: PoseidonArity, W: PoseidonArity> AuthPath<H
                 hashes: vec![None; W::to_usize() - 1],
                 index: None,
                 _a: Default::default(),
-                _h: Default::default(),
             }]
         } else {
             Vec::new()
@@ -240,7 +233,7 @@ impl<H: Hasher, U: PoseidonArity, V: PoseidonArity, W: PoseidonArity> AuthPath<H
 }
 
 impl<Tree: MerkleTreeTrait> CircuitComponent for PoRCircuit<Tree> {
-    type ComponentPrivateInputs = Option<Root<Fr>>;
+    type ComponentPrivateInputs = Option<Root<Tree::Field>>;
 }
 
 pub struct PoRCompound<Tree: MerkleTreeTrait> {
@@ -257,7 +250,7 @@ pub fn challenge_into_auth_path_bits(challenge: usize, leaves: usize) -> Vec<boo
     to_bits(leaves.trailing_zeros(), challenge)
 }
 
-impl<C: Circuit<Fr>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheableParameters<C, P>
+impl<C: Circuit<Fr>, P: ParameterSetMetadata, Tree: MerkleTreeTrait<Field = Fr>> CacheableParameters<C, P>
     for PoRCompound<Tree>
 {
     fn cache_prefix() -> String {
@@ -266,7 +259,7 @@ impl<C: Circuit<Fr>, P: ParameterSetMetadata, Tree: MerkleTreeTrait> CacheablePa
 }
 
 // can only implment for Bls12 because por is not generic over the engine.
-impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircuit<Tree>>
+impl<'a, Tree: 'static + MerkleTreeTrait<Field = Fr>> CompoundProof<'a, PoR<Tree>, PoRCircuit<Tree>>
     for PoRCompound<Tree>
 {
     fn circuit<'b>(
@@ -312,31 +305,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait> CompoundProof<'a, PoR<Tree>, PoRCircui
         pub_params: &<PoR<Tree> as ProofScheme<'a>>::PublicParams,
         _k: Option<usize>,
     ) -> Result<Vec<Fr>> {
-        ensure!(
-            pub_inputs.challenge < pub_params.leaves,
-            "Challenge out of range"
-        );
-        let mut inputs = Vec::new();
-
-        // Inputs are (currently, inefficiently) packed with one `Fr` per challenge.
-        // Boolean/bit auth paths trivially correspond to the challenged node's index within a sector.
-        // Defensively convert the challenge with `try_from` as a reminder that we must not truncate.
-        let input_fr =
-            Fr::from(u64::try_from(pub_inputs.challenge).expect("challenge type too wide"));
-        inputs.push(input_fr);
-
-        if let Some(commitment) = pub_inputs.commitment {
-            ensure!(!pub_params.private, "Params must be public");
-            inputs.push(commitment.into());
-        } else {
-            ensure!(pub_params.private, "Params must be private");
-        }
-
-        Ok(inputs)
+        PoRCircuit::<Tree>::generate_public_inputs(pub_params, pub_inputs)
     }
 }
 
-impl<Tree: MerkleTreeTrait> Circuit<Fr> for PoRCircuit<Tree> {
+impl<Tree: MerkleTreeTrait> Circuit<Tree::Field> for PoRCircuit<Tree> {
     /// # Public Inputs
     ///
     /// This circuit expects the following public inputs.
@@ -348,7 +321,7 @@ impl<Tree: MerkleTreeTrait> Circuit<Fr> for PoRCircuit<Tree> {
     /// * value_num - packed version of `value` as bits. (might be more than one Fr)
     ///
     /// Note: All public inputs must be provided as `E::Fr`.
-    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+    fn synthesize<CS: ConstraintSystem<Tree::Field>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let value = self.value;
         let auth_path = self.auth_path;
         let root = self.root;
@@ -432,13 +405,13 @@ impl<Tree: MerkleTreeTrait> PoRCircuit<Tree> {
     #[allow(clippy::type_complexity)]
     pub fn synthesize<CS>(
         mut cs: CS,
-        value: Root<Fr>,
+        value: Root<Tree::Field>,
         auth_path: AuthPath<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-        root: Root<Fr>,
+        root: Root<Tree::Field>,
         private: bool,
     ) -> Result<(), SynthesisError>
     where
-        CS: ConstraintSystem<Fr>,
+        CS: ConstraintSystem<Tree::Field>,
     {
         let por = Self {
             value,
@@ -450,6 +423,36 @@ impl<Tree: MerkleTreeTrait> PoRCircuit<Tree> {
 
         por.synthesize(&mut cs)
     }
+
+    // Generate the r1cs circuit's public inputs; note `CompoundProof::generate_public_inputs` is
+    // tied to bls12-381's scalar field, whereas this method is generic over any prime field.
+    pub fn generate_public_inputs(
+        pub_params: &PublicParams,
+        pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain>,
+    ) -> Result<Vec<Tree::Field>> {
+        ensure!(
+            pub_inputs.challenge < pub_params.leaves,
+            "Challenge out of range"
+        );
+        let mut inputs = Vec::new();
+
+        // Inputs are (currently, inefficiently) packed with one scalar per challenge.
+        // Boolean/bit auth paths trivially correspond to the challenged node's index within a sector.
+        // Defensively convert the challenge with `try_from` as a reminder that we must not truncate.
+        let input_fr = Tree::Field::from(
+            u64::try_from(pub_inputs.challenge).expect("challenge type too wide"),
+        );
+        inputs.push(input_fr);
+
+        if let Some(commitment) = pub_inputs.commitment {
+            ensure!(!pub_params.private, "Params must be public");
+            inputs.push(commitment.into());
+        } else {
+            ensure!(pub_params.private, "Params must be private");
+        }
+
+        Ok(inputs)
+    }
 }
 
 /// Synthesizes a PoR proof without adding a public input for the challenge (whereas `PoRCircuit`
@@ -458,13 +461,13 @@ pub fn por_no_challenge_input<Tree, CS>(
     mut cs: CS,
     // little-endian
     challenge_bits: Vec<AllocatedBit>,
-    leaf: AllocatedNum<Fr>,
-    path_values: Vec<Vec<AllocatedNum<Fr>>>,
-    root: AllocatedNum<Fr>,
+    leaf: AllocatedNum<Tree::Field>,
+    path_values: Vec<Vec<AllocatedNum<Tree::Field>>>,
+    root: AllocatedNum<Tree::Field>,
 ) -> Result<(), SynthesisError>
 where
     Tree: MerkleTreeTrait,
-    CS: ConstraintSystem<Fr>,
+    CS: ConstraintSystem<Tree::Field>,
 {
     let base_arity = Tree::Arity::to_usize();
     let sub_arity = Tree::SubTreeArity::to_usize();

@@ -47,7 +47,7 @@ fn test_stacked_compound_poseidon_top_8_4_2() {
     test_stacked_compound::<DiskTree<PoseidonHasher, U8, U4, U2>>();
 }
 
-fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
+fn test_stacked_compound<Tree: 'static + MerkleTreeTrait<Field = Fr>>() {
     let nodes = 8 * get_base_tree_count::<Tree>();
 
     let degree = BASE_DEGREE;

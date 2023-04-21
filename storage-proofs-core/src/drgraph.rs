@@ -37,7 +37,7 @@ pub trait Graph<H: Hasher>: Debug + Clone + PartialEq + Eq {
     }
 
     /// Returns the merkle tree depth.
-    fn merkle_tree_depth<U: 'static + PoseidonArity>(&self) -> u64 {
+    fn merkle_tree_depth<U: 'static + PoseidonArity<H::Field>>(&self) -> u64 {
         graph_height::<U>(self.size()) as u64
     }
 
@@ -359,7 +359,7 @@ mod tests {
         graph_bucket::<Blake2sHasher>();
     }
 
-    fn gen_proof<H: 'static + Hasher, U: 'static + PoseidonArity>(config: Option<StoreConfig>) {
+    fn gen_proof<H: 'static + Hasher, U: 'static + PoseidonArity<H::Field>>(config: Option<StoreConfig>) {
         let leafs = 64;
         let porep_id = [1; 32];
         let g = BucketGraph::<H>::new(leafs, BASE_DEGREE, 0, porep_id, ApiVersion::V1_2_0)
@@ -382,11 +382,15 @@ mod tests {
     #[test]
     fn gen_proof_poseidon_binary() {
         gen_proof::<PoseidonHasher, U2>(None);
+        #[cfg(feature = "nova")]
+        gen_proof::<PoseidonHasher<pasta_curves::Fp>, U2>(None);
     }
 
     #[test]
     fn gen_proof_sha256_binary() {
         gen_proof::<Sha256Hasher, U2>(None);
+        #[cfg(feature = "nova")]
+        gen_proof::<Sha256Hasher<pasta_curves::Fp>, U2>(None);
     }
 
     #[test]
@@ -397,11 +401,15 @@ mod tests {
     #[test]
     fn gen_proof_poseidon_quad() {
         gen_proof::<PoseidonHasher, U4>(None);
+        #[cfg(feature = "nova")]
+        gen_proof::<PoseidonHasher<pasta_curves::Fp>, U4>(None);
     }
 
     #[test]
     fn gen_proof_sha256_quad() {
         gen_proof::<Sha256Hasher, U4>(None);
+        #[cfg(feature = "nova")]
+        gen_proof::<Sha256Hasher<pasta_curves::Fp>, U4>(None);
     }
 
     #[test]
@@ -412,5 +420,7 @@ mod tests {
     #[test]
     fn gen_proof_poseidon_oct() {
         gen_proof::<PoseidonHasher, U8>(None);
+        #[cfg(feature = "nova")]
+        gen_proof::<PoseidonHasher<pasta_curves::Fp>, U8>(None);
     }
 }

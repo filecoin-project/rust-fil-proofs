@@ -26,7 +26,7 @@ log = "0.4.7"
 pretty_assertions = "1.2.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { version = "~8.0.0", features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+neptune = { version = "~8.1.0", features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"
@@ -39,6 +39,8 @@ fdlimit = "0.2.0"
 fr32 = { path = "../fr32", version = "~7.0.0", default-features = false }
 yastl = "0.1.2"
 blstrs = "0.6.0"
+pasta_curves = { version = "0.5.2", optional = true, features = ["repr-c", "serde"], package = "fil_pasta_curves" }
+nova-snark = { version = "0.20.3", optional = true }
 
 [build-dependencies]
 rustversion = "1.0"
@@ -59,10 +61,11 @@ fil_logger = "0.1.6"
 
 [features]
 default = ["opencl", "multicore-sdr"]
-cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda"]
-opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl"]
+cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda", "nova-snark?/cuda"]
+opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl", "nova-snark?/opencl"]
 isolated-testing = []
 multicore-sdr = ["hwloc"]
+nova = ["filecoin-hashers/nova", "storage-proofs-core/nova", "neptune/pasta", "pasta_curves", "nova-snark"]
 
 [[bench]]
 name = "encode"

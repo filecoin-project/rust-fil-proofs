@@ -16,7 +16,7 @@ use crate::{
     PoRep,
 };
 
-impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> PoRep<'a, Tree::Hasher, G>
+impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher<Field = Tree::Field>> PoRep<'a, Tree::Hasher, G>
     for StackedDrg<'a, Tree, G>
 {
     type Tau = Tau<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>;

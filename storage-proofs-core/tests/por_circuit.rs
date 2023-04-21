@@ -5,27 +5,22 @@ use bellperson::{
     util_cs::test_cs::TestConstraintSystem,
     Circuit, ConstraintSystem,
 };
-use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{
     blake2s::Blake2sHasher,
-    poseidon::{PoseidonDomain, PoseidonHasher},
+    poseidon::PoseidonHasher,
     sha256::Sha256Hasher,
     Domain, Hasher, PoseidonArity,
 };
-use fr32::{bytes_into_fr, fr_into_bytes};
 use generic_array::typenum::{Unsigned, U0, U2, U4, U8};
 use merkletree::store::{StoreConfig, VecStore};
 use pretty_assertions::assert_eq;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
-    compound_proof::CompoundProof,
-    gadgets::por::{
-        challenge_into_auth_path_bits, por_no_challenge_input, PoRCircuit, PoRCompound,
-    },
+    gadgets::por::{challenge_into_auth_path_bits, por_no_challenge_input, PoRCircuit},
     merkle::{
-        create_base_merkle_tree, generate_tree, get_base_tree_count, DiskTree, MerkleProofTrait,
+        create_base_merkle_tree, generate_tree, get_base_tree_count, MerkleProofTrait,
         MerkleTreeTrait, MerkleTreeWrapper, ResTree,
     },
     por::{self, PoR},
@@ -47,11 +42,15 @@ fn test_por_circuit_blake2s_base_2() {
 #[test]
 fn test_por_circuit_sha256_base_2() {
     test_por_circuit::<TreeBase<Sha256Hasher, U2>>(3, 272_295);
+    #[cfg(feature = "nova")]
+    test_por_circuit::<TreeBase<Sha256Hasher<pasta_curves::Fp>, U2>>(3, 272_295);
 }
 
 #[test]
 fn test_por_circuit_poseidon_base_2() {
     test_por_circuit::<TreeBase<PoseidonHasher, U2>>(3, 1_887);
+    #[cfg(feature = "nova")]
+    test_por_circuit::<TreeBase<PoseidonHasher<pasta_curves::Fp>, U2>>(3, 1_887);
 }
 
 #[test]
@@ -62,11 +61,15 @@ fn test_por_circuit_blake2s_base_4() {
 #[test]
 fn test_por_circuit_sha256_base_4() {
     test_por_circuit::<TreeBase<Sha256Hasher, U4>>(3, 216_258);
+    #[cfg(feature = "nova")]
+    test_por_circuit::<TreeBase<Sha256Hasher<pasta_curves::Fp>, U4>>(3, 216_258);
 }
 
 #[test]
 fn test_por_circuit_poseidon_base_4() {
     test_por_circuit::<TreeBase<PoseidonHasher, U4>>(3, 1_164);
+    #[cfg(feature = "nova")]
+    test_por_circuit::<TreeBase<PoseidonHasher<pasta_curves::Fp>, U4>>(3, 1_164);
 }
 
 #[test]
@@ -77,32 +80,44 @@ fn test_por_circuit_blake2s_base_8() {
 #[test]
 fn test_por_circuit_sha256_base_8() {
     test_por_circuit::<TreeBase<Sha256Hasher, U8>>(3, 250_987);
+    #[cfg(feature = "nova")]
+    test_por_circuit::<TreeBase<Sha256Hasher<pasta_curves::Fp>, U8>>(3, 250_987);
 }
 
 #[test]
 fn test_por_circuit_poseidon_base_8() {
     test_por_circuit::<TreeBase<PoseidonHasher, U8>>(3, 1_063);
+    #[cfg(feature = "nova")]
+    test_por_circuit::<TreeBase<PoseidonHasher<pasta_curves::Fp>, U8>>(3, 1_063);
 }
 
 #[test]
 fn test_por_circuit_poseidon_sub_8_2() {
     test_por_circuit::<TreeSub<PoseidonHasher, U8, U2>>(3, 1_377);
+    #[cfg(feature = "nova")]
+    test_por_circuit::<TreeSub<PoseidonHasher<pasta_curves::Fp>, U8, U2>>(3, 1_377);
 }
 
 #[test]
 fn test_por_circuit_poseidon_top_8_4_2() {
     test_por_circuit::<TreeTop<PoseidonHasher, U8, U4, U2>>(3, 1_764);
+    #[cfg(feature = "nova")]
+    test_por_circuit::<TreeTop<PoseidonHasher<pasta_curves::Fp>, U8, U4, U2>>(3, 1_764);
 }
 
 #[test]
 fn test_por_circuit_poseidon_sub_8_8() {
     // This is the shape we want for 32GiB sectors.
     test_por_circuit::<TreeSub<PoseidonHasher, U8, U8>>(3, 1_593);
+    #[cfg(feature = "nova")]
+    test_por_circuit::<TreeSub<PoseidonHasher<pasta_curves::Fp>, U8, U8>>(3, 1_593);
 }
 #[test]
 fn test_por_circuit_poseidon_top_8_8_2() {
     // This is the shape we want for 64GiB secotrs.
     test_por_circuit::<TreeTop<PoseidonHasher, U8, U8, U2>>(3, 1_907);
+    #[cfg(feature = "nova")]
+    test_por_circuit::<TreeTop<PoseidonHasher<pasta_curves::Fp>, U8, U8, U2>>(3, 1_907);
 }
 
 #[test]
@@ -110,6 +125,8 @@ fn test_por_circuit_poseidon_top_8_2_4() {
     // We can handle top-heavy trees with a non-zero subtree arity.
     // These should never be produced, though.
     test_por_circuit::<TreeTop<PoseidonHasher, U8, U2, U4>>(3, 1_764);
+    #[cfg(feature = "nova")]
+    test_por_circuit::<TreeTop<PoseidonHasher<pasta_curves::Fp>, U8, U2, U4>>(3, 1_764);
 }
 
 fn test_por_circuit<Tree: 'static + MerkleTreeTrait>(num_inputs: usize, num_constraints: usize) {
@@ -152,7 +169,7 @@ fn test_por_circuit<Tree: 'static + MerkleTreeTrait>(num_inputs: usize, num_cons
 
         // -- Circuit
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Tree::Field>::new();
 
         // Root is public input.
         let por = PoRCircuit::<ResTree<Tree>>::new(proof.proof, false);
@@ -167,7 +184,7 @@ fn test_por_circuit<Tree: 'static + MerkleTreeTrait>(num_inputs: usize, num_cons
         );
 
         let generated_inputs =
-            PoRCompound::<ResTree<Tree>>::generate_public_inputs(&pub_inputs, &pub_params, None)
+            PoRCircuit::<ResTree<Tree>>::generate_public_inputs(&pub_params, &pub_inputs)
                 .expect("generate_public_inputs failure");
 
         let expected_inputs = cs.get_inputs();
@@ -191,16 +208,22 @@ fn test_por_circuit<Tree: 'static + MerkleTreeTrait>(num_inputs: usize, num_cons
 #[test]
 fn test_por_circuit_poseidon_base_2_private_root() {
     test_por_circuit_private_root::<TreeBase<PoseidonHasher, U2>>(1_886);
+    #[cfg(feature = "nova")]
+    test_por_circuit_private_root::<TreeBase<PoseidonHasher<pasta_curves::Fp>, U2>>(1_886);
 }
 
 #[test]
 fn test_por_circuit_poseidon_base_4_private_root() {
     test_por_circuit_private_root::<TreeBase<PoseidonHasher, U4>>(1_163);
+    #[cfg(feature = "nova")]
+    test_por_circuit_private_root::<TreeBase<PoseidonHasher<pasta_curves::Fp>, U4>>(1_163);
 }
 
 #[test]
 fn test_por_circuit_poseidon_base_8_private_root() {
     test_por_circuit_private_root::<TreeBase<PoseidonHasher, U8>>(1_062);
+    #[cfg(feature = "nova")]
+    test_por_circuit_private_root::<TreeBase<PoseidonHasher<pasta_curves::Fp>, U8>>(1_062);
 }
 
 fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) {
@@ -211,7 +234,7 @@ fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) 
         // -- Basic Setup
 
         let data: Vec<u8> = (0..leaves)
-            .flat_map(|_| fr_into_bytes(&Fr::random(&mut rng)))
+            .flat_map(|_| <Tree::Hasher as Hasher>::Domain::random(&mut rng).into_bytes())
             .collect();
 
         let tree = create_base_merkle_tree::<Tree>(None, leaves, data.as_slice())
@@ -229,11 +252,10 @@ fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) 
         };
 
         let priv_inputs = por::PrivateInputs::<Tree>::new(
-            bytes_into_fr(
+            <Tree::Hasher as Hasher>::Domain::try_from_bytes(
                 data_at_node(data.as_slice(), pub_inputs.challenge).expect("data_at_node failure"),
             )
-            .expect("bytes_into_fr failure")
-            .into(),
+            .expect("bytes into domain should not fail"),
             &tree,
         );
 
@@ -248,7 +270,7 @@ fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) 
 
         // -- Circuit
 
-        let mut cs = TestConstraintSystem::<Fr>::new();
+        let mut cs = TestConstraintSystem::<Tree::Field>::new();
 
         // Root is private input.
         let por = PoRCircuit::<Tree>::new(proof.proof, true);
@@ -263,12 +285,12 @@ fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) 
         );
 
         let auth_path_bits = challenge_into_auth_path_bits(pub_inputs.challenge, pub_params.leaves);
-        let packed_auth_path = multipack::compute_multipacking::<Fr>(&auth_path_bits);
+        let packed_auth_path = multipack::compute_multipacking::<Tree::Field>(&auth_path_bits);
 
         let mut expected_inputs = Vec::new();
         expected_inputs.extend(packed_auth_path);
 
-        assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
+        assert_eq!(cs.get_input(0, "ONE"), Tree::Field::one(), "wrong input 0");
 
         assert_eq!(
             cs.get_input(1, "path/input 0"),
@@ -372,11 +394,12 @@ fn create_tree<Tree: MerkleTreeTrait>(
     }
 }
 
-fn test_por_no_challenge_input<U, V, W>(sector_nodes: usize)
+fn test_por_no_challenge_input<H, U, V, W>(sector_nodes: usize)
 where
-    U: PoseidonArity,
-    V: PoseidonArity,
-    W: PoseidonArity,
+    H: 'static + Hasher,
+    U: PoseidonArity<H::Field>,
+    V: PoseidonArity<H::Field>,
+    W: PoseidonArity<H::Field>,
 {
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
@@ -386,14 +409,14 @@ where
     let tmp_dir = tempdir().unwrap();
     let tmp_path = tmp_dir.path();
 
-    // Create random TreeROld.
-    let leafs: Vec<PoseidonDomain> = (0..sector_nodes)
-        .map(|_| PoseidonDomain::random(&mut rng))
+    // Create random TreeR.
+    let leafs: Vec<H::Domain> = (0..sector_nodes)
+        .map(|_| H::Domain::random(&mut rng))
         .collect();
-    let tree = create_tree::<DiskTree<PoseidonHasher, U, V, W>>(&leafs, tmp_path);
+    let tree = create_tree::<TreeTop<H, U, V, W>>(&leafs, tmp_path);
     let root = tree.root();
 
-    let mut cs = TestConstraintSystem::<Fr>::new();
+    let mut cs = TestConstraintSystem::<H::Field>::new();
 
     let root = AllocatedNum::alloc(cs.namespace(|| "root"), || Ok(root.into())).unwrap();
 
@@ -412,10 +435,10 @@ where
                 commitment: None,
             };
             let priv_inputs =
-                por::PrivateInputs::<DiskTree<PoseidonHasher, U, V, W>> { leaf, tree: &tree };
+                por::PrivateInputs::<TreeTop<H, U, V, W>> { leaf, tree: &tree };
             let proof = PoR::prove(&pub_params, &pub_inputs, &priv_inputs).expect("proving failed");
             let is_valid =
-                PoR::<DiskTree<PoseidonHasher, U, V, W>>::verify(&pub_params, &pub_inputs, &proof)
+                PoR::<TreeTop<H, U, V, W>>::verify(&pub_params, &pub_inputs, &proof)
                     .expect("verification failed");
             assert!(is_valid, "failed to verify por proof");
             proof.proof
@@ -439,7 +462,7 @@ where
             })
             .collect();
 
-        let path_values: Vec<Vec<AllocatedNum<Fr>>> = proof
+        let path_values: Vec<Vec<AllocatedNum<H::Field>>> = proof
             .path()
             .into_iter()
             .enumerate()
@@ -463,7 +486,7 @@ where
             })
             .collect();
 
-        por_no_challenge_input::<DiskTree<PoseidonHasher, U, V, W>, _>(
+        por_no_challenge_input::<TreeTop<H, U, V, W>, _>(
             cs.namespace(|| format!("por (c_index={})", c_index)),
             c_bits,
             leaf,
@@ -481,29 +504,39 @@ where
 // Test non-compound tree.
 #[test]
 fn test_por_no_challenge_input_2kib_8_0_0() {
-    test_por_no_challenge_input::<U8, U0, U0>(1 << 6);
+    test_por_no_challenge_input::<PoseidonHasher, U8, U0, U0>(1 << 6);
+    #[cfg(feature = "nova")]
+    test_por_no_challenge_input::<PoseidonHasher<pasta_curves::Fp>, U8, U0, U0>(1 << 6);
 }
 
 // Test compound base-sub tree with repeated arity.
 #[test]
 fn test_por_no_challenge_input_2kib_8_8_0() {
-    test_por_no_challenge_input::<U8, U8, U0>(1 << 6);
+    test_por_no_challenge_input::<PoseidonHasher, U8, U8, U0>(1 << 6);
+    #[cfg(feature = "nova")]
+    test_por_no_challenge_input::<PoseidonHasher<pasta_curves::Fp>, U8, U8, U0>(1 << 6);
 }
 
 // Test compound base-sub tree.
 #[test]
 fn test_por_no_challenge_input_8kib_8_4_0() {
-    test_por_no_challenge_input::<U8, U4, U0>(1 << 8);
+    test_por_no_challenge_input::<PoseidonHasher, U8, U4, U0>(1 << 8);
+    #[cfg(feature = "nova")]
+    test_por_no_challenge_input::<PoseidonHasher<pasta_curves::Fp>, U8, U4, U0>(1 << 8);
 }
 
 // Test compound base-sub tree.
 #[test]
 fn test_por_no_challenge_input_8kib_8_4_2() {
-    test_por_no_challenge_input::<U8, U4, U2>(1 << 9);
+    test_por_no_challenge_input::<PoseidonHasher, U8, U4, U2>(1 << 9);
+    #[cfg(feature = "nova")]
+    test_por_no_challenge_input::<PoseidonHasher<pasta_curves::Fp>, U8, U4, U2>(1 << 9);
 }
 
 // Test compound base-sub-top tree with repeated arity.
 #[test]
 fn test_por_no_challenge_input_32kib_8_8_2() {
-    test_por_no_challenge_input::<U8, U8, U2>(1 << 10);
+    test_por_no_challenge_input::<PoseidonHasher, U8, U8, U2>(1 << 10);
+    #[cfg(feature = "nova")]
+    test_por_no_challenge_input::<PoseidonHasher<pasta_curves::Fp>, U8, U8, U2>(1 << 10);
 }

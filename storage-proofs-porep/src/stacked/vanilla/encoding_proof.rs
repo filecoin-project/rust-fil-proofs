@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use blstrs::Scalar as Fr;
 use filecoin_hashers::Hasher;
 use fr32::bytes_into_fr_repr_safe;
 use log::trace;
@@ -50,7 +49,7 @@ impl<H: Hasher> EncodingProof<H> {
         bytes_into_fr_repr_safe(hasher.finalize().as_ref()).into()
     }
 
-    pub fn verify<G: Hasher>(
+    pub fn verify<G: Hasher<Field = H::Field>>(
         &self,
         replica_id: &H::Domain,
         exp_encoded_node: &H::Domain,
@@ -58,7 +57,7 @@ impl<H: Hasher> EncodingProof<H> {
     ) -> bool {
         let key = self.create_key(replica_id);
 
-        let fr: Fr = (*decoded_node).into();
+        let fr: H::Field = (*decoded_node).into();
         let encoded_node = encode(key, fr.into());
 
         check_eq!(exp_encoded_node, &encoded_node);
