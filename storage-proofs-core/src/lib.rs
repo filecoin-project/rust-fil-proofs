@@ -22,6 +22,8 @@ pub mod gadgets;
 pub mod measurements;
 pub mod merkle;
 pub mod multi_proof;
+#[cfg(feature = "nova")]
+pub mod nova;
 pub mod parameter_cache;
 pub mod partitions;
 pub mod pieces;

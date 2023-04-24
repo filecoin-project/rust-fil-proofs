@@ -44,6 +44,8 @@ cbc = { version = "0.1.2", features = ["std"] }
 ec-gpu = { version = "0.2.0", optional = true }
 pasta_curves = { version = "0.5.2", optional = true, features = ["repr-c", "serde"], package = "fil_pasta_curves" }
 nova-snark = { version = "0.20.3", optional = true }
+bincode = { version = "1.2.1", optional = true }
+flate2 = { version = "1.0", optional = true }
 
 [dev-dependencies]
 proptest = "1.0.0"
@@ -66,7 +68,7 @@ profile = ["measurements"]
 cuda = ["bellperson/cuda", "filecoin-hashers/cuda", "nova-snark?/cuda", "ec-gpu"]
 opencl = ["bellperson/opencl", "filecoin-hashers/opencl", "nova-snark?/opencl", "ec-gpu"]
 
-nova = ["filecoin-hashers/nova", "pasta_curves", "nova-snark"]
+nova = ["filecoin-hashers/nova", "pasta_curves", "nova-snark", "bincode", "flate2"]
 
 [[bench]]
 name = "sha256"
