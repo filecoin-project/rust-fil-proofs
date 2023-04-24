@@ -1276,10 +1276,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         label_configs: Labels<Tree>,
     ) -> Result<TransformedLayers<Tree, G>> {
         trace!("transform_and_replicate_layers");
-        let nodes_count = graph.size();
+        let total_nodes_count = graph.size();
 
-        assert_eq!(data.len(), nodes_count * NODE_SIZE);
-        trace!("nodes count {}, data len {}", nodes_count, data.len());
+        assert_eq!(data.len(), total_nodes_count * NODE_SIZE);
+        trace!("nodes count {}, data len {}", total_nodes_count, data.len());
 
         let tree_count = get_base_tree_count::<Tree>();
         let nodes_count = graph.size() / tree_count;
@@ -1309,9 +1309,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let mut tree_d_config = StoreConfig::from_config(
             &config,
             CacheKey::CommDTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, BINARY_ARITY)?),
+            Some(get_merkle_tree_len(total_nodes_count, BINARY_ARITY)?),
         );
-        tree_d_config.rows_to_discard = default_rows_to_discard(nodes_count, BINARY_ARITY);
+        tree_d_config.rows_to_discard = default_rows_to_discard(total_nodes_count, BINARY_ARITY);
 
         let mut tree_r_last_config = StoreConfig::from_config(
             &config,
@@ -1401,7 +1401,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 })?
             }
         };
-        tree_d_config.size = Some(tree_d.len());
         assert_eq!(
             tree_d_config.size.expect("config size failure"),
             tree_d.len()
