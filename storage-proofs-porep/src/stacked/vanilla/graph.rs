@@ -174,9 +174,9 @@ where
             let cache_parents = cache.read(node)?;
             Ok(self.copy_parents_data_inner(&cache_parents, base_data, hasher))
         } else {
-            let mut cache_parents = [0u32; DEGREE];
+            let mut cache_parents = [0u32; BASE_DEGREE];
 
-            self.parents(node as usize, &mut cache_parents[..])
+            self.base_parents(node as usize, &mut cache_parents[..])
                 .expect("parents failure");
             Ok(self.copy_parents_data_inner(&cache_parents, base_data, hasher))
         }
