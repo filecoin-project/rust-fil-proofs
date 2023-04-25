@@ -20,13 +20,13 @@ num-traits = "0.2"
 rayon = "1.0.0"
 serde = { version = "1.0", features = ["derive"]}
 serde_json = "1.0"
-ff = "0.12.0"
-bellperson = "0.24.0"
+ff = "0.13.0"
+bellperson = "0.25.0"
 log = "0.4.7"
 pretty_assertions = "1.2.0"
 generic-array = "0.14.4"
 anyhow = "1.0.23"
-neptune = { version = "~8.0.0", features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
+neptune = { version = "9.0.0", features = ["bls", "arity2", "arity4", "arity8", "arity11", "arity16", "arity24", "arity36"] }
 num_cpus = "1.10.1"
 hex = "0.4.2"
 bincode = "1.1.2"
@@ -38,7 +38,7 @@ libc = "0.2"
 fdlimit = "0.2.0"
 fr32 = { path = "../fr32", version = "~7.0.0", default-features = false }
 yastl = "0.1.2"
-blstrs = "0.6.0"
+blstrs = "0.7.0"
 
 [build-dependencies]
 rustversion = "1.0"

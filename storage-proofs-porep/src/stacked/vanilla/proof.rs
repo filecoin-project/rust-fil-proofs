@@ -1550,7 +1550,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             .expect("failed to create TreeBuilder");
 
             // Allocate zeros once and reuse.
-            let zero_leaves: Vec<Fr> = vec![Fr::zero(); max_gpu_tree_batch_size];
+            let zero_leaves: Vec<Fr> = vec![Fr::ZERO; max_gpu_tree_batch_size];
             for (i, config) in configs.iter().enumerate() {
                 let mut consumed = 0;
                 while consumed < nodes_count {

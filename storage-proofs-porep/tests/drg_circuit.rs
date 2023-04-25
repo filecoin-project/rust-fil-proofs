@@ -171,7 +171,7 @@ fn test_drg_porep_circuit() {
     assert_eq!(cs.num_inputs(), 18, "wrong number of inputs");
     assert_eq!(cs.num_constraints(), 115_660, "wrong number of constraints");
 
-    assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+    assert_eq!(cs.get_input(0, "ONE"), Fr::ONE);
 
     assert_eq!(
         cs.get_input(1, "drgporep/replica_id/input variable"),

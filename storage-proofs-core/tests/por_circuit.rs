@@ -268,7 +268,7 @@ fn test_por_circuit_private_root<Tree: MerkleTreeTrait>(num_constraints: usize) 
         let mut expected_inputs = Vec::new();
         expected_inputs.extend(packed_auth_path);
 
-        assert_eq!(cs.get_input(0, "ONE"), Fr::one(), "wrong input 0");
+        assert_eq!(cs.get_input(0, "ONE"), Fr::ONE, "wrong input 0");
 
         assert_eq!(
             cs.get_input(1, "path/input 0"),

@@ -168,7 +168,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
         "wrong number of constraints"
     );
 
-    assert_eq!(cs.get_input(0, "ONE"), Fr::one());
+    assert_eq!(cs.get_input(0, "ONE"), Fr::ONE);
 
     let generated_inputs = <StackedCompound<Tree, Sha256Hasher> as CompoundProof<
         StackedDrg<'_, Tree, Sha256Hasher>,

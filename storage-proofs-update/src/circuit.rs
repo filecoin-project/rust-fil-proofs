@@ -451,7 +451,7 @@ where
                 .collect::<Result<Vec<AllocatedBit>, SynthesisError>>()?;
 
             let mut lc = LinearCombination::<Fr>::zero();
-            let mut pow2 = Fr::one();
+            let mut pow2 = Fr::ONE;
             for bit in k_and_h_select_bits.iter() {
                 lc = lc + (pow2, bit.get_variable());
                 pow2 = pow2.double();

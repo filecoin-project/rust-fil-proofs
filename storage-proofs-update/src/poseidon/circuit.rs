@@ -393,7 +393,7 @@ where
                 .collect::<Result<Vec<AllocatedBit>, SynthesisError>>()?;
 
             let mut lc = LinearCombination::<Fr>::zero();
-            let mut pow2 = Fr::one();
+            let mut pow2 = Fr::ONE;
             for bit in h_select_bits.iter() {
                 lc = lc + (pow2, bit.get_variable());
                 pow2 = pow2.double();
@@ -471,7 +471,7 @@ where
 
         let partition =
             AllocatedNum::alloc(cs.namespace(|| "gen_challenge_bits partition zero"), || {
-                Ok(Fr::zero())
+                Ok(Fr::ZERO)
             })?;
 
         // Generate `challenge_bit_len` number of random bits for each challenge.
