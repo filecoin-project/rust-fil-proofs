@@ -12,9 +12,3 @@ members = [
   "filecoin-hashers",
   "storage-proofs-update",
 ]
-
-[patch.crates-io]
-# rustix v.0.37.14 cannot be compiled due to this error:
-# no method named `difference` found for struct `backend::fs::types::AtFlags` in the current scope
-# Hence use the previous version as a  temporary workaround.
-rustix = { git = "https://github.com/bytecodealliance/rustix", tag = "v0.37.13" }
