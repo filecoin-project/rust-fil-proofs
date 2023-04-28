@@ -591,6 +591,12 @@ where
     // Assert equality between the computed root and the provided root.
     let computed_root = cur;
 
+    let root = if cfg!(all(feature = "nova", feature = "mock-por-circ")) {
+        &computed_root
+    } else {
+        &root
+    };
+
     cs.enforce(
         || "calculated root == provided root",
         |lc| lc + computed_root.get_variable(),

@@ -66,6 +66,8 @@ opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/open
 isolated-testing = []
 multicore-sdr = ["hwloc"]
 nova = ["filecoin-hashers/nova", "storage-proofs-core/nova", "neptune/pasta", "pasta_curves", "nova-snark"]
+# Allows testing/benchmarking the SDR-PoRep Nova circuit without first peforming vanilla sealing (i.e. using mock public inputs and witness).
+mock-test-circ = ["storage-proofs-core/mock-por-circ"]
 
 [[bench]]
 name = "encode"

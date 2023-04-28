@@ -1,14 +1,14 @@
 [workspace]
 
 members = [
-  "filecoin-proofs",
+#  "filecoin-proofs",
   "storage-proofs-core",
   "storage-proofs-porep",
-  "storage-proofs-post",
-  "fil-proofs-tooling",
-  "fil-proofs-param",
+#  "storage-proofs-post",
+#  "fil-proofs-tooling",
+#  "fil-proofs-param",
   "fr32",
   "sha2raw",
   "filecoin-hashers",
-  "storage-proofs-update",
+#  "storage-proofs-update",
 ]

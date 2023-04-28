@@ -874,7 +874,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher<Field = Tree::Fiel
         if Self::use_gpu_tree_builder() {
             use ff::PrimeField;
 
-            use crate::encode::encoded_fr;
+            use crate::encode::encode_fr;
 
             assert_eq!(std::mem::size_of::<Tree::Field>(), NODE_SIZE);
 

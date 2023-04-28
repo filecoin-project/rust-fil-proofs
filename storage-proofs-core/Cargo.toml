@@ -69,6 +69,9 @@ cuda = ["bellperson/cuda", "filecoin-hashers/cuda", "nova-snark?/cuda", "ec-gpu"
 opencl = ["bellperson/opencl", "filecoin-hashers/opencl", "nova-snark?/opencl", "ec-gpu"]
 
 nova = ["filecoin-hashers/nova", "pasta_curves", "nova-snark", "bincode", "flate2"]
+# Mocks root checking in PoR circuits; this is useful when testing/benchmarking circuits for large
+# sector sizes where the caller does not want to perform the circuit's vanilla setup.
+mock-por-circ = []
 
 [[bench]]
 name = "sha256"
