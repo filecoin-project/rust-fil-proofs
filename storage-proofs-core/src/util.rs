@@ -177,6 +177,16 @@ pub fn default_rows_to_discard(leafs: usize, arity: usize) -> usize {
     }
 }
 
+#[cfg(feature = "nova")]
+pub fn pretty_print_sector_size(sector_nodes: usize) -> String {
+    match sector_nodes << 5 {
+        sector_bytes if sector_bytes >= 1 << 30 => format!("{}GiB", sector_bytes >> 30),
+        sector_bytes if sector_bytes >= 1 << 20 => format!("{}MiB", sector_bytes >> 20),
+        sector_bytes if sector_bytes >= 1 << 10 => format!("{}KiB", sector_bytes >> 10),
+        _ => unreachable!("`sector_nodes={}` is less than 1KiB", sector_nodes),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
