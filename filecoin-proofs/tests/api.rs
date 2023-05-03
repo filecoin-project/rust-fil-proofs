@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs::{metadata, read_dir, remove_file, OpenOptions};
-use std::io::{Read, Seek, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Error, Result};
@@ -10,8 +10,8 @@ use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
-    add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, decode_from, encode_into,
-    fauxrep_aux, generate_empty_sector_update_proof,
+    add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, decode_from,
+    decode_from_range, encode_into, fauxrep_aux, generate_empty_sector_update_proof,
     generate_empty_sector_update_proof_with_vanilla, generate_fallback_sector_challenges,
     generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
     generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_window_post,
@@ -36,7 +36,9 @@ use log::info;
 use memmap2::MmapOptions;
 use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
-use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::SectorId};
+use storage_proofs_core::{
+    api_version::ApiVersion, is_legacy_porep_id, sector::SectorId, util::NODE_SIZE,
+};
 use storage_proofs_update::constants::TreeRHasher;
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
@@ -1831,6 +1833,49 @@ fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+/// Returns the decoded data.
+///
+/// The decoding is done in several arbitrarily sized parts.
+fn decode_from_range_in_parts<R: Rng>(
+    rng: &mut R,
+    nodes_count: usize,
+    comm_d: Commitment,
+    comm_r: Commitment,
+    mut input_file: &NamedTempFile,
+    mut sector_key_file: &NamedTempFile,
+    output_file: &mut NamedTempFile,
+) -> Result<()> {
+    const MAX_NUM_NODES: usize = 10;
+
+    let mut offset = 0;
+    while offset < nodes_count {
+        // Select a number of nodes that is between 1 and 10.
+        let num_nodes = if offset + MAX_NUM_NODES < nodes_count {
+            rng.gen_range(1..=MAX_NUM_NODES)
+        } else {
+            nodes_count - offset
+        };
+        input_file
+            .seek(SeekFrom::Start((offset * NODE_SIZE) as u64))
+            .expect("failed to seek input");
+        sector_key_file
+            .seek(SeekFrom::Start((offset * NODE_SIZE) as u64))
+            .expect("failed to seek sector key");
+        decode_from_range(
+            nodes_count,
+            comm_d,
+            comm_r,
+            input_file,
+            sector_key_file,
+            output_file,
+            offset,
+            num_nodes,
+        )?;
+        offset += num_nodes
+    }
+    Ok(())
+}
+
 fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     rng: &mut R,
     sector_size: u64,
@@ -2020,7 +2065,24 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     // When the data is decoded, it MUST match the original new staged data.
     compare_elements(decoded_sector_file.path(), new_staged_sector_file.path())?;
 
+    // Decode again, this time not the whole sector is a whole, but with random ranges.
+    let mut decoded_sector_in_parts_file = NamedTempFile::new()?;
+    decode_from_range_in_parts(
+        rng,
+        sector_size as usize / NODE_SIZE,
+        encoded.comm_d_new,
+        comm_r,
+        &new_sealed_sector_file,
+        &sealed_sector_file,
+        &mut decoded_sector_in_parts_file,
+    )?;
+    compare_elements(
+        decoded_sector_in_parts_file.path(),
+        decoded_sector_file.path(),
+    )?;
+
     decoded_sector_file.close()?;
+    decoded_sector_in_parts_file.close()?;
 
     // Remove Data here
     let remove_encoded_file = NamedTempFile::new()?;

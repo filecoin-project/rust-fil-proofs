@@ -1,10 +1,13 @@
+use std::cmp;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::Path;
 
 use anyhow::{ensure, Context, Result};
 use bincode::{deserialize, serialize};
+use ff::PrimeField;
 use filecoin_hashers::{Domain, Hasher};
+use fr32::bytes_into_fr;
 use generic_array::typenum::Unsigned;
 use log::{info, trace};
 use merkletree::merkle::get_merkle_tree_len;
@@ -15,11 +18,15 @@ use storage_proofs_core::{
     merkle::{get_base_tree_count, MerkleTreeTrait},
     multi_proof::MultiProof,
     proof::ProofScheme,
+    util::{ChunkIterator, NODE_SIZE},
 };
 use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
 use storage_proofs_update::{
-    constants::TreeDArity, constants::TreeRHasher, EmptySectorUpdate, EmptySectorUpdateCompound,
-    PartitionProof, PrivateInputs, PublicInputs, PublicParams, SetupParams,
+    constants::{TreeDArity, TreeDDomain, TreeRDomain, TreeRHasher},
+    phi,
+    vanilla::Rhos,
+    EmptySectorUpdate, EmptySectorUpdateCompound, PartitionProof, PrivateInputs, PublicInputs,
+    PublicParams, SetupParams,
 };
 
 use crate::{
@@ -166,7 +173,6 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
             sector_key_path,
             sector_key_cache_path,
             staged_data_path,
-            config.h,
         )?;
 
     let mut comm_d = [0; 32];
@@ -203,6 +209,84 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     })
 }
 
+/// Decodes a range of data with the given sector key.
+///
+/// This function is similar to [`decode_from`], the difference is that it operates directly on the
+/// given file descriptions. The current position of the file descriptors is where the decoding
+/// starts, i.e. you need to seek to the intended offset before you call this function. The
+/// `nodes_offset` is the node offset relative to the beginning of the file. This information is
+/// needed in order to do the decoding correctly. The `nodes_count` is the total number of nodes
+/// within the file. The `num_nodes` defines how many nodes will be decoded, starting from the
+/// current position.
+#[allow(clippy::too_many_arguments)]
+pub fn decode_from_range<R: Read, W: Write>(
+    nodes_count: usize,
+    comm_d: Commitment,
+    comm_r: Commitment,
+    input_data: R,
+    sector_key_data: R,
+    output_data: &mut W,
+    nodes_offset: usize,
+    num_nodes: usize,
+) -> Result<()> {
+    let comm_d_domain = TreeDDomain::try_from_bytes(&comm_d[..])?;
+    let comm_r_domain = TreeRDomain::try_from_bytes(&comm_r[..])?;
+    let phi = phi(&comm_d_domain, &comm_r_domain);
+    let rho_invs = Rhos::new_inv_range(&phi, nodes_count, nodes_offset, num_nodes);
+
+    let bytes_length = num_nodes * NODE_SIZE;
+
+    let input_iter = ChunkIterator::new(input_data);
+    let sector_key_iter = ChunkIterator::new(sector_key_data);
+    let chunk_size = input_iter.chunk_size();
+
+    for (chunk_index, (input_chunk_result, sector_key_chunk_result)) in
+        input_iter.zip(sector_key_iter).enumerate()
+    {
+        let chunk_offset = chunk_index * chunk_size;
+
+        // The end of the intended decoding range was reached.
+        if chunk_offset > bytes_length {
+            break;
+        }
+
+        let input_chunk = input_chunk_result?;
+        let sector_key_chunk = sector_key_chunk_result?;
+
+        // If the bytes that still need to be read is smaller then the chunk size, then use that
+        // size.
+        let current_chunk_size = cmp::min(bytes_length - chunk_offset, chunk_size);
+        ensure!(
+            current_chunk_size <= input_chunk.len(),
+            "not enough bytes in input",
+        );
+        ensure!(
+            current_chunk_size <= sector_key_chunk.len(),
+            "not enough bytes in sector key",
+        );
+
+        let output_reprs = (0..current_chunk_size)
+            .step_by(NODE_SIZE)
+            .map(|index| {
+                // The absolute byte offset within the current sector
+                let offset = (nodes_offset * NODE_SIZE) + chunk_offset + index;
+                let rho_inv = rho_invs.get(offset / NODE_SIZE);
+
+                let sector_key_fr = bytes_into_fr(&sector_key_chunk[index..index + NODE_SIZE])?;
+                let input_fr = bytes_into_fr(&input_chunk[index..index + NODE_SIZE])?;
+
+                // This is the actual encoding step. Those operations happen on field elements.
+                let output_fr = (input_fr - sector_key_fr) * rho_inv;
+                Ok(output_fr.to_repr())
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        output_data.write_all(&output_reprs.concat())?;
+    }
+
+    Ok(())
+}
+
 /// Reverses the encoding process and outputs the data into out_data_path.
 #[allow(clippy::too_many_arguments)]
 pub fn decode_from<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
@@ -217,9 +301,8 @@ pub fn decode_from<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
 
     let p_aux = get_p_aux::<Tree>(sector_key_cache_path)?;
 
-    let nodes_count = config.nodes_count;
     EmptySectorUpdate::<Tree>::decode_from(
-        nodes_count,
+        config.nodes_count,
         out_data_path,
         replica_path,
         sector_key_path,
@@ -227,7 +310,6 @@ pub fn decode_from<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
         comm_d_new.into(),
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
-        config.h,
     )?;
 
     info!("decode_from:finish");
@@ -253,9 +335,8 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
     let (_, tree_r_last_new_config) =
         get_new_configs_from_t_aux_old::<Tree>(&t_aux, sector_key_cache_path, config.nodes_count)?;
 
-    let nodes_count = config.nodes_count;
     let tree_r_last_new = EmptySectorUpdate::<Tree>::remove_encoded_data(
-        nodes_count,
+        config.nodes_count,
         sector_key_path,
         sector_key_cache_path,
         replica_path,
@@ -265,7 +346,6 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
         comm_d_new.into(),
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
-        config.h,
     )?;
 
     // Persist p_aux and t_aux into the sector_key_cache_path here

@@ -34,11 +34,11 @@ generic-array = "0.14.4"
 fr32 = { path = "../fr32", version = "~7.0.0", default-features = false }
 once_cell = "1.8.0"
 blstrs = "0.7.0"
+ff = { version = "0.13.0", default-features = false }
 
 [dev-dependencies]
 criterion = "0.3"
 tempfile = "3"
-ff = "0.13.0"
 fil_logger = "0.1.6"
 rand_xorshift = "0.3.0"
 walkdir = "2.3.2"
