@@ -60,6 +60,27 @@ impl<Tree: MerkleTreeTrait, G: Hasher> CircuitComponent for StackedCircuit<Tree,
 }
 
 impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedCircuit<Tree, G> {
+    #[cfg(feature = "tooling")]
+    pub fn new(
+        replica_id: <Tree::Hasher as Hasher>::Domain,
+        comm_d: G::Domain,
+        comm_r: <Tree::Hasher as Hasher>::Domain,
+        comm_r_last: <Tree::Hasher as Hasher>::Domain,
+        comm_c: <Tree::Hasher as Hasher>::Domain,
+        num_layers: usize,
+        proofs: Vec<Proof<Tree, G>>,
+    ) -> Self {
+        Self {
+            replica_id: Some(replica_id),
+            comm_d: Some(comm_d),
+            comm_r: Some(comm_r),
+            comm_r_last: Some(comm_r_last),
+            comm_c: Some(comm_c),
+            num_layers,
+            proofs,
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn synthesize<CS>(
         mut cs: CS,

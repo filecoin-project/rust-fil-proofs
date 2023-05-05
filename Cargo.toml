@@ -11,4 +11,5 @@ members = [
   "sha2raw",
   "filecoin-hashers",
   "storage-proofs-update",
+  "fil-proofs-bin",
 ]

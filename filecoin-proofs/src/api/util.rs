@@ -48,6 +48,7 @@ pub fn get_base_tree_leafs<Tree: MerkleTreeTrait>(base_tree_size: usize) -> Resu
     get_merkle_tree_leafs(base_tree_size, Tree::Arity::to_usize())
 }
 
+#[cfg_attr(feature = "tooling", visibility::make(pub))]
 pub(crate) fn proofs_to_bytes(proofs: &[Proof<Bls12>]) -> Result<Vec<u8>> {
     let mut out = Vec::with_capacity(Proof::<Bls12>::size());
     for proof in proofs {

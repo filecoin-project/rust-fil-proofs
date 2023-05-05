@@ -1,0 +1,165 @@
+run:
+    fallocate --length 2048 /tmp/unsealed
+    mkdir /tmp/filbin
+    echo '{"input_path": "/tmp/unsealed", "output_dir": "/tmp/filbin", "sector_size": 2048}'|RUST_LOG=trace cargo run --bin tree-d
+    echo '{"num_layers": 3, "output_dir": "/tmp/filbin", "porep_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "sector_size": 2048}'|RUST_LOG=trace cargo run --bin sdr
+    # Not needed for CC sectors, the encoding there is just a no-op with the sector key. Instead we just copy the file
+    #echo '{"input_path": "/tmp/unsealed", "replica_path": "/tmp/sealed", "sector_key_path": "/tmp/filbin/sc-02-data-layer-3.dat"}'|RUST_LOG=trace cargo run --bin encode_replica
+    cp /tmp/filbin/sc-02-data-layer-3.dat /tmp/sealed
+    echo '{"comm_d": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "num_layers": 3, "output_dir": "/tmp/filbin", "sector_size": 2048, "replica_path": "/tmp/sealed"}'|RUST_LOG=trace cargo run --bin pc2
+
+pc1:
+    fallocate --length 2048 /tmp/unsealed
+    mkdir /tmp/filbin
+    echo '{"input_path": "/tmp/unsealed", "output_dir": "/tmp/filbin", "sector_size": 2048}'|RUST_LOG=trace cargo run --bin tree-d
+    echo '{"num_layers": 2, "output_dir": "/tmp/filbin", "porep_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "sector_size": 2048}'|RUST_LOG=trace cargo run --bin sdr
+    # Not needed for CC sectors, the encoding there is just a no-op with the sector key. Instead we just copy the file
+    #echo '{"input_path": "/tmp/unsealed", "replica_path": "/tmp/sealed", "sector_key_path": "/tmp/filbin/sc-02-data-layer-2.dat"}'|RUST_LOG=trace cargo run --bin encode_replica
+    cp /tmp/filbin/sc-02-data-layer-2.dat /tmp/sealed
+
+# The PC2 in a single binary
+pc2_single:
+    echo '{"comm_d": "0xfc7e928296e516faade986b28f92d44a4f24b935485223376a799027bc18f833", "num_layers": 2, "output_dir": "/tmp/filbin", "sector_size": 2048, "replica_path": "/tmp/sealed"}'|RUST_LOG=trace cargo run --bin pc2
+
+# The PC2 in several pieces
+pc2:
+    echo '{"num_layers": 2, "output_dir": "/tmp/filbin", "replica_path": "/tmp/sealed", "sector_size": 2048}'|RUST_LOG=trace cargo run --bin tree-r-last
+    echo '{"num_layers": 2, "output_dir": "/tmp/filbin", "sector_size": 2048}'|RUST_LOG=trace cargo run --bin tree-c
+    echo '{"comm_c": "0x1d107fbccf91f682aced9b9b259a7f9928578417cfb06c60562a002fcc34a00b", "comm_r_last": "0x911145e3ffe6484689db1a4591dc341011063e1b563bc9512b0a97ac1ed02c20"}'|RUST_LOG=trace cargo run --bin comm-r
+
+
+pc12_16kib:
+    fallocate --length 16384 /tmp/unsealed_16kib
+    mkdir /tmp/filbin_16kib
+    # PC1
+    echo '{"input_path": "/tmp/unsealed", "output_dir": "/tmp/filbin_16kib", "sector_size": 16384}'|RUST_LOG=trace cargo run --bin tree-d
+    echo '{"num_layers": 2, "output_dir": "/tmp/filbin_16kib", "porep_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "sector_size": 16384}'|RUST_LOG=trace cargo run --bin sdr
+    cp /tmp/filbin_16k/sc-02-data-layer-2.dat /tmp/sealed_16_kib
+    # PC2
+    echo '{"num_layers": 2, "output_dir": "/tmp/filbin_16kib", "replica_path": "/tmp/sealed_16kib", "sector_size": 16384}'|RUST_LOG=trace cargo run --bin tree-r-last
+    echo '{"num_layers": 2, "output_dir": "/tmp/filbin_16kib", "sector_size": 2048}'|RUST_LOG=trace cargo run --bin tree-c
+    echo '{"comm_c": "0x1d107fbccf91f682aced9b9b259a7f9928578417cfb06c60562a002fcc34a00b", "comm_r_last": "0x911145e3ffe6484689db1a4591dc341011063e1b563bc9512b0a97ac1ed02c20"}'|RUST_LOG=trace cargo run --bin comm-r
+
+
+output_dir := "/tmp/filbin_1gib"
+
+pc1_cc_1gib:
+    mkdir {{output_dir}}
+    echo '{"num_layers": 2, "output_dir": "{{output_dir}}", "porep_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "sector_size": 1073741824}'|RUST_LOG=trace FIL_PROOFS_USE_MULTICORE_SDR=1 cargo run --bin sdr
+
+
+snap:
+    # The data that should be snapped into an existing sector
+    fallocate --length 2048 /tmp/unsealed_2kib
+    fallocate --length 2048 /tmp/old_replica_2kib
+    mkdir /tmp/filbin_snap2kib
+    echo '{"input_path": "/tmp/unsealed_2kib", "output_dir": "/tmp/filbin_snap2kib", "sector_size": 2048}'|RUST_LOG=trace cargo run --bin tree-d
+    echo '{"comm_d": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "comm_r": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "input_path": "/tmp/unsealed_2kib", "replica_path": "/tmp/snapped_2kib", "sector_key_path": "/tmp/old_replica_2kib", "sector_size": 2048}'|RUST_LOG=trace cargo run --bin update-encode
+
+testing_snap_16kib:
+    fallocate --length 16384 /tmp/unsealed_16kib
+    mkdir -p /tmp/filbin_16kib
+    echo '{"num_layers": 2, "output_dir": "/tmp/filbin_16kib", "porep_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "sector_size": 16384}'|RUST_LOG=trace cargo run --bin sdr
+    # You woulnd't use the first layer as input data, this is just for testing so that I have a file with properly encoded field elements.
+    echo '{"comm_d": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "comm_r": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "input_path": "/tmp/unsealed_16kib", "length": 16384, "offset": 0, "output_path": "/tmp/snapped_16kib", "sector_key_path": "/tmp/filbin_16kib/sc-02-data-layer-2.dat", "sector_size": 16384}'|RUST_LOG=trace cargo run --bin update-encode -- --nocapture
+    echo '{"comm_d": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "comm_r": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "input_path": "/tmp/snapped_16kib", "length": 16384, "offset": 0, "output_path": "/tmp/decoded_16kib", "sector_key_path": "/tmp/filbin_16kib/sc-02-data-layer-2.dat", "sector_size": 16384}'|RUST_LOG=trace cargo run --bin update-decode -- --nocapture
+    b2sum /tmp/unsealed_16kib /tmp/decoded_16kib
+
+testing_update_encode_32gib:
+    echo '{"comm_d": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "comm_r": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "input_path": "/storage/proofs-cache/vmx/window-post-32gib-dir/sc-02-data-layer-1.dat", "length": 16384, "offset": 0, "replica_path": "/home/vmx/pc2/snapped_32gib", "sector_key_path": "/storage/proofs-cache/vmx/window-post-32gib-dir/sc-02-data-layer-11.dat", "sector_size": 34359738368}'|RUST_LOG=trace /usr/bin/time -v cargo run --release --bin update-encode -- --nocapture
+
+tree_r_last_32gib:
+    echo '{"output_dir": "/storage/proofs-cache/vmx/tree-r-last", "replica_path": "/storage/proofs-cache/vmx/window-post-32gib-dir/sealed-file", "sector_size": 34359738368}'|RUST_LOG=trace FIL_PROOFS_USE_GPU_COLUMN_BUILDER=1 FIL_PROOFS_USE_GPU_TREE_BUILDER=1 /usr/bin/time -v cargo run --release --bin tree-r-last -- --nocapture
+
+tree_r_last16kib:
+   echo '{"output_dir": "/tmp/rfp-tree-r-last", "replica_path": "/tmp/window-post-16kib-dir/sealed-file", "sector_size": 16384}'|RUST_LOG=trace /usr/bin/time -v cargo run --bin tree-r-last -- --nocapture
+
+encode_replica_16kib:
+    echo '{"input_path": "/tmp/window-post-16KiB-dir/staged-file", "replica_path": "/tmp/sealed", "sector_key_path": "/tmp/window-post-16KiB-dir/sc-02-data-layer-2.dat"}'|RUST_LOG=trace cargo run --bin encode-replica
+    b2sum /tmp/sealed /tmp/window-post-16KiB-dir/sealed-file
+
+replica_id:
+    echo '{"comm_d": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "porep_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "prover_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "sector_id": 12345678, "ticket": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00"}'|RUST_LOG=trace cargo run --bin replica-id
+
+comm_r_16kib:
+    echo '{"comm_c": "0x1b61f9fe67494de955c92d12e02f99ddea102124d1bfd86d1fcc0e64a961bb06", "comm_r_last": "0xdbcf53a5db1289511d3ce5e333a8bdba94e01c95ebf74645fe92c0ce12c84a1b"}'|RUST_LOG=trace cargo run --bin comm-r
+
+challenges_interactive_16kib:
+    echo '{"num_challenges_per_partition": 2, "num_partitions": 1, "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "sector_size": 16384, "seed": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00"}'|RUST_LOG=trace cargo run --bin challenges-interactive
+
+challenges_interactive_32gib:
+    jo -- num_challenges_per_partition=18 num_partitions=10 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 -s seed=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 | RUST_LOG=trace cargo run --bin challenges-interactive
+
+challenges_synth_generate_16kib:
+    echo '{"comm_r": "0xb98d4681bc5b1c2692dadc24d32b02bbb4b3f82aae928d57d8d008c11ed7c646", "num_challenges": 512, "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "sector_size": 16384}'|RUST_LOG=trace cargo run --bin challenges-synth-generate
+
+challenges_synth_generate_32gib:
+    jo -- -s comm_r=0x1b61f9fe67494de955c92d12e02f99ddea102124d1bfd86d1fcc0e64a961bb06 num_challenges=262144 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 | RUST_LOG=trace /usr/bin/time -v cargo run --release --bin challenges-synth-generate
+
+challenges_synth_extract_16kib:
+    echo '{"comm_r": "0xb98d4681bc5b1c2692dadc24d32b02bbb4b3f82aae928d57d8d008c11ed7c646", "num_challenges": 2, "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "sector_size": 16384, "seed": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00"}'|RUST_LOG=trace cargo run --bin challenges-synth-extract
+
+challenges_synth_extract_32gib:
+    jo -- -s comm_r=0x1b61f9fe67494de955c92d12e02f99ddea102124d1bfd86d1fcc0e64a961bb06 num_challenges=180 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 -s seed=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00|RUST_LOG=trace cargo run --bin challenges-synth-extract
+
+challenges_ni_16kib:
+    echo '{"comm_r": "0xb98d4681bc5b1c2692dadc24d32b02bbb4b3f82aae928d57d8d008c11ed7c646", "num_challenges_per_partition": 2, "num_partitions": 2, "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "sector_size": 16384}'|RUST_LOG=trace cargo run --bin challenges-ni
+
+challenges_ni_32gib:
+    jo -- -s comm_r=0x1b61f9fe67494de955c92d12e02f99ddea102124d1bfd86d1fcc0e64a961bb06 num_challenges_per_partition=18 num_partitions=79 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 | RUST_LOG=trace cargo run --bin challenges-ni
+
+commit_phase1_output_read_16kib:
+    echo '{"commit_phase1_output_path": "/tmp/bins-16kib/commit-phase1-output.dat", "sector_size": 16384}' | RUST_LOG=trace cargo run --bin commit-phase1-output-read
+
+commit_phase1_output_read_32gib:
+    echo '{"commit_phase1_output_path": "resources/test/commit-phase1-output", "sector_size": 34359738368}' | RUST_LOG=trace cargo run --bin commit-phase1-output-read
+
+merkle_proofs_16kib:
+    echo '{"challenges": [206, 253], "comm_c": "0x1b61f9fe67494de955c92d12e02f99ddea102124d1bfd86d1fcc0e64a961bb06", "comm_d": "0xf9226160c8f927bfdcc418cdf203493146008eaefb7d02194d5e548189005108", "input_dir": "/tmp/bins-16kib", "num_layers": 2, "num_partitions": 1, "output_path": "/tmp/bins-16kib/orig-porep-vanilla-proofs.dat", "porep_id": "0x0500000000000000000000000000000000000000000000000000000000000000", "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "replica_path": "/tmp/bins-16kib/sealed-file", "sector_size": 16384, "seed": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00"}' | RUST_LOG=trace cargo run --bin merkle-proofs
+
+merkle_proofs_32gib:
+    jo -- challenges=$(jo -a 634761690 1045210944 511645472 154509611 1016897961 1008759641 140723436 382670922 778365821 466750664 561160512 589581287 610400678 752255333 51902683 461707114 174698930 325404544 293276734 738495834 740325572 880468505 536918834 148746428 503884161 102452918 193421274 455280661 587562019 893677167 688587487 100263355 863906103 857413607 848983919 403233550 223276781 542711471 342325984 798372674 171442164 354409060 355230908 395699113 3761161 562810653 36121893 583047677 660190982 865113431 344392504 1014805731 831112434 270095050 922947561 709011045 152358614 647519448 910066529 535990058 884535823 139889572 664690284 33875941 453041222 164931231 710614757 240473408 89611870 356921538 644911771 1029408604 556043035 270565426 741581659 359899480 518468388 9064451 263297365 787919725 936117709 1054170945 591931943 251274644 600307140 291680952 863116987 550475783 896201632 463366733 239379297 684110325 967235628 378315791 35860289 747830730 671308376 601851228 498169487 964555449 931503868 155400227 212093286 1057102638 483473883 8811350 425203535 71971074 505987834 573260839 982218123 584004983 469976220 153112168 82534360 383949896 773710817 395867200 826200982 369050910 986676582 65532916 520910944 916947696 529106797 469115101 304705383 1049623912 812806221 696299867 248312436 380157572 758964741 831379298 850267643 716885154 774505628 129014803 1036324794 450758038 488485782 934161436 887251432 80156305 85237629 369041372 45712991 698203525 934088662 1009377708 1073405965 43328824 427459141 833295445 435159148 1044779146 112238478 692703114 614825280 494241251 541659739 441407495 740750896 711414568 11623488 604224317 1057259405 1034832038 982879303 467862785 204037499 501152492 134197735 750207285 330451066 782622099 274876032 387647182 538076117 209362216) -s comm_c=0xb59b73958d310335a3b43491e15221ed8f2d22c1b86e77ca53439ad5aed02e2e -s comm_d=0x077e5fde35c50a9303a55009e3498a4ebedff39c42b710b730d8ec7ac7afa63e input_dir=/home/vmx/32gib num_layers=11 num_partitions=10 output_path=/home/vmx/32gib/orig-porep-vanilla-proofs.dat -s porep_id=0x0d00000000000000000000000000000000000000000000000000000000000000 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 replica_path=/home/vmx/32gib/sc-02-data-layer-11.dat sector_size=34359738368 -s seed=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00| RUST_LOG=trace /usr/bin/time -v cargo run --release --bin merkle-proofs
+
+merkle_proofs_32gib_with_challenges_generation:
+    jo -- num_challenges_per_partition=18 num_partitions=10 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 -s seed=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 | RUST_LOG=trace cargo run --bin challenges-interactive > /home/vmx/32gib/challenges-extract.json
+    jo -- challenges=$(cat /home/vmx/32gib/challenges-ni.json|jq -c '.challenges') -s comm_c=0xb59b73958d310335a3b43491e15221ed8f2d22c1b86e77ca53439ad5aed02e2e -s comm_d=0x077e5fde35c50a9303a55009e3498a4ebedff39c42b710b730d8ec7ac7afa63e input_dir=/home/vmx/32gib num_layers=11 num_partitions=10 output_path=/home/vmx/32gib/orig-porep-vanilla-proofs.dat -s porep_id=0x0d00000000000000000000000000000000000000000000000000000000000000 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 replica_path=/home/vmx/32gib/sc-02-data-layer-11.dat sector_size=34359738368 -s seed=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00| RUST_LOG=trace /usr/bin/time -v cargo run --release --bin merkle-proofs
+
+merkle_proofs_ni_32gib_with_challenges_generation:
+    jo -- -s comm_r=0x1b61f9fe67494de955c92d12e02f99ddea102124d1bfd86d1fcc0e64a961bb06 num_challenges_per_partition=18 num_partitions=79 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 | RUST_LOG=trace cargo run --bin challenges-ni > /home/vmx/32gib/challenges-ni.json
+    jo -- challenges=$(cat /home/vmx/32gib/challenges-ni.json|jq -c '.challenges') -s comm_c=0xb59b73958d310335a3b43491e15221ed8f2d22c1b86e77ca53439ad5aed02e2e -s comm_d=0x077e5fde35c50a9303a55009e3498a4ebedff39c42b710b730d8ec7ac7afa63e input_dir=/home/vmx/32gib num_layers=11 num_partitions=79 output_path=/home/vmx/32gib/ni-porep-vanilla-proofs.dat -s porep_id=0x0d00000000000000000000000000000000000000000000000000000000000000 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 replica_path=/home/vmx/32gib/sc-02-data-layer-11.dat sector_size=34359738368 -s seed=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00| RUST_LOG=trace /usr/bin/time -v cargo run --release --bin merkle-proofs
+
+
+pc1pc2_16kib:
+    fallocate --length 16384 /tmp/unsealed-16kib.data
+    jo -- input_path=/tmp/unsealed-16kib.data output_dir=/tmp/bins-16kib -s porep_id=0x0500000000000000000000000000000000000000000000000000000000000000 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 replica_path=/tmp/bins-16kib/sealed-file sector_size=16384|./scripts/pc1_pc2.sh
+
+merkle_proofs_synth_generate_16kib:
+    echo '{"comm_r": "0xb98d4681bc5b1c2692dadc24d32b02bbb4b3f82aae928d57d8d008c11ed7c646", "num_challenges": 512, "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "sector_size": 16384}'|RUST_LOG=trace cargo run --bin challenges-synth-generate > /tmp/bins-16kib/challenges-generate.json
+    jo -- challenges=$(cat /tmp/bins-16kib/challenges-generate.json|jq '.challenges' -c) -s comm_c=0x1b61f9fe67494de955c92d12e02f99ddea102124d1bfd86d1fcc0e64a961bb06 -s comm_d=0xf9226160c8f927bfdcc418cdf203493146008eaefb7d02194d5e548189005108 input_dir=/tmp/bins-16kib num_layers=2 output_path=/tmp/bins-16kib/syn-porep-vanilla-proofs.dat -s porep_id=0x0500000000000000000000000000000000000000000000000000000000000000 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 replica_path=/tmp/bins-16kib/sealed-file sector_size=16384  | RUST_LOG=trace cargo run --bin merkle-proofs-synth-generate
+
+merkle_proofs_synth_extract_16kib:
+    echo '{"challenges": [378, 474], "comm_r": "0x1b61f9fe67494de955c92d12e02f99ddea102124d1bfd86d1fcc0e64a961bb06", "num_challenges": 2, "num_layers": 2, "output_path": "/tmp/bins-16kib/extracted.dat", "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "sector_size": 16384, "seed": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "synth_proofs_path": "/tmp/bins-16kib/syn-porep-vanilla-proofs.dat"}' | RUST_LOG=trace cargo run --bin merkle-proofs-synth-extract
+
+merkle_proofs_synth_generate_32gib:
+    # `jo` has limitations on the argument size, work around that by putting the challenges into a file.
+    jo -- -s comm_r=0x1b61f9fe67494de955c92d12e02f99ddea102124d1bfd86d1fcc0e64a961bb06 num_challenges=262144 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 | RUST_LOG=trace /usr/bin/time -v cargo run --release --bin challenges-synth-generate > /home/vmx/32gib/challenges-generate.json
+    jo -- -s comm_c=0xb59b73958d310335a3b43491e15221ed8f2d22c1b86e77ca53439ad5aed02e2e -s comm_d=0x077e5fde35c50a9303a55009e3498a4ebedff39c42b710b730d8ec7ac7afa63e input_dir=/home/vmx/32gib num_layers=11 output_path=/home/vmx/32gib/syn-porep-vanilla-proofs.dat -s porep_id=0x0d00000000000000000000000000000000000000000000000000000000000000 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 replica_path=/home/vmx/32gib/sc-02-data-layer-11.dat sector_size=34359738368 | cat - /home/vmx/32gib/challenges-generate.json | jq -c -s add | RUST_LOG=trace /usr/bin/time -v cargo run --release --bin merkle-proofs-synth-generate
+
+merkle_proofs_synth_extract_32gib:
+    jo -- challenges=$(jo -a 189818 12762 13801 240675 156947 236898 257523 175630 81593 180498 59215 150021 83017 178440 172892 125992 166544 94218 45018 154677 22439 124424 247435 65949 70915 149865 38014 96690 202001 63786 183617 59046 226949 125634 236728 189643 15803 119423 260050 31369 211177 23599 215301 82037 26729 71422 49082 59223 138254 219554 156661 231707 257738 201165 94738 73087 12803 227009 101120 50383 186920 164441 97279 157174 183529 79563 241740 103030 36266 52202 102687 110357 126619 88222 46958 1817 105969 217820 29334 33672 120246 197911 148401 203005 113408 65202 165725 172416 244 226772 197979 45940 32185 59232 209908 41326 96650 99057 67040 68125 139678 246671 201155 12394 97735 184280 236235 159739 118322 140204 93784 262074 209219 79578 133039 199617 172898 236455 135982 100155 82672 26644 36451 152436 161007 158289 59108 248287 181981 21528 134065 176807 185089 80361 12897 107734 44658 257688 22258 247394 44222 563 237533 168551 8609 195933 239825 132276 138503 7699 9077 88462 64072 219850 103995 90208 224442 97791 230679 88390 126279 254786 248676 72888 84461 27610 178487 244844 98932 169901 23325 138808 132286 55280 105625 232624 169108 74377 214708 136763) num_layers=11 output_path=/home/vmx/32gib/extracted.dat -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 synth_proofs_path=/home/vmx/32gib/syn-porep-vanilla-proofs.dat | RUST_LOG=trace cargo run --bin merkle-proofs-synth-extract
+
+merkle_proofs_synth_extract_32gib_with_challenge_generation:
+    jo -- -s comm_r=0x1b61f9fe67494de955c92d12e02f99ddea102124d1bfd86d1fcc0e64a961bb06 num_challenges=180 -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 -s seed=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00|RUST_LOG=trace cargo run --bin challenges-synth-extract > /home/vmx/32gib/challenges-synth-extract.json
+    jo -- challenges=$(cat /home/vmx/32gib/challenges-synth-extract.json|jq -c '.challenges') num_layers=11 output_path=/home/vmx/32gib/extracted.dat -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 synth_proofs_path=/home/vmx/32gib/syn-porep-vanilla-proofs.dat | RUST_LOG=trace cargo run --bin merkle-proofs-synth-extract
+
+commit_phase1_output_write_16kib:
+    echo '{"comm_d": "0xf9226160c8f927bfdcc418cdf203493146008eaefb7d02194d5e548189005108", "comm_r": "0xb98d4681bc5b1c2692dadc24d32b02bbb4b3f82aae928d57d8d008c11ed7c646", "num_challenges": 1, "num_layers": 2, "num_partitions": 1, "output_path": "/tmp/bins-16kib/commit-phase1-output.dat", "porep_proofs_path": "/tmp/bins-16kib/orig-porep-vanilla-proofs.dat", "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "sector_size": 16384, "seed": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "ticket": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00"}' | RUST_BACKTRACE=1 RUST_LOG=trace cargo run --bin commit-phase1-output-write
+
+commit_phase1_output_write_32gib:
+    jo -- -s comm_d=0x077e5fde35c50a9303a55009e3498a4ebedff39c42b710b730d8ec7ac7afa63e -s comm_r=0x1b61f9fe67494de955c92d12e02f99ddea102124d1bfd86d1fcc0e64a961bb06 num_challenges=180 num_layers=11 num_partitions=10 output_path=/home/vmx/32gib/commit-phase1-output.dat porep_proofs_path=/home/vmx/32gib/orig-porep-vanilla-proofs.dat -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 -s seed=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 -s ticket=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 | RUST_LOG=trace /usr/bin/time -v cargo run --release --bin commit-phase1-output-write
+
+snark_proof_16kib:
+    echo '{"comm_c": "0x1b61f9fe67494de955c92d12e02f99ddea102124d1bfd86d1fcc0e64a961bb06", "comm_d": "0xf9226160c8f927bfdcc418cdf203493146008eaefb7d02194d5e548189005108", "comm_r": "0xb98d4681bc5b1c2692dadc24d32b02bbb4b3f82aae928d57d8d008c11ed7c646", "comm_r_last": "0xdbcf53a5db1289511d3ce5e333a8bdba94e01c95ebf74645fe92c0ce12c84a1b", "num_challenges_per_partition": 2, "num_layers": 2, "num_partitions": 1, "output_path": "/tmp/bins-16kib/snark-proof.dat", "parameters_path": "/var/tmp/filecoin-proof-parameters/v28-stacked-proof-of-replication-merkletree-poseidon_hasher-8-8-0-sha256_hasher-166018664fe37a7307fc0f4b75ffb4636b95eb0de80db5130882b49ec26c2008.params", "porep_proofs_path": "/tmp/bins-16kib/orig-porep-vanilla-proofs.dat", "replica_id": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "sector_size": 16384}' | RUST_LOG=trace cargo run --bin snark-proof
+
+snark_proof_32gib:
+    jo -- -s comm_c=0xb59b73958d310335a3b43491e15221ed8f2d22c1b86e77ca53439ad5aed02e2e -s comm_d=0x077e5fde35c50a9303a55009e3498a4ebedff39c42b710b730d8ec7ac7afa63e -s comm_r=0xbf5a05f476c166d2b5a68b1b268d31719621bc536b1e46cebf0e94c3dd905532 -s comm_r_last=0x3c1d2b533e2d6d7a62abd5b39d9c21344e190cc7ac6bca08340a548f53554b19 num_challenges_per_partition=18 num_layers=11 num_partitions=10 output_path=/home/vmx/32gib/snark-proof.dat parameters_path=/var/tmp/filecoin-proof-parameters/v28-stacked-proof-of-replication-merkletree-poseidon_hasher-8-8-0-sha256_hasher-82a357d2f2ca81dc61bb45f4a762807aedee1b0a53fd6c4e77b46a01bfef7820.params porep_proofs_path=/home/vmx/32gib/orig-porep-vanilla-proofs.dat -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 | RUST_LOG=trace cargo run --release --bin snark-proof
