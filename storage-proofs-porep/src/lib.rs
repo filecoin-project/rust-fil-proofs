@@ -5,6 +5,9 @@
 
 pub mod stacked;
 
+#[cfg(feature = "tooling")]
+pub mod encode;
+#[cfg(not(feature = "tooling"))]
 mod encode;
 
 pub const MAX_LEGACY_POREP_REGISTERED_PROOF_ID: u64 = 4;

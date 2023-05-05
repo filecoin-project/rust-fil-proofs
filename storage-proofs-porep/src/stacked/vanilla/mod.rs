@@ -26,6 +26,11 @@ pub use challenges::{
     synthetic::SYNTHETIC_POREP_VANILLA_PROOFS_EXT, synthetic::SYNTHETIC_POREP_VANILLA_PROOFS_KEY,
     ChallengeRequirements, Challenges,
 };
+#[cfg(feature = "tooling")]
+pub use challenges::{
+    synthetic::{SynthChallengeGenerator, DEFAULT_SYNTH_CHALLENGE_COUNT},
+    InteractiveChallenges, NiChallenges,
+};
 pub use clear_files::{clear_cache_dir, clear_synthetic_proofs};
 pub use column::Column;
 pub use column_proof::ColumnProof;

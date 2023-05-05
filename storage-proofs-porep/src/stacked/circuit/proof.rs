@@ -58,6 +58,25 @@ impl<Tree: MerkleTreeTrait, G: Hasher> CircuitComponent for StackedCircuit<Tree,
 }
 
 impl<Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedCircuit<Tree, G> {
+    #[cfg(feature = "tooling")]
+    pub fn new(
+        replica_id: <Tree::Hasher as Hasher>::Domain,
+        comm_d: G::Domain,
+        comm_r: <Tree::Hasher as Hasher>::Domain,
+        comm_r_last: <Tree::Hasher as Hasher>::Domain,
+        comm_c: <Tree::Hasher as Hasher>::Domain,
+        proofs: Vec<Proof<Tree, G>>,
+    ) -> Self {
+        Self {
+            replica_id: Some(replica_id),
+            comm_d: Some(comm_d),
+            comm_r: Some(comm_r),
+            comm_r_last: Some(comm_r_last),
+            comm_c: Some(comm_c),
+            proofs,
+        }
+    }
+
     pub fn synthesize<CS>(
         mut cs: CS,
         replica_id: Option<<Tree::Hasher as Hasher>::Domain>,

@@ -49,6 +49,7 @@ pub fn get_base_tree_leafs<Tree: MerkleTreeTrait>(base_tree_size: usize) -> Resu
     get_merkle_tree_leafs(base_tree_size, Tree::Arity::to_usize())
 }
 
+#[cfg_attr(feature = "tooling", visibility::make(pub))]
 pub(crate) fn proofs_to_bytes(proofs: &[Proof<Bls12>]) -> Result<Vec<u8>> {
     let mut out = Vec::with_capacity(Proof::<Bls12>::size());
     for proof in proofs {
@@ -160,6 +161,7 @@ pub(crate) fn persist_t_aux<Tree: MerkleTreeTrait>(
 
 /// Given a value, get one suitable for aggregation.
 #[inline]
+#[cfg_attr(feature = "tooling", visibility::make(pub))]
 pub(crate) fn get_aggregate_target_len(len: usize) -> usize {
     if len == 1 {
         2
@@ -169,6 +171,7 @@ pub(crate) fn get_aggregate_target_len(len: usize) -> usize {
 }
 
 /// Given a list of proofs and a target_len, make sure that the proofs list is padded to the target_len size.
+#[cfg_attr(feature = "tooling", visibility::make(pub))]
 pub(crate) fn pad_proofs_to_target(
     proofs: &mut Vec<groth16::Proof<Bls12>>,
     target_len: usize,
@@ -209,6 +212,7 @@ pub(crate) fn pad_proofs_to_target(
 }
 
 /// Given a list of public inputs and a target_len, make sure that the inputs list is padded to the target_len size.
+#[cfg_attr(feature = "tooling", visibility::make(pub))]
 pub(crate) fn pad_inputs_to_target(
     fr_inputs: &[Vec<Fr>],
     num_inputs_per_proof: usize,

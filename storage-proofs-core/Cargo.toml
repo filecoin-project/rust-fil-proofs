@@ -41,6 +41,7 @@ semver = "1.0.6"
 fr32 = { path = "../fr32", version = "~9.1.0"}
 blstrs = "0.7.0"
 cbc = { version = "0.1.2", features = ["std"] }
+visibility = "0.1.0"
 
 [dev-dependencies]
 proptest = "1.0.0"
@@ -62,6 +63,9 @@ profile = ["measurements"]
 # This feature enables a fixed number of discarded rows for TreeR. The `FIL_PROOFS_ROWS_TO_DISCARD`
 # setting is ignored, no `TemporaryAux` file will be written.
 fixed-rows-to-discard = []
+# This feature is for things like changing the visibility of functions/modules for tooling purpose.
+# This way functionality is accessible for those cases, while not being part of the public API.
+tooling = []
 
 cuda = ["bellperson/cuda", "filecoin-hashers/cuda"]
 cuda-supraseal = ["bellperson/cuda-supraseal", "filecoin-hashers/cuda"]

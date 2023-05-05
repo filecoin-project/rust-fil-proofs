@@ -47,6 +47,9 @@ pub const PUBLISHED_SECTOR_SIZES: [u64; 10] = [
     SECTOR_SIZE_64_GIB,
 ];
 
+// NOTE vmx 2023-10-17: Those constants are deprecated, use the functions above instead. The
+// constants are only kept, so that filecoin-proofs-api can still be compiled without any changes.
+// They can be removed, once filecoin-api-proofs are upgraded to this version.
 lazy_static! {
     pub static ref POREP_PARTITIONS: RwLock<HashMap<u64, u8>> = RwLock::new(
         [
@@ -106,6 +109,7 @@ lazy_static! {
 
 /// Returns the minimum number of challenges used for the (synth and non-synth) interactive PoRep
 /// for a certain sector size.
+#[cfg_attr(feature = "tooling", visibility::make(pub))]
 pub(crate) const fn get_porep_interactive_minimum_challenges(sector_size: u64) -> usize {
     match sector_size {
         SECTOR_SIZE_2_KIB | SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB
@@ -126,6 +130,16 @@ pub(crate) const fn get_porep_non_interactive_minimum_challenges(sector_size: u6
     }
 }
 
+/// Returns the number of partitions for a certain sector size.
+pub const fn get_porep_interactive_partitions(sector_size: u64) -> u8 {
+    match sector_size {
+        SECTOR_SIZE_2_KIB | SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB
+        | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 1,
+        SECTOR_SIZE_32_GIB | SECTOR_SIZE_64_GIB => 10,
+        _ => panic!("invalid sector size"),
+    }
+}
+
 /// Returns the number of partitions for non-interactive PoRep for a certain sector size.
 pub const fn get_porep_non_interactive_partitions(sector_size: u64) -> u8 {
     match sector_size {
@@ -137,6 +151,33 @@ pub const fn get_porep_non_interactive_partitions(sector_size: u64) -> u8 {
         SECTOR_SIZE_2_KIB | SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB
         | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 2,
         SECTOR_SIZE_32_GIB | SECTOR_SIZE_64_GIB => 126,
+        _ => panic!("invalid sector size"),
+    }
+}
+
+/// Returns the number of layers for a certain sector size.
+pub const fn get_layers(sector_size: u64) -> usize {
+    match sector_size {
+        SECTOR_SIZE_2_KIB | SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB
+        | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 2,
+        SECTOR_SIZE_32_GIB | SECTOR_SIZE_64_GIB => 11,
+        _ => panic!("invalid sector size"),
+    }
+}
+
+/// Returns the number of layers for a certain sector size.
+///
+/// These numbers must match those used for Window PoSt scheduling in the miner actor.
+/// Please coordinate changes with actor code.
+/// https://github.com/filecoin-project/specs-actors/blob/master/actors/abi/sector.go
+pub const fn get_window_post_sector_count(sector_size: u64) -> usize {
+    match sector_size {
+        SECTOR_SIZE_2_KIB | SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB
+        | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 2,
+        // this gives 125,279,217 constraints, fitting in a single partition
+        SECTOR_SIZE_32_GIB => 2349,
+        // this gives 129,887,900 constraints, fitting in a single partition
+        SECTOR_SIZE_64_GIB => 2300,
         _ => panic!("invalid sector size"),
     }
 }

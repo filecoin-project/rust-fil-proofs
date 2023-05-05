@@ -220,6 +220,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         }
     }
 
+    #[cfg_attr(feature = "tooling", visibility::make(pub))]
     fn prove_layers_generate(
         graph: &StackedBucketGraph<Tree::Hasher>,
         pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
