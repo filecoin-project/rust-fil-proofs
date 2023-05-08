@@ -34,7 +34,7 @@ use filecoin_proofs::{
 use fr32::bytes_into_fr;
 use log::info;
 use memmap2::MmapOptions;
-use rand::{random, Rng, SeedableRng};
+use rand::{Rng, RngCore, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::SectorId};
 use storage_proofs_update::constants::TreeRHasher;
@@ -1473,9 +1473,9 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
 fn generate_piece_file(sector_size: u64) -> Result<(NamedTempFile, Vec<u8>)> {
     let number_of_bytes_in_piece = UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size));
 
-    let piece_bytes: Vec<u8> = (0..number_of_bytes_in_piece.0)
-        .map(|_| random::<u8>())
-        .collect();
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
+    let mut piece_bytes: Vec<u8> = vec![0u8; number_of_bytes_in_piece.0 as usize];
+    rng.fill_bytes(&mut piece_bytes);
 
     let mut piece_file = NamedTempFile::new()?;
     piece_file.write_all(&piece_bytes)?;
