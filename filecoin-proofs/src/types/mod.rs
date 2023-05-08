@@ -11,7 +11,6 @@ use storage_proofs_post::fallback;
 use crate::constants::DefaultPieceHasher;
 
 mod bytes_amount;
-mod hselect;
 mod piece_info;
 mod porep_config;
 mod porep_proof_partitions;
@@ -25,7 +24,6 @@ mod sector_update_config;
 mod update_proof_partitions;
 
 pub use bytes_amount::*;
-pub use hselect::*;
 pub use piece_info::*;
 pub use porep_config::*;
 pub use porep_proof_partitions::*;
