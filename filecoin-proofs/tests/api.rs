@@ -34,7 +34,7 @@ use filecoin_proofs::{
 use fr32::bytes_into_fr;
 use log::info;
 use memmap2::MmapOptions;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{api_version::ApiVersion, is_legacy_porep_id, sector::SectorId};
 use storage_proofs_update::constants::TreeRHasher;
@@ -653,7 +653,7 @@ fn run_resumable_seal<Tree: 'static + MerkleTreeTrait>(
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
     let (mut piece_file, piece_bytes) =
-        generate_piece_file(sector_size).expect("failed to generate piece file");
+        generate_piece_file(&mut rng, sector_size).expect("failed to generate piece file");
     let sealed_sector_file = NamedTempFile::new().expect("failed to created sealed sector file");
     let cache_dir = tempdir().expect("failed to create temp dir");
 
@@ -1470,10 +1470,9 @@ fn window_post<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
-fn generate_piece_file(sector_size: u64) -> Result<(NamedTempFile, Vec<u8>)> {
+fn generate_piece_file<R: Rng>(rng: &mut R, sector_size: u64) -> Result<(NamedTempFile, Vec<u8>)> {
     let number_of_bytes_in_piece = UnpaddedBytesAmount::from(PaddedBytesAmount(sector_size));
 
-    let mut rng = XorShiftRng::from_seed(TEST_SEED);
     let mut piece_bytes: Vec<u8> = vec![0u8; number_of_bytes_in_piece.0 as usize];
     rng.fill_bytes(&mut piece_bytes);
 
@@ -1695,7 +1694,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
 ) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
     fil_logger::maybe_init();
 
-    let (mut piece_file, piece_bytes) = generate_piece_file(sector_size)?;
+    let (mut piece_file, piece_bytes) = generate_piece_file(rng, sector_size)?;
     let sealed_sector_file = NamedTempFile::new()?;
     let cache_dir = tempdir().expect("failed to create temp dir");
 
@@ -1755,7 +1754,7 @@ fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
 ) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])> {
     fil_logger::maybe_init();
 
-    let (mut piece_file, _piece_bytes) = generate_piece_file(sector_size)?;
+    let (mut piece_file, _piece_bytes) = generate_piece_file(rng, sector_size)?;
     let sealed_sector_file = NamedTempFile::new()?;
     let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
 
@@ -1840,7 +1839,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
 ) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
     fil_logger::maybe_init();
 
-    let (mut piece_file, _piece_bytes) = generate_piece_file(sector_size)?;
+    let (mut piece_file, _piece_bytes) = generate_piece_file(rng, sector_size)?;
     let sealed_sector_file = NamedTempFile::new()?;
     let cache_dir = tempdir().expect("failed to create temp dir");
 
@@ -1874,7 +1873,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     let new_cache_dir = tempdir().expect("failed to create temp dir");
 
     // create and generate some random data in staged_data_file.
-    let (mut new_piece_file, _new_piece_bytes) = generate_piece_file(sector_size)?;
+    let (mut new_piece_file, _new_piece_bytes) = generate_piece_file(rng, sector_size)?;
     let number_of_bytes_in_piece = porep_config.unpadded_bytes_amount();
 
     let new_piece_info =
