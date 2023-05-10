@@ -342,12 +342,23 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     ) -> Result<()> {
         use crate::stacked::vanilla::SynthChallenges;
 
+        ensure!(
+            pub_inputs.tau.is_some(),
+            "comm_r must be set prior to generating synthetic challenges",
+        );
+
         // Verify synth proofs prior to writing because `ProofScheme`'s verification API is not
         // amenable to prover-only verification (i.e. the API uses public values, whereas synthetic
         // proofs are known only to the prover).
         let pub_params = PublicParams::<Tree>::new(graph.clone(), layer_challenges.clone());
         let replica_id: Fr = pub_inputs.replica_id.into();
-        let synth_challenges = SynthChallenges::default_chacha20(graph.size(), &replica_id);
+        let comm_r: Fr = pub_inputs
+            .tau
+            .as_ref()
+            .map(|tau| tau.comm_r.into())
+            .expect("unwrapping should not fail");
+        let synth_challenges =
+            SynthChallenges::default_chacha20(graph.size(), &replica_id, &comm_r);
         assert_eq!(synth_proofs.len(), synth_challenges.num_synth_challenges);
         for (challenge, proof) in synth_challenges.zip(synth_proofs) {
             assert!(proof.verify(&pub_params, pub_inputs, challenge, graph));
@@ -387,10 +398,20 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             pub_inputs.seed.is_some(),
             "porep challenge seed must be set prior to reading porep proofs from synthetic",
         );
+        ensure!(
+            pub_inputs.tau.is_some(),
+            "comm_r must be set prior to generating synthetic porep challenges",
+        );
+
         let seed = pub_inputs
             .seed
             .as_ref()
-            .expect("challenge seed should be set");
+            .expect("unwrapping should not fail");
+        let comm_r = pub_inputs
+            .tau
+            .as_ref()
+            .map(|tau| &tau.comm_r)
+            .expect("unwrapping should not fail");
         let path = t_aux.synth_proofs_path();
         info!("reading synthetic vanilla proofs from file: {:?}", path);
         let proofs_bytes = fs::read(&path)
@@ -400,7 +421,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let porep_proofs = (0..partition_count as u8)
             .map(|k| {
                 layer_challenges
-                    .derive_porep_synth_indexes(sector_nodes, &pub_inputs.replica_id, seed, k)
+                    .derive_synth_indexes(sector_nodes, &pub_inputs.replica_id, comm_r, seed, k)
                     .into_iter()
                     .map(|i| synth_proofs[i].clone())
                     .collect()

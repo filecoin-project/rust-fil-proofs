@@ -140,18 +140,26 @@ impl<T: Domain, S: Domain> PublicInputs<T, S> {
     ) -> Vec<usize> {
         let k = k.unwrap_or(0);
 
+        assert!(
+            layer_challenges.use_synthetic || self.seed.is_some(),
+            "challenge seed must be set when synth porep is disabled",
+        );
+        assert!(
+            !layer_challenges.use_synthetic || self.tau.is_some(),
+            "comm_r must be set prior to generating synth porep challenges",
+        );
+        let comm_r = self
+            .tau
+            .as_ref()
+            .map(|tau| tau.comm_r)
+            .unwrap_or(T::default());
+
         if let Some(seed) = self.seed.as_ref() {
-            layer_challenges.derive(sector_nodes, &self.replica_id, seed, k as u8)
+            layer_challenges.derive(sector_nodes, &self.replica_id, &comm_r, seed, k as u8)
+        } else if k == 0 {
+            layer_challenges.derive_synthetic(sector_nodes, &self.replica_id, &comm_r)
         } else {
-            assert!(
-                layer_challenges.use_synthetic,
-                "challenge seed must be set for non-synthetic porep",
-            );
-            if k == 0 {
-                layer_challenges.derive_synthetic(sector_nodes, &self.replica_id)
-            } else {
-                vec![]
-            }
+            vec![]
         }
     }
 }
