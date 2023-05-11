@@ -918,6 +918,48 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         Self::prepare_tree_r_data_cpu(source, data, start, end)
     }
 
+    /// Generate the TreeRLast.
+    ///
+    /// `nodes_count` is the number of nodes per sector, practically is the sector size in bytes
+    /// devided by the 32 bytes node size.
+    ///
+    /// TreeRLast is split into several sub-trees. The exact number `tree_count` depends on the
+    /// sector size.
+    ///
+    /// The `tree_r_last_config` specifies where those sub-trees are stored and what their
+    /// filenames are.
+    ///
+    /// This tree is built during the PoRep during the PreCommit2 phase as well as during the empty
+    /// sector update (aka SnapDeals). The input parameters are used differently in both cases,
+    /// therefore the next section distinguishes between those for the other parameter
+    /// descriptions.
+    ///
+    /// # PoRep TreeRLast
+    ///
+    /// When calling this function to produce the PoRep TreeRLast, several things beside the actual
+    /// tree building are happening. When calling this function, `data` points to the unsealed
+    /// data, which is then modified in-place during the execution. This means, that it's a copy
+    /// of the unsealed data at the location where the final replica will be stored. That location
+    /// is the same as the `replica_path`.
+    ///
+    /// That modification during the execution of the function is the replica encoding step. The
+    /// data for the sector key is provided by the `source`, which is the last layer of the SDR
+    /// process.
+    ///
+    /// The `callback` is `None`, this way the default callback is used, which does the encoding
+    /// step described above. In case of the GPU code path, it also transforms the field elements
+    /// into the representation needed for the GPU based tree building.
+    ///
+    /// # Empty sector update TreeRLast
+    ///
+    /// When calling this function to produce the empty sector update TreeRLast, no data is
+    /// manipulated in place. This means that the `data` parameter isn't really used, hence it's
+    /// initialized with [`Data::empty`]. The `replica_path` points to the already encoded replica
+    /// file. The `source` points to the same replica file.
+    ///
+    /// A custom `callback` is passed in. In case of the GPU code path, that callback does only
+    /// the on-the-fly transformation of the field elements for the GPU code path, it doesn't do
+    /// any further transformations.
     #[cfg(any(feature = "cuda", feature = "opencl"))]
     pub fn generate_tree_r_last(
         data: &mut Data<'_>,
