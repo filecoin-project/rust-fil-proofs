@@ -1,23 +1,22 @@
-use std::marker::PhantomData;
-
+use anyhow::ensure;
 use bellperson::{gadgets::num::AllocatedNum, Circuit, ConstraintSystem, SynthesisError};
-use blstrs::Scalar as Fr;
 use filecoin_hashers::{HashFunction, Hasher};
 use storage_proofs_core::{
     compound_proof::CircuitComponent, error::Result, gadgets::constraint, gadgets::por::PoRCircuit,
-    gadgets::variables::Root, merkle::MerkleTreeTrait,
+    gadgets::variables::Root, merkle::MerkleTreeTrait, por, util::NODE_SIZE,
 };
+
+use crate::rational::vanilla;
 
 /// This is the `RationalPoSt` circuit.
 pub struct RationalPoStCircuit<Tree: MerkleTreeTrait> {
     /// Paramters for the engine.
-    pub comm_rs: Vec<Option<Fr>>,
-    pub comm_cs: Vec<Option<Fr>>,
-    pub comm_r_lasts: Vec<Option<Fr>>,
-    pub leafs: Vec<Option<Fr>>,
+    pub comm_rs: Vec<Option<Tree::Field>>,
+    pub comm_cs: Vec<Option<Tree::Field>>,
+    pub comm_r_lasts: Vec<Option<Tree::Field>>,
+    pub leafs: Vec<Option<Tree::Field>>,
     #[allow(clippy::type_complexity)]
-    pub paths: Vec<Vec<(Vec<Option<Fr>>, Option<usize>)>>,
-    pub _t: PhantomData<Tree>,
+    pub paths: Vec<Vec<(Vec<Option<Tree::Field>>, Option<usize>)>>,
 }
 
 #[derive(Clone, Default)]
@@ -27,8 +26,8 @@ impl<Tree: MerkleTreeTrait> CircuitComponent for RationalPoStCircuit<Tree> {
     type ComponentPrivateInputs = ComponentPrivateInputs;
 }
 
-impl<Tree: 'static + MerkleTreeTrait> Circuit<Fr> for RationalPoStCircuit<Tree> {
-    fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl<Tree: 'static + MerkleTreeTrait> Circuit<Tree::Field> for RationalPoStCircuit<Tree> {
+    fn synthesize<CS: ConstraintSystem<Tree::Field>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let comm_rs = self.comm_rs;
         let comm_cs = self.comm_cs;
         let comm_r_lasts = self.comm_r_lasts;
@@ -94,5 +93,41 @@ impl<Tree: 'static + MerkleTreeTrait> Circuit<Fr> for RationalPoStCircuit<Tree> 
         }
 
         Ok(())
+    }
+}
+
+impl<Tree: MerkleTreeTrait> RationalPoStCircuit<Tree> {
+    pub fn generate_public_inputs(
+        pub_params: &vanilla::PublicParams,
+        pub_in: &vanilla::PublicInputs<<Tree::Hasher as Hasher>::Domain>,
+    ) -> Result<Vec<Tree::Field>> {
+        let mut inputs = Vec::new();
+
+        let por_pub_params = por::PublicParams {
+            leaves: (pub_params.sector_size as usize / NODE_SIZE),
+            private: true,
+        };
+
+        ensure!(
+            pub_in.challenges.len() == pub_in.comm_rs.len(),
+            "Missmatch in challenges and comm_rs"
+        );
+
+        for (challenge, comm_r) in pub_in.challenges.iter().zip(pub_in.comm_rs.iter()) {
+            inputs.push((*comm_r).into());
+
+            let por_pub_inputs = por::PublicInputs {
+                commitment: None,
+                challenge: challenge.leaf as usize,
+            };
+            let por_inputs = PoRCircuit::<Tree>::generate_public_inputs(
+                &por_pub_params,
+                &por_pub_inputs,
+            )?;
+
+            inputs.extend(por_inputs);
+        }
+
+        Ok(inputs)
     }
 }

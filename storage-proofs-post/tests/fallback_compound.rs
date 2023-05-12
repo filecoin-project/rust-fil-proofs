@@ -2,6 +2,7 @@ use bellperson::{
     util_cs::{metric_cs::MetricCS, test_cs::TestConstraintSystem},
     Circuit,
 };
+use blstrs::Scalar as Fr;
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
 use generic_array::typenum::{U0, U2, U4, U8};
 use pretty_assertions::assert_eq;
@@ -62,7 +63,7 @@ fn test_fallback_post_compound_poseidon_two_partitions_smaller_base_8() {
     fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_1_0);
 }
 
-fn fallback_post<Tree: 'static + MerkleTreeTrait>(
+fn fallback_post<Tree: 'static + MerkleTreeTrait<Field = Fr>>(
     total_sector_count: usize,
     sector_count: usize,
     partitions: usize,

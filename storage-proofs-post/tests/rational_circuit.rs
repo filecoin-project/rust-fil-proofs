@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::marker::PhantomData;
 
 use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
 use blstrs::Scalar as Fr;
@@ -25,7 +24,7 @@ fn test_rational_post_circuit_poseidon() {
     test_rational_post_circuit::<BinaryMerkleTree<PoseidonHasher>>(3_770);
 }
 
-fn test_rational_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constraints: usize) {
+fn test_rational_post_circuit<Tree: 'static + MerkleTreeTrait<Field = Fr>>(expected_constraints: usize) {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 32 * get_base_tree_count::<Tree>();
@@ -117,7 +116,6 @@ fn test_rational_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constrai
         comm_rs: comm_rs.iter().copied().map(|c| Some(c.into())).collect(),
         comm_cs: comm_cs.into_iter().map(|c| Some(c.into())).collect(),
         comm_r_lasts: comm_r_lasts.into_iter().map(|c| Some(c.into())).collect(),
-        _t: PhantomData,
     };
 
     instance

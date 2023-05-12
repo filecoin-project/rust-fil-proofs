@@ -1,5 +1,7 @@
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
 use generic_array::typenum::{U0, U2, U4, U8};
+#[cfg(feature = "nova")]
+use pasta_curves::Fp;
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
@@ -19,6 +21,8 @@ fn test_fallback_post_poseidon_single_partition_base_8() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 5, 1, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U0, U0>>(5, 5, 1, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -26,6 +30,8 @@ fn test_fallback_post_poseidon_single_partition_smaller_base_8() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 5, 1, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 5, 1, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(3, 5, 1, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U0, U0>>(3, 5, 1, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -33,6 +39,8 @@ fn test_fallback_post_poseidon_two_partitions_base_8() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U0, U0>>(4, 2, 2, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -40,6 +48,8 @@ fn test_fallback_post_poseidon_two_partitions_smaller_base_8() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U0, U0>>(5, 3, 2, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -47,6 +57,8 @@ fn test_fallback_post_poseidon_single_partition_sub_8_4() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 5, 1, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 5, 1, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 5, 1, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U4, U0>>(5, 5, 1, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -54,6 +66,8 @@ fn test_fallback_post_poseidon_single_partition_smaller_sub_8_4() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 5, 1, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 5, 1, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(3, 5, 1, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U4, U0>>(3, 5, 1, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -61,6 +75,8 @@ fn test_fallback_post_poseidon_two_partitions_sub_8_4() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(4, 2, 2, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U4, U0>>(4, 2, 2, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -68,6 +84,8 @@ fn test_fallback_post_poseidon_two_partitions_sub_8_8() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(4, 2, 2, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(4, 2, 2, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(4, 2, 2, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U8, U0>>(4, 2, 2, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -75,6 +93,8 @@ fn test_fallback_post_poseidon_two_partitions_smaller_sub_8_4() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U0>>(5, 3, 2, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U4, U0>>(5, 3, 2, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -82,6 +102,8 @@ fn test_fallback_post_poseidon_two_partitions_smaller_sub_8_8() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U0>>(5, 3, 2, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U8, U0>>(5, 3, 2, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -89,6 +111,8 @@ fn test_fallback_post_poseidon_single_partition_top_8_4_2() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 5, 1, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U4, U2>>(5, 5, 1, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -96,6 +120,8 @@ fn test_fallback_post_poseidon_single_partition_top_8_8_2() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 5, 1, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 5, 1, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 5, 1, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U8, U2>>(5, 5, 1, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -103,6 +129,8 @@ fn test_fallback_post_poseidon_single_partition_smaller_top_8_4_2() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 5, 1, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 5, 1, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(3, 5, 1, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U4, U2>>(3, 5, 1, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -110,6 +138,8 @@ fn test_fallback_post_poseidon_two_partitions_top_8_4_2() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(4, 2, 2, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(4, 2, 2, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(4, 2, 2, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U4, U2>>(4, 2, 2, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -117,6 +147,8 @@ fn test_fallback_post_poseidon_two_partitions_smaller_top_8_4_2() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U4, U2>>(5, 3, 2, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U4, U2>>(5, 3, 2, ApiVersion::V1_2_0);
 }
 
 #[test]
@@ -124,6 +156,8 @@ fn test_fallback_post_poseidon_two_partitions_smaller_top_8_8_2() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 3, 2, ApiVersion::V1_0_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 3, 2, ApiVersion::V1_1_0);
     test_fallback_post::<LCTree<PoseidonHasher, U8, U8, U2>>(5, 3, 2, ApiVersion::V1_2_0);
+    #[cfg(feature = "nova")]
+    test_fallback_post::<LCTree<PoseidonHasher<Fp>, U8, U8, U2>>(5, 3, 2, ApiVersion::V1_2_0);
 }
 
 fn test_fallback_post<Tree: MerkleTreeTrait>(

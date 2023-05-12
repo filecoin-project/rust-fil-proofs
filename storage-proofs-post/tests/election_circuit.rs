@@ -1,9 +1,8 @@
 use std::collections::BTreeMap;
-use std::marker::PhantomData;
 
 use bellperson::{util_cs::test_cs::TestConstraintSystem, Circuit};
 use blstrs::Scalar as Fr;
-use ff::Field;
+use ff::{Field, PrimeField};
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher};
 use generic_array::typenum::{U0, U8};
 use rand::SeedableRng;
@@ -26,7 +25,9 @@ fn test_election_post_circuit_poseidon() {
     test_election_post_circuit::<LCTree<PoseidonHasher, U8, U0, U0>>(22_940);
 }
 
-fn test_election_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constraints: usize) {
+fn test_election_post_circuit<Tree: 'static + MerkleTreeTrait<Field = Fr>>(
+    expected_constraints: usize,
+) {
     let rng = &mut XorShiftRng::from_seed(TEST_SEED);
 
     let leaves = 64 * get_base_tree_count::<Tree>();
@@ -110,11 +111,12 @@ fn test_election_post_circuit<Tree: 'static + MerkleTreeTrait>(expected_constrai
         comm_r: Some(comm_r.into()),
         comm_c: Some(comm_c.into()),
         comm_r_last: Some(comm_r_last.into()),
-        partial_ticket: Some(candidate.partial_ticket),
+        partial_ticket: Some(
+            Fr::from_repr_vartime(candidate.partial_ticket).expect("from_repr failure"),
+        ),
         randomness: Some(randomness.into()),
         prover_id: Some(prover_id.into()),
         sector_id: Some(candidate.sector_id.into()),
-        _t: PhantomData,
     };
 
     instance

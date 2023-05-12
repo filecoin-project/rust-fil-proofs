@@ -53,7 +53,7 @@ fn test_fallback_post_circuit_poseidon_two_partitions_smaller_base_8() {
     test_fallback_post::<LCTree<PoseidonHasher, U8, U0, U0>>(5, 3, 2, 19, 16_869);
 }
 
-fn test_fallback_post<Tree: 'static + MerkleTreeTrait>(
+fn test_fallback_post<Tree: 'static + MerkleTreeTrait<Field = Fr>>(
     total_sector_count: usize,
     sector_count: usize,
     partitions: usize,

@@ -5,6 +5,8 @@ use filecoin_hashers::{
     Hasher,
 };
 use generic_array::typenum::{U0, U2, U8};
+#[cfg(feature = "nova")]
+use pasta_curves::Fp;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
@@ -19,26 +21,36 @@ use tempfile::tempdir;
 #[test]
 fn test_rational_post_sha256_base_8() {
     test_rational_post::<LCTree<Sha256Hasher, U8, U0, U0>>();
+    #[cfg(feature = "nova")]
+    test_rational_post::<LCTree<Sha256Hasher<Fp>, U8, U0, U0>>();
 }
 
 #[test]
 fn test_rational_post_blake2s_base_8() {
     test_rational_post::<LCTree<Blake2sHasher, U8, U0, U0>>();
+    #[cfg(feature = "nova")]
+    test_rational_post::<LCTree<Blake2sHasher<Fp>, U8, U0, U0>>();
 }
 
 #[test]
 fn test_rational_post_poseidon_base_8() {
     test_rational_post::<LCTree<PoseidonHasher, U8, U0, U0>>();
+    #[cfg(feature = "nova")]
+    test_rational_post::<LCTree<PoseidonHasher<Fp>, U8, U0, U0>>();
 }
 
 #[test]
 fn test_rational_post_poseidon_sub_8_8() {
     test_rational_post::<LCTree<PoseidonHasher, U8, U8, U0>>();
+    #[cfg(feature = "nova")]
+    test_rational_post::<LCTree<PoseidonHasher<Fp>, U8, U8, U0>>();
 }
 
 #[test]
 fn test_rational_post_poseidon_top_8_8_2() {
     test_rational_post::<LCTree<PoseidonHasher, U8, U8, U2>>();
+    #[cfg(feature = "nova")]
+    test_rational_post::<LCTree<PoseidonHasher<Fp>, U8, U8, U2>>();
 }
 
 fn test_rational_post<Tree: MerkleTreeTrait>()
@@ -128,26 +140,36 @@ where
 #[test]
 fn test_rational_post_validates_challenge_sha256_base_8() {
     test_rational_post_validates_challenge::<LCTree<Sha256Hasher, U8, U0, U0>>();
+    #[cfg(feature = "nova")]
+    test_rational_post_validates_challenge::<LCTree<Sha256Hasher<Fp>, U8, U0, U0>>();
 }
 
 #[test]
 fn test_rational_post_validates_challenge_blake2s_base_8() {
     test_rational_post_validates_challenge::<LCTree<Blake2sHasher, U8, U0, U0>>();
+    #[cfg(feature = "nova")]
+    test_rational_post_validates_challenge::<LCTree<Blake2sHasher<Fp>, U8, U0, U0>>();
 }
 
 #[test]
 fn test_rational_post_validates_challenge_poseidon_base_8() {
     test_rational_post_validates_challenge::<LCTree<PoseidonHasher, U8, U0, U0>>();
+    #[cfg(feature = "nova")]
+    test_rational_post_validates_challenge::<LCTree<PoseidonHasher<Fp>, U8, U0, U0>>();
 }
 
 #[test]
 fn test_rational_post_validates_challenge_poseidon_sub_8_8() {
     test_rational_post_validates_challenge::<LCTree<PoseidonHasher, U8, U8, U0>>();
+    #[cfg(feature = "nova")]
+    test_rational_post_validates_challenge::<LCTree<PoseidonHasher<Fp>, U8, U8, U0>>();
 }
 
 #[test]
 fn test_rational_post_validates_challenge_poseidon_top_8_8_2() {
     test_rational_post_validates_challenge::<LCTree<PoseidonHasher, U8, U8, U2>>();
+    #[cfg(feature = "nova")]
+    test_rational_post_validates_challenge::<LCTree<PoseidonHasher<Fp>, U8, U8, U2>>();
 }
 
 fn test_rational_post_validates_challenge<Tree: 'static + MerkleTreeTrait>() {
