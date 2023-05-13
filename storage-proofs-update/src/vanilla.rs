@@ -348,6 +348,40 @@ impl Rhos {
     }
 }
 
+#[cfg(any(feature = "cuda", feature = "opencl"))]
+pub fn prepare_tree_r_data<Tree: 'static + MerkleTreeTrait>(
+    source: &DiskStore<<Tree::Hasher as Hasher>::Domain>,
+    _data: Option<&mut Data<'_>>,
+    start: usize,
+    end: usize,
+) -> Result<TreeRElementData<Tree>> {
+    let tree_data = source
+        .read_range(start..end)
+        .expect("failed to read from source");
+
+    if StackedDrg::<Tree, TreeDHasher>::use_gpu_tree_builder() {
+        Ok(TreeRElementData::FrList(
+            tree_data.into_par_iter().map(|x| x.into()).collect(),
+        ))
+    } else {
+        Ok(TreeRElementData::ElementList(tree_data))
+    }
+}
+
+#[cfg(not(any(feature = "cuda", feature = "opencl")))]
+pub fn prepare_tree_r_data<Tree: 'static + MerkleTreeTrait>(
+    source: &DiskStore<<Tree::Hasher as Hasher>::Domain>,
+    _data: Option<&mut Data<'_>>,
+    start: usize,
+    end: usize,
+) -> Result<TreeRElementData<Tree>> {
+    let tree_data = source
+        .read_range(start..end)
+        .expect("failed to read from source");
+
+    Ok(TreeRElementData::ElementList(tree_data))
+}
+
 #[derive(Debug)]
 #[allow(clippy::upper_case_acronyms)]
 pub struct EmptySectorUpdate<TreeR>
@@ -834,42 +868,6 @@ where
         })
     }
 
-    #[cfg(any(feature = "cuda", feature = "opencl"))]
-    #[allow(clippy::unnecessary_wraps)]
-    fn prepare_tree_r_data(
-        source: &DiskStore<TreeRDomain>,
-        _data: Option<&mut Data<'_>>,
-        start: usize,
-        end: usize,
-    ) -> Result<TreeRElementData<TreeR>> {
-        let tree_data: Vec<TreeRDomain> = source
-            .read_range(start..end)
-            .expect("failed to read from source");
-
-        if StackedDrg::<TreeR, TreeDHasher>::use_gpu_tree_builder() {
-            Ok(TreeRElementData::FrList(
-                tree_data.into_par_iter().map(|x| x.into()).collect(),
-            ))
-        } else {
-            Ok(TreeRElementData::ElementList(tree_data))
-        }
-    }
-
-    #[cfg(not(any(feature = "cuda", feature = "opencl")))]
-    #[allow(clippy::unnecessary_wraps)]
-    fn prepare_tree_r_data(
-        source: &DiskStore<TreeRDomain>,
-        _data: Option<&mut Data<'_>>,
-        start: usize,
-        end: usize,
-    ) -> Result<TreeRElementData<TreeR>> {
-        let tree_data: Vec<TreeRDomain> = source
-            .read_range(start..end)
-            .expect("failed to read from source");
-
-        Ok(TreeRElementData::ElementList(tree_data))
-    }
-
     /// Returns tuple of (comm_r_new, comm_r_last_new, comm_d_new)
     pub fn encode_into(
         nodes_count: usize,
@@ -1015,7 +1013,7 @@ where
             tree_r_last_new_config,
             new_replica_path.to_path_buf(),
             &new_replica_store,
-            Some(Self::prepare_tree_r_data),
+            Some(prepare_tree_r_data),
         )?;
 
         let comm_r_last_new = tree_r_last.root();
@@ -1265,7 +1263,7 @@ where
             tree_r_last_new_config,
             sector_key_cache_path.to_path_buf(),
             &sector_key_store,
-            Some(Self::prepare_tree_r_data),
+            Some(prepare_tree_r_data),
         )?;
 
         Ok(tree_r_last.root())
