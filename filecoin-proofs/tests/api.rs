@@ -33,7 +33,7 @@ use filecoin_proofs::{
     WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use fr32::bytes_into_fr;
-use log::info;
+use log::{info, trace};
 use memmap2::MmapOptions;
 use merkletree::store::StoreConfig;
 use rand::{random, Rng, SeedableRng};
@@ -80,6 +80,49 @@ fn to_porep_id_verified(registered_seal_proof: u64, api_version: ApiVersion) -> 
     });
 
     porep_id
+}
+
+#[test]
+fn test_get_sector_update_inputs() -> Result<()> {
+    fil_logger::maybe_init();
+
+    let porep_id_v1_1_2k: u64 = 5; // This is a RegisteredSealProof value
+    let porep_id_v1_1_32g: u64 = 8; // This is a RegisteredSealProof value
+
+    let mut porep_id_2k = [0u8; 32];
+    porep_id_2k[..8].copy_from_slice(&porep_id_v1_1_2k.to_le_bytes());
+    assert!(!is_legacy_porep_id(porep_id_2k));
+
+    let mut porep_id_32g = [0u8; 32];
+    porep_id_32g[..8].copy_from_slice(&porep_id_v1_1_32g.to_le_bytes());
+    assert!(!is_legacy_porep_id(porep_id_32g));
+
+    let config_2k = PoRepConfig::new_groth16(SECTOR_SIZE_2_KIB, porep_id_2k, ApiVersion::V1_2_0);
+    let config_32g = PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id_32g, ApiVersion::V1_2_0);
+
+    let comm_r_old = [5u8; 32];
+    let comm_r_new = [6u8; 32];
+    let comm_d_new = [7u8; 32];
+
+    let inputs_2k = get_sector_update_inputs::<SectorShape2KiB>(
+        &config_2k, comm_r_old, comm_r_new, comm_d_new,
+    )?;
+    info!("NUM INPUTS IS {}", inputs_2k.len());
+    ensure!(inputs_2k.len() == 1, "sector_update_inputs length mismatch");
+
+    let inputs_32g = get_sector_update_inputs::<SectorShape32GiB>(
+        &config_32g,
+        comm_r_old,
+        comm_r_new,
+        comm_d_new,
+    )?;
+    info!("NUM INPUTS IS {}", inputs_32g.len());
+    ensure!(
+        inputs_32g.len() == 16,
+        "sector_update_inputs length mismatch"
+    );
+
+    Ok(())
 }
 
 #[test]
@@ -2215,7 +2258,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     ensure!(valid, "Compound proof failed to verify");
 
     /***************************************
-     * TEST SNARKPACK/SNAPDEAL HERE
+     * TEST SNARKPACK/SNAPDEAL HERE [BEGIN]
      ***************************************/
     let proof_inputs = SectorUpdateProofInputs {
         comm_r_old: comm_r,
@@ -2223,44 +2266,60 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         comm_d_new: encoded.comm_d_new,
     };
 
-    let sector_update_proofs = vec![proof.clone(), proof.clone(), proof.clone()];
-    let sector_update_inputs = vec![
-        proof_inputs.clone(),
-        proof_inputs.clone(),
-        proof_inputs.clone(),
-    ];
+    let aggregation_counts = vec![3, 16, 32, 64, 127];
+    for current in aggregation_counts {
+        info!("***** Aggregating {} sector update proofs *****", current);
+        let mut sector_update_proofs = Vec::with_capacity(current);
+        let mut sector_update_inputs = Vec::with_capacity(current);
+        for _ in 0..current {
+            sector_update_proofs.push(proof.clone());
+            sector_update_inputs.push(proof_inputs.clone());
+        }
+        ensure!(sector_update_proofs.len() == current);
+        ensure!(sector_update_inputs.len() == current);
 
-    let agg_update_proof = aggregate_empty_sector_update_proofs::<Tree>(
-        &porep_config,
-        &sector_update_proofs,
-        &sector_update_inputs,
-        groth16::aggregate::AggregateVersion::V2,
-    )?;
+        let agg_update_proof = aggregate_empty_sector_update_proofs::<Tree>(
+            &porep_config,
+            &sector_update_proofs,
+            &sector_update_inputs,
+            groth16::aggregate::AggregateVersion::V2,
+        )?;
 
-    let combined_sector_update_inputs: Vec<Vec<Fr>> = sector_update_inputs
-        .iter()
-        .flat_map(|input| {
-            get_sector_update_inputs::<Tree>(
-                &porep_config,
-                input.comm_r_old,
-                input.comm_r_new,
-                input.comm_d_new,
-            )
-            .expect("failed to get sector update inputs")
-        })
-        .collect();
+        let combined_sector_update_inputs: Vec<Vec<Fr>> = sector_update_inputs
+            .iter()
+            .flat_map(|input| {
+                get_sector_update_inputs::<Tree>(
+                    &porep_config,
+                    input.comm_r_old,
+                    input.comm_r_new,
+                    input.comm_d_new,
+                )
+                .expect("failed to get sector update inputs")
+            })
+            .collect();
 
-    let valid = verify_aggregate_sector_update_proofs::<Tree>(
-        &porep_config,
-        agg_update_proof,
-        &sector_update_inputs,
-        combined_sector_update_inputs,
-        groth16::aggregate::AggregateVersion::V2,
-    )?;
-    ensure!(
-        valid,
-        "aggregate empty sector update proof failed to verify"
-    );
+        trace!(
+            "combined sector update inputs len {}, sector_update_inputs len {}",
+            combined_sector_update_inputs.len(),
+            sector_update_inputs.len()
+        );
+
+        let valid = verify_aggregate_sector_update_proofs::<Tree>(
+            &porep_config,
+            agg_update_proof,
+            &sector_update_inputs,
+            combined_sector_update_inputs,
+            groth16::aggregate::AggregateVersion::V2,
+        )?;
+        ensure!(
+            valid,
+            "aggregate empty sector update proof failed to verify"
+        );
+    }
+
+    /***************************************
+     * TEST SNARKPACK/SNAPDEAL HERE [END]
+     ***************************************/
 
     let decoded_sector_file = NamedTempFile::new()?;
     // New replica (new_sealed_sector_file) is currently 0 bytes --

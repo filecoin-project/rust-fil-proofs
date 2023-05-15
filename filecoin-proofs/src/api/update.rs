@@ -109,7 +109,6 @@ fn pad_proofs_to_target(proofs: &mut Vec<groth16::Proof<Bls12>>, target_len: usi
     Ok(())
 }
 
-/// FIXME: DUPLICATED??
 /// Given a list of public inputs and a target_len, make sure that the inputs list is padded to the target_len size.
 fn pad_inputs_to_target(
     sector_update_inputs: &[Vec<Fr>],
@@ -124,6 +123,11 @@ fn pad_inputs_to_target(
     let mut num_inputs = sector_update_inputs.len();
     let mut new_inputs = sector_update_inputs.to_owned();
 
+    trace!(
+        "pad_inputs_to_target target_len {}, inputs len {}",
+        target_len,
+        num_inputs
+    );
     if target_len != num_inputs {
         ensure!(
             target_len > num_inputs,
@@ -136,6 +140,10 @@ fn pad_inputs_to_target(
         while target_len != num_inputs {
             new_inputs.extend_from_slice(duplicate_inputs);
             num_inputs += num_inputs_per_proof;
+            ensure!(
+                num_inputs <= target_len,
+                "num_inputs extended beyond target"
+            );
         }
     }
 
@@ -861,11 +869,11 @@ pub fn get_sector_update_inputs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHa
     let partitions = usize::from(config.update_partitions);
 
     let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
-        k: usize::from(config.update_partitions),
+        k: partitions,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
-        h: usize::from(config.h_select),
+        h: config.h,
     };
     let setup_params_compound = compound_proof::SetupParams {
         vanilla_params: SetupParams {
@@ -985,7 +993,7 @@ pub fn verify_aggregate_sector_update_proofs<
     sector_update_inputs: Vec<Vec<Fr>>,
     aggregate_version: groth16::aggregate::AggregateVersion,
 ) -> Result<bool> {
-    info!("verify_aggregate_seal_commit_proofs:start");
+    info!("verify_aggregate_sector_update_proofs:start");
 
     let aggregate_proof =
         groth16::aggregate::AggregateProof::read(std::io::Cursor::new(&aggregate_proof_bytes))?;
@@ -993,7 +1001,10 @@ pub fn verify_aggregate_sector_update_proofs<
     let aggregated_proofs_len = aggregate_proof.tmipp.gipa.nproofs as usize;
 
     ensure!(aggregated_proofs_len != 0, "cannot verify zero proofs");
-    ensure!(!inputs.is_empty(), "cannot verify with empty inputs");
+    ensure!(
+        !sector_update_inputs.is_empty(),
+        "cannot verify with empty inputs"
+    );
 
     trace!(
         "verify_aggregate_sector_update_proofs called with len {}",
@@ -1009,22 +1020,22 @@ pub fn verify_aggregate_sector_update_proofs<
         "cannot verify non-pow2 aggregate seal proofs"
     );
 
-    let num_inputs = inputs.len();
+    let num_inputs = sector_update_inputs.len();
     let num_inputs_per_proof = get_aggregate_target_len(num_inputs) / aggregated_proofs_len;
     let target_inputs_len = aggregated_proofs_len * num_inputs_per_proof;
+
+    trace!(
+        "verify_aggregate_sector_update_proofs got {} combined inputs with {} inputs per proof, target_len is {}",
+        num_inputs,
+        num_inputs_per_proof,
+        target_inputs_len,
+    );
+
     ensure!(
         target_inputs_len % aggregated_proofs_len == 0,
         "invalid number of inputs provided",
     );
 
-    trace!(
-        "verify_aggregate_seal_commit_proofs got {} inputs with {} inputs per proof",
-        num_inputs,
-        target_inputs_len / aggregated_proofs_len,
-    );
-
-    //sector_update_inputs: Vec<Vec<Fr>>,
-    // Pad public inputs if needed.
     let sector_update_inputs = pad_inputs_to_target(
         &sector_update_inputs,
         num_inputs_per_proof,
@@ -1046,7 +1057,7 @@ pub fn verify_aggregate_sector_update_proofs<
     let srs_verifier_key =
         get_stacked_srs_verifier_key::<Tree>(porep_config, aggregated_proofs_len)?;
 
-    trace!("start verifying aggregate proof");
+    trace!("start verifying aggregate sector update proof");
     let result = StackedCompound::<Tree, DefaultPieceHasher>::verify_aggregate_proofs(
         &srs_verifier_key,
         &verifying_key,
@@ -1055,9 +1066,9 @@ pub fn verify_aggregate_sector_update_proofs<
         &aggregate_proof,
         aggregate_version,
     )?;
-    trace!("end verifying aggregate proof");
+    trace!("end verifying aggregate sector update proof");
 
-    info!("verify_aggregate_seal_commit_proofs:finish");
+    info!("verify_aggregate_sector_update_proofs:finish");
 
     Ok(result)
 }
