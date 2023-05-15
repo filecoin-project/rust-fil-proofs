@@ -921,7 +921,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     /// Generate the TreeRLast.
     ///
     /// `nodes_count` is the number of nodes per sector, practically is the sector size in bytes
-    /// devided by the 32 bytes node size.
+    /// divided by the 32 bytes node size.
     ///
     /// TreeRLast is split into several sub-trees. The exact number `tree_count` depends on the
     /// sector size.
