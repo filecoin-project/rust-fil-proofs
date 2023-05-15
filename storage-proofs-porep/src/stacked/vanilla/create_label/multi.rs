@@ -754,6 +754,9 @@ mod tests {
             .read_at(final_labels.len() - 1)
             .expect("read_at");
         dbg!(&last_label);
-        assert_eq!(expected_last_label.to_repr(), last_label.0);
+        assert_eq!(
+            expected_last_label.to_repr(),
+            <<Fr as PrimeField>::Repr>::from(last_label)
+        );
     }
 }

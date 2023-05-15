@@ -57,7 +57,7 @@ impl Hashable<PoseidonFunction> for PoseidonDomain {
 }
 
 #[derive(Default, Copy, Clone, Debug, Serialize, Deserialize)]
-pub struct PoseidonDomain(pub <Fr as PrimeField>::Repr);
+pub struct PoseidonDomain(<Fr as PrimeField>::Repr);
 
 impl AsRef<PoseidonDomain> for PoseidonDomain {
     fn as_ref(&self) -> &PoseidonDomain {
@@ -362,6 +362,13 @@ impl From<[u8; 32]> for PoseidonDomain {
     #[inline]
     fn from(val: [u8; 32]) -> Self {
         PoseidonDomain(val)
+    }
+}
+
+impl From<PoseidonDomain> for [u8; 32] {
+    #[inline]
+    fn from(val: PoseidonDomain) -> Self {
+        val.0
     }
 }
 

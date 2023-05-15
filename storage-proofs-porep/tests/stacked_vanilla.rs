@@ -577,5 +577,8 @@ fn test_generate_labels_aux(
     let final_labels = labels.labels_for_last_layer().unwrap();
     let last_label = final_labels.read_at(nodes - 1).unwrap();
 
-    assert_eq!(expected_last_label.to_repr(), last_label.0);
+    assert_eq!(
+        expected_last_label.to_repr(),
+        <<Fr as PrimeField>::Repr>::from(last_label)
+    );
 }
