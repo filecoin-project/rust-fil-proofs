@@ -1,5 +1,5 @@
 use storage_proofs_core::util::NODE_SIZE;
-use storage_proofs_update::constants::{num_high_bits, partition_count};
+use storage_proofs_update::constants::{h_default, partition_count};
 
 use crate::types::{PoRepConfig, SectorSize, UpdateProofPartitions};
 
@@ -19,7 +19,7 @@ impl SectorUpdateConfig {
             sector_size: porep_config.sector_size,
             nodes_count,
             update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-            h: num_high_bits(nodes_count),
+            h: h_default(nodes_count),
         }
     }
 }

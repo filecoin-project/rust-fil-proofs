@@ -106,7 +106,7 @@ pub const fn hs(sector_nodes: usize) -> [usize; 6] {
 /// Returns the `h` for the given sector-size. The `h` value is the number of high bits taken from
 /// each challenge `c`. For production use, it was determined to use the value at index 3, which
 /// translates to a value of 10 for production sector sizes.
-pub const fn num_high_bits(sector_nodes: usize) -> usize {
+pub const fn h_default(sector_nodes: usize) -> usize {
     hs(sector_nodes)[3]
 }
 
