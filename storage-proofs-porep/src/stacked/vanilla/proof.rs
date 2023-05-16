@@ -453,7 +453,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
     #[cfg(any(feature = "cuda", feature = "opencl"))]
     fn generate_tree_c<ColumnArity, TreeArity>(
-        layers: usize,
         nodes_count: usize,
         tree_count: usize,
         configs: Vec<StoreConfig>,
@@ -465,7 +464,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     {
         if Self::use_gpu_column_builder() {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
-                layers,
                 nodes_count,
                 tree_count,
                 configs,
@@ -473,7 +471,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             )
         } else {
             Self::generate_tree_c_cpu::<ColumnArity, TreeArity>(
-                layers,
                 nodes_count,
                 tree_count,
                 configs,
@@ -484,7 +481,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
     #[cfg(not(any(feature = "cuda", feature = "opencl")))]
     fn generate_tree_c<ColumnArity, TreeArity>(
-        layers: usize,
         nodes_count: usize,
         tree_count: usize,
         configs: Vec<StoreConfig>,
@@ -495,7 +491,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         TreeArity: PoseidonArity,
     {
         Self::generate_tree_c_cpu::<ColumnArity, TreeArity>(
-            layers,
             nodes_count,
             tree_count,
             configs,
@@ -506,7 +501,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     #[allow(clippy::needless_range_loop)]
     #[cfg(any(feature = "cuda", feature = "opencl"))]
     fn generate_tree_c_gpu<ColumnArity, TreeArity>(
-        layers: usize,
         nodes_count: usize,
         tree_count: usize,
         configs: Vec<StoreConfig>,
@@ -574,7 +568,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 let mut layer_data: Vec<Vec<u8>> =
                                     vec![
                                         vec![0u8; chunked_nodes_count * std::mem::size_of::<Fr>()];
-                                        layers
+                                        ColumnArity::to_usize()
                                     ];
 
                                 // gather all layer data.
@@ -593,7 +587,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 (0..chunked_nodes_count)
                                     .into_par_iter()
                                     .map(|index| {
-                                        (0..layers)
+                                        (0..ColumnArity::to_usize())
                                             .map(|layer_index| {
                                                 bytes_into_fr(
                                                 &layer_data[layer_index][std::mem::size_of::<Fr>()
@@ -766,7 +760,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     }
 
     fn generate_tree_c_cpu<ColumnArity, TreeArity>(
-        layers: usize,
         nodes_count: usize,
         tree_count: usize,
         configs: Vec<StoreConfig>,
@@ -800,7 +793,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                         s.execute(move || {
                             for (j, hash) in hashes_chunk.iter_mut().enumerate() {
-                                let data: Vec<_> = (1..=layers)
+                                let data: Vec<_> = (1..=ColumnArity::to_usize())
                                     .map(|layer| {
                                         let store = labels.labels_for_layer(layer);
                                         let el: <Tree::Hasher as Hasher>::Domain = store
@@ -1341,7 +1334,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let tree_c_root = match layers {
             2 => {
                 let tree_c = Self::generate_tree_c::<U2, Tree::Arity>(
-                    layers,
                     nodes_count,
                     tree_count,
                     configs,
@@ -1351,7 +1343,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             }
             8 => {
                 let tree_c = Self::generate_tree_c::<U8, Tree::Arity>(
-                    layers,
                     nodes_count,
                     tree_count,
                     configs,
@@ -1361,7 +1352,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             }
             11 => {
                 let tree_c = Self::generate_tree_c::<U11, Tree::Arity>(
-                    layers,
                     nodes_count,
                     tree_count,
                     configs,
