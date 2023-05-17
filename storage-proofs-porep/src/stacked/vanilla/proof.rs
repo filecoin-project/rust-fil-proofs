@@ -357,8 +357,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             .as_ref()
             .map(|tau| tau.comm_r.into())
             .expect("unwrapping should not fail");
-        let synth_challenges =
-            SynthChallenges::default_chacha20(graph.size(), &replica_id, &comm_r);
+        let synth_challenges = SynthChallenges::default(graph.size(), &replica_id, &comm_r);
         assert_eq!(synth_proofs.len(), synth_challenges.num_synth_challenges);
         for (challenge, proof) in synth_challenges.zip(synth_proofs) {
             assert!(proof.verify(&pub_params, pub_inputs, challenge, graph));

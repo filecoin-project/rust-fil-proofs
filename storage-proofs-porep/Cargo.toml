@@ -41,7 +41,6 @@ yastl = "0.1.2"
 blstrs = "0.7.0"
 chacha20 = "0.9.0"
 blake2b_simd = "1.0.0"
-hmac = "0.12.1"
 
 [build-dependencies]
 rustversion = "1.0"
