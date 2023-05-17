@@ -1251,3 +1251,33 @@ where
 
     Ok(tree_c.root())
 }
+
+pub fn sdr<P, Tree: 'static + MerkleTreeTrait>(
+    porep_config: &PoRepConfig,
+    cache_path: P,
+    replica_id: &<Tree::Hasher as Hasher>::Domain,
+) -> Result<()>
+where
+    P: AsRef<Path>,
+{
+    let base_tree_size = get_base_tree_size::<DefaultBinaryTree>(porep_config.sector_size)?;
+    let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
+
+    let config = StoreConfig::new(
+        cache_path.as_ref(),
+        CacheKey::CommDTree.to_string(),
+        default_rows_to_discard(base_tree_leafs, BINARY_ARITY),
+    );
+
+    let setup_params = setup_params(
+        porep_config.padded_bytes_amount(),
+        usize::from(porep_config.partitions),
+        porep_config.porep_id,
+        porep_config.api_version,
+    )?;
+    let public_params = StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params)?;
+
+    StackedDrg::<Tree, DefaultPieceHasher>::replicate_phase1(&public_params, replica_id, config)?;
+
+    Ok(())
+}
