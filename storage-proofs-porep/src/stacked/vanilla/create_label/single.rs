@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 use std::mem;
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use filecoin_hashers::Hasher;
@@ -21,16 +22,20 @@ use crate::stacked::vanilla::{
 };
 
 #[allow(clippy::type_complexity)]
-pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
+pub fn create_labels_for_encoding<
+    Tree: 'static + MerkleTreeTrait,
+    T: AsRef<[u8]>,
+    P: AsRef<Path>,
+>(
     graph: &StackedBucketGraph<Tree::Hasher>,
     parents_cache: &mut ParentCache,
     layers: usize,
     replica_id: T,
-    config: StoreConfig,
+    cache_path: P,
 ) -> Result<(Labels<Tree>, Vec<LayerState>)> {
     info!("generate labels");
 
-    let layer_states = prepare_layers::<Tree>(graph, &config, layers);
+    let layer_states = prepare_layers::<_, Tree>(graph, &cache_path, layers);
 
     let layer_size = graph.size() * NODE_SIZE;
     // NOTE: this means we currently keep 2x sector size around, to improve speed.
