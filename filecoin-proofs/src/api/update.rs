@@ -219,12 +219,12 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
 /// within the file. The `num_nodes` defines how many nodes will be decoded, starting from the
 /// current position.
 #[allow(clippy::too_many_arguments)]
-pub fn decode_from_range<R: Read, W: Write>(
+pub fn decode_from_range<R: Read, S: Read, W: Write>(
     nodes_count: usize,
     comm_d: Commitment,
     comm_r: Commitment,
     input_data: R,
-    sector_key_data: R,
+    sector_key_data: S,
     output_data: &mut W,
     nodes_offset: usize,
     num_nodes: usize,
