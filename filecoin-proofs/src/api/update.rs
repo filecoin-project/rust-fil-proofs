@@ -166,7 +166,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
             sector_key_path,
             sector_key_cache_path,
             staged_data_path,
-            usize::from(config.h_select),
+            config.h,
         )?;
 
     let mut comm_d = [0; 32];
@@ -227,7 +227,7 @@ pub fn decode_from<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
         comm_d_new.into(),
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
-        usize::from(config.h_select),
+        config.h,
     )?;
 
     info!("decode_from:finish");
@@ -265,7 +265,7 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
         comm_d_new.into(),
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
-        usize::from(config.h_select),
+        config.h,
     )?;
 
     // Persist p_aux and t_aux into the sector_key_cache_path here
@@ -311,7 +311,7 @@ pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = 
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
-        h: usize::from(config.h_select),
+        h: config.h,
     };
 
     let t_aux_old = get_t_aux::<Tree>(sector_key_cache_path)?;
@@ -364,7 +364,7 @@ pub fn verify_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = Tr
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
-        h: usize::from(config.h_select),
+        h: config.h,
     };
 
     let valid = EmptySectorUpdate::<Tree>::verify(&public_params, &public_inputs, &proof)?;
@@ -403,7 +403,7 @@ pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
-        h: usize::from(config.h_select),
+        h: config.h,
     };
 
     let t_aux_old = get_t_aux::<Tree>(sector_key_cache_path)?;
@@ -455,7 +455,7 @@ pub fn verify_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHas
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
-        h: usize::from(config.h_select),
+        h: config.h,
     };
 
     let valid =
@@ -491,7 +491,7 @@ pub fn generate_empty_sector_update_proof_with_vanilla<
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
-        h: usize::from(config.h_select),
+        h: config.h,
     };
 
     let setup_params_compound = compound_proof::SetupParams {
@@ -544,7 +544,7 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
-        h: usize::from(config.h_select),
+        h: config.h,
     };
 
     let t_aux_old = get_t_aux::<Tree>(sector_key_cache_path)?;
@@ -604,7 +604,7 @@ pub fn verify_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher =
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
-        h: usize::from(config.h_select),
+        h: config.h,
     };
     let setup_params_compound = compound_proof::SetupParams {
         vanilla_params: SetupParams {

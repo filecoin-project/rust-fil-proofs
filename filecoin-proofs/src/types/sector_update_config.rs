@@ -1,14 +1,14 @@
 use storage_proofs_core::util::NODE_SIZE;
-use storage_proofs_update::constants::partition_count;
+use storage_proofs_update::constants::{h_default, partition_count};
 
-use crate::types::{HSelect, PoRepConfig, SectorSize, UpdateProofPartitions};
+use crate::types::{PoRepConfig, SectorSize, UpdateProofPartitions};
 
 #[derive(Clone, Copy, Debug)]
 pub struct SectorUpdateConfig {
     pub sector_size: SectorSize,
     pub nodes_count: usize,
     pub update_partitions: UpdateProofPartitions,
-    pub h_select: HSelect,
+    pub h: usize,
 }
 
 impl SectorUpdateConfig {
@@ -19,7 +19,7 @@ impl SectorUpdateConfig {
             sector_size: porep_config.sector_size,
             nodes_count,
             update_partitions: UpdateProofPartitions::from(partition_count(nodes_count)),
-            h_select: HSelect::from_nodes(nodes_count),
+            h: h_default(nodes_count),
         }
     }
 }

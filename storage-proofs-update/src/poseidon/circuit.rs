@@ -19,7 +19,7 @@ use storage_proofs_core::{
 
 use crate::{
     constants::{
-        challenge_count_poseidon, hs, validate_tree_r_shape, TreeRDomain, TreeRHasher,
+        challenge_count_poseidon, h_select, hs, validate_tree_r_shape, TreeRDomain, TreeRHasher,
         POSEIDON_CONSTANTS_GEN_RANDOMNESS,
     },
     gadgets::{gen_challenge_bits, get_challenge_high_bits, label_r_new},
@@ -48,12 +48,7 @@ impl PublicInputs {
         comm_d_new: TreeRDomain,
         comm_r_new: TreeRDomain,
     ) -> Self {
-        let hs_index = hs(sector_nodes)
-            .iter()
-            .position(|h_allowed| *h_allowed == h)
-            .expect("invalid `h` for sector-size");
-
-        let h_select = 1u64 << hs_index;
+        let h_select = h_select(sector_nodes, h);
 
         PublicInputs {
             h_select: Some(Fr::from(h_select)),
