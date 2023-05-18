@@ -600,3 +600,59 @@ where
 
     Ok(())
 }
+
+#[cfg(feature = "nova")]
+#[inline]
+pub fn assign_path<F, CS>(
+    cs: &mut CS,
+    path_name: &str,
+    path: &[Vec<F>],
+) -> Result<Vec<Vec<AllocatedNum<F>>>, SynthesisError>
+where
+    F: ff::PrimeField,
+    CS: ConstraintSystem<F>,
+{
+    path
+        .iter()
+        .enumerate()
+        .map(|(height, sibs)| {
+            sibs
+                .iter()
+                .enumerate()
+                .map(|(sib_index, sib)| {
+                    AllocatedNum::alloc(
+                        cs.namespace(|| {
+                            format!("{} height_{} sib_{}", path_name, height, sib_index)
+                        }),
+                        || Ok(*sib),
+                    )
+                })
+                .collect::<Result<Vec<AllocatedNum<F>>, SynthesisError>>()
+        })
+        .collect::<Result<Vec<Vec<AllocatedNum<F>>>, SynthesisError>>()
+}
+
+#[cfg(feature = "nova")]
+pub fn blank_merkle_path<F, U, V, W>(sector_nodes: usize) -> Vec<Vec<F>>
+where
+    F: ff::PrimeField,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+{
+    use std::iter;
+
+    let (base_arity, sub_arity, top_arity) = (U::to_usize(), V::to_usize(), W::to_usize());
+    let (sub_height, top_height) = ((sub_arity != 0) as u32, (top_arity != 0) as u32);
+    let sub_bits = sub_height * sub_arity.trailing_zeros();
+    let top_bits = top_height * top_arity.trailing_zeros();
+    let base_bits = sector_nodes.trailing_zeros() - sub_bits - top_bits;
+    let base_height = base_bits / base_arity.trailing_zeros();
+
+    iter::repeat(base_arity)
+        .take(base_height as usize)
+        .chain(iter::once(sub_arity).take(sub_height as usize))
+        .chain(iter::once(top_arity).take(top_height as usize))
+        .map(|arity| vec![F::zero(); arity - 1])
+        .collect()
+}

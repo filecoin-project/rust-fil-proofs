@@ -1,3 +1,5 @@
+#[cfg(feature = "nova")]
+pub mod boolean;
 pub mod constraint;
 pub mod encode;
 pub mod insertion;
