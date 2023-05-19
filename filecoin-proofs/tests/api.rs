@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
-use std::fs::{metadata, read_dir, remove_file, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::fs::{metadata, read_dir, remove_file, File, OpenOptions};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Error, Result};
@@ -14,17 +14,17 @@ use filecoin_proofs::{
     decode_from_range, encode_into, fauxrep_aux, generate_empty_sector_update_proof,
     generate_empty_sector_update_proof_with_vanilla, generate_fallback_sector_challenges,
     generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
-    generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_window_post,
-    generate_window_post_with_vanilla, generate_winning_post,
-    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla,
-    get_num_partition_for_fallback_post, get_seal_inputs, merge_window_post_partition_proofs,
-    remove_encoded_data, seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1,
-    seal_pre_commit_phase2, unseal_range, validate_cache_for_commit,
-    validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs,
-    verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
-    verify_single_partition_proof, verify_window_post, verify_winning_post, Commitment,
-    DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PoStConfig,
-    PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput,
+    generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_tree_c,
+    generate_tree_r_last, generate_window_post, generate_window_post_with_vanilla,
+    generate_winning_post, generate_winning_post_sector_challenge,
+    generate_winning_post_with_vanilla, get_num_partition_for_fallback_post, get_seal_inputs,
+    merge_window_post_partition_proofs, remove_encoded_data, seal_commit_phase1,
+    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, unseal_range,
+    validate_cache_for_commit, validate_cache_for_precommit_phase2,
+    verify_aggregate_seal_commit_proofs, verify_empty_sector_update_proof, verify_partition_proofs,
+    verify_seal, verify_single_partition_proof, verify_window_post, verify_winning_post,
+    Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
+    PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput,
     SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB,
     SectorShape32KiB, SectorShape4KiB, SectorUpdateConfig, UnpaddedByteIndex, UnpaddedBytesAmount,
     SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
@@ -34,10 +34,13 @@ use filecoin_proofs::{
 use fr32::bytes_into_fr;
 use log::info;
 use memmap2::MmapOptions;
+use merkletree::store::StoreConfig;
 use rand::{random, Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
+use sha2::{Digest, Sha256};
 use storage_proofs_core::{
-    api_version::ApiVersion, is_legacy_porep_id, sector::SectorId, util::NODE_SIZE,
+    api_version::ApiVersion, cache_key::CacheKey, is_legacy_porep_id, merkle::get_base_tree_count,
+    sector::SectorId, util::NODE_SIZE,
 };
 use storage_proofs_update::constants::TreeRHasher;
 use tempfile::{tempdir, NamedTempFile, TempDir};
@@ -1716,12 +1719,25 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
         &sealed_sector_file,
     )?;
 
+    let num_layers = phase1_output.labels.len();
     let pre_commit_output = seal_pre_commit_phase2(
         &config,
         phase1_output,
         cache_dir.path(),
         sealed_sector_file.path(),
     )?;
+
+    // Check if creating only the tree_r_last generates the same output as the full pre commit
+    // phase 2 process.
+    let tree_r_last_dir = tempdir().expect("failed to create temp dir");
+    generate_tree_r_last::<_, _, Tree>(sector_size, &sealed_sector_file, &tree_r_last_dir)?;
+    compare_trees::<Tree>(&tree_r_last_dir, &cache_dir, CacheKey::CommRLastTree)?;
+
+    // Check if creating only the tree_r generates the same output as the full pre commit phase 2
+    // process.
+    let tree_c_dir = tempdir().expect("failed to create temp dir");
+    generate_tree_c::<_, _, Tree>(sector_size, &cache_dir, &tree_c_dir, num_layers)?;
+    compare_trees::<Tree>(&tree_c_dir, &cache_dir, CacheKey::CommCTree)?;
 
     let comm_r = pre_commit_output.comm_r;
 
@@ -1830,6 +1846,39 @@ fn compare_elements(path1: &Path, path2: &Path) -> Result<(), Error> {
     }
     info!("Match found for {:?} and {:?}", path1, path2);
 
+    Ok(())
+}
+
+/// Return the hash of a given file specified by cache key within a certain directory.
+fn hash_file(dir: &TempDir, cache_key: &str) -> Result<Vec<u8>> {
+    let path = StoreConfig::data_path(dir.path(), cache_key);
+    let mut hasher = Sha256::new();
+    let mut file = File::open(path)?;
+    io::copy(&mut file, &mut hasher)?;
+    Ok(hasher.finalize().to_vec())
+}
+
+/// Compare whether two trees are identical.
+///
+/// The tree may be split across several files.
+fn compare_trees<Tree: 'static + MerkleTreeTrait>(
+    dir_a: &TempDir,
+    dir_b: &TempDir,
+    cache_key: CacheKey,
+) -> Result<()> {
+    let base_tree_count = get_base_tree_count::<Tree>();
+    let cache_key_names = if base_tree_count == 1 {
+        vec![cache_key.to_string()]
+    } else {
+        (0..base_tree_count)
+            .map(|count| format!("{}-{}", cache_key, count))
+            .collect()
+    };
+    for cache_key_name in cache_key_names {
+        let hash_a = hash_file(dir_a, &cache_key_name)?;
+        let hash_b = hash_file(dir_b, &cache_key_name)?;
+        assert_eq!(hash_a, hash_b, "files are identical");
+    }
     Ok(())
 }
 

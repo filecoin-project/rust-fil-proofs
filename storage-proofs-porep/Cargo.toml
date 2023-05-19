@@ -13,7 +13,7 @@ crossbeam = "0.8"
 storage-proofs-core = { path = "../storage-proofs-core", version = "~14.0.0", default-features = false}
 sha2raw = { path = "../sha2raw", version = "~9.0.0"}
 filecoin-hashers = { path = "../filecoin-hashers", version = "~9.0.0", default-features = false, features = ["poseidon", "sha256"]}
-merkletree = "0.22.0"
+merkletree = "0.23.0"
 memmap2 = "0.5.6"
 num-bigint = "0.4.3"
 num-traits = "0.2"
