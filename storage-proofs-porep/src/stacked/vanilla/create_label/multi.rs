@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::mem::{self, size_of};
+use std::path::Path;
 use std::sync::{
     atomic::{AtomicU64, Ordering::SeqCst},
     Arc, MutexGuard,
@@ -436,16 +437,20 @@ fn create_layer_labels(
 }
 
 #[allow(clippy::type_complexity)]
-pub fn create_labels_for_encoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]>>(
+pub fn create_labels_for_encoding<
+    Tree: 'static + MerkleTreeTrait,
+    T: AsRef<[u8]>,
+    P: AsRef<Path>,
+>(
     graph: &StackedBucketGraph<Tree::Hasher>,
     parents_cache: &ParentCache,
     layers: usize,
     replica_id: T,
-    config: StoreConfig,
+    cache_path: P,
 ) -> Result<(Labels<Tree>, Vec<LayerState>)> {
     info!("create labels");
 
-    let layer_states = prepare_layers::<Tree>(graph, &config, layers);
+    let layer_states = prepare_layers::<_, Tree>(graph, &cache_path, layers);
 
     let sector_size = graph.size() * NODE_SIZE;
     let node_count = graph.size() as u64;

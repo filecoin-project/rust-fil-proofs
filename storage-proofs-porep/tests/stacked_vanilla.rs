@@ -136,7 +136,7 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
         &pp.graph,
         &layer_challenges,
         &replica_id,
-        config.clone(),
+        &config.path,
     )
     .expect("label generation failed");
     for state in &label_states {
@@ -154,7 +154,7 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
         &pp.graph,
         &layer_challenges,
         &replica_id,
-        config.clone(),
+        &config.path,
     )
     .expect("label generation failed");
     for state in &label_states[..off] {
@@ -267,7 +267,7 @@ fn test_stacked_porep_resume_seal() {
         &pp.graph,
         &layer_challenges,
         &replica_id,
-        config.clone(),
+        &config.path,
     )
     .expect("label generation failed");
     let off = label_states.len() - 3;

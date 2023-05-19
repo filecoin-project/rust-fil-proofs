@@ -202,7 +202,7 @@ where
     let labels = StackedDrg::<Tree, DefaultPieceHasher>::replicate_phase1(
         &compound_public_params.vanilla_params,
         &replica_id,
-        config.clone(),
+        &config.path,
     )?;
 
     let out = SealPreCommitPhase1Output {
@@ -1250,4 +1250,29 @@ where
     };
 
     Ok(tree_c.root())
+}
+
+pub fn sdr<P, Tree: 'static + MerkleTreeTrait>(
+    porep_config: &PoRepConfig,
+    cache_path: P,
+    replica_id: &<Tree::Hasher as Hasher>::Domain,
+) -> Result<()>
+where
+    P: AsRef<Path>,
+{
+    let setup_params = setup_params(
+        porep_config.padded_bytes_amount(),
+        usize::from(porep_config.partitions),
+        porep_config.porep_id,
+        porep_config.api_version,
+    )?;
+    let public_params = StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params)?;
+
+    StackedDrg::<Tree, DefaultPieceHasher>::replicate_phase1(
+        &public_params,
+        replica_id,
+        &cache_path,
+    )?;
+
+    Ok(())
 }
