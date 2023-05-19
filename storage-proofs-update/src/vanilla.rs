@@ -266,14 +266,14 @@ pub struct Rhos {
 impl Rhos {
     /// Generate the `rho`s for a certain number of nodes.
     ///
-    /// Those are used for encoding.
+    /// Those are used for encoding. The `nodes_count` is the total number of nodes of the sector.
     pub fn new(phi: &TreeRDomain, nodes_count: usize) -> Self {
         Self::new_range(phi, nodes_count, 0, nodes_count)
     }
 
     /// Generate the inverted `rho`s for a certain number of nodes.
     ///
-    /// Those are used for decoding.
+    /// Those are used for decoding. The `nodes_count` is the total number of nodes of the sector.
     pub fn new_inv(phi: &TreeRDomain, nodes_count: usize) -> Self {
         Self::new_inv_range(phi, nodes_count, 0, nodes_count)
     }
@@ -282,7 +282,8 @@ impl Rhos {
     ///
     /// Those are used for encoding.
     ///
-    /// All inputs are in number of nodes.
+    /// All inputs are in number of nodes. The `nodes_count` is the total number of nodes of the
+    /// sector. `offset` defines where the range should start, with a `num` sized length.
     pub fn new_range(phi: &TreeRDomain, nodes_count: usize, offset: usize, num: usize) -> Self {
         let bits_shr = Self::calc_bits_shr(nodes_count);
         let high_range = Self::calc_high_range(offset, num, bits_shr);
@@ -297,7 +298,8 @@ impl Rhos {
     ///
     /// Those are used for decoding.
     ///
-    /// All inputs are in number of nodes.
+    /// All inputs are in number of nodes. The `nodes_count` is the total number of nodes of the
+    /// sector. `offset` defines where the range should start, with a `num` sized length.
     pub fn new_inv_range(phi: &TreeRDomain, nodes_count: usize, offset: usize, num: usize) -> Self {
         let bits_shr = Self::calc_bits_shr(nodes_count);
         let high_range = Self::calc_high_range(offset, num, bits_shr);
