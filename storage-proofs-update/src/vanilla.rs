@@ -37,8 +37,8 @@ use storage_proofs_porep::stacked::{StackedDrg, TreeRElementData};
 
 use crate::{
     constants::{
-        apex_leaf_count, challenge_count, challenge_count_poseidon, h_default, hs, partition_count,
-        TreeD, TreeDArity, TreeDDomain, TreeDHasher, TreeDStore, TreeRDomain, TreeRHasher,
+        apex_leaf_count, challenge_count, challenge_count_poseidon, hs, partition_count, TreeD,
+        TreeDArity, TreeDDomain, TreeDHasher, TreeDStore, TreeRDomain, TreeRHasher,
         ALLOWED_SECTOR_SIZES, POSEIDON_CONSTANTS_GEN_RANDOMNESS,
     },
     Challenges,
@@ -267,15 +267,15 @@ impl Rhos {
     /// Generate the `rho`s for a certain number of nodes.
     ///
     /// Those are used for encoding. The `nodes_count` is the total number of nodes of the sector.
-    pub fn new(phi: &TreeRDomain, nodes_count: usize) -> Self {
-        Self::new_range(phi, nodes_count, 0, nodes_count)
+    pub fn new(phi: &TreeRDomain, h: usize, nodes_count: usize) -> Self {
+        Self::new_range(phi, h, nodes_count, 0, nodes_count)
     }
 
     /// Generate the inverted `rho`s for a certain number of nodes.
     ///
     /// Those are used for decoding. The `nodes_count` is the total number of nodes of the sector.
-    pub fn new_inv(phi: &TreeRDomain, nodes_count: usize) -> Self {
-        Self::new_inv_range(phi, nodes_count, 0, nodes_count)
+    pub fn new_inv(phi: &TreeRDomain, h: usize, nodes_count: usize) -> Self {
+        Self::new_inv_range(phi, h, nodes_count, 0, nodes_count)
     }
 
     /// Generate the `rho`s for a certain number of nodes and range.
@@ -284,8 +284,14 @@ impl Rhos {
     ///
     /// All inputs are in number of nodes. The `nodes_count` is the total number of nodes of the
     /// sector. `offset` defines where the range should start, with a `num` sized length.
-    pub fn new_range(phi: &TreeRDomain, nodes_count: usize, offset: usize, num: usize) -> Self {
-        let bits_shr = Self::calc_bits_shr(nodes_count);
+    pub fn new_range(
+        phi: &TreeRDomain,
+        h: usize,
+        nodes_count: usize,
+        offset: usize,
+        num: usize,
+    ) -> Self {
+        let bits_shr = Self::calc_bits_shr(h, nodes_count);
         let high_range = Self::calc_high_range(offset, num, bits_shr);
 
         let rhos = high_range
@@ -300,8 +306,14 @@ impl Rhos {
     ///
     /// All inputs are in number of nodes. The `nodes_count` is the total number of nodes of the
     /// sector. `offset` defines where the range should start, with a `num` sized length.
-    pub fn new_inv_range(phi: &TreeRDomain, nodes_count: usize, offset: usize, num: usize) -> Self {
-        let bits_shr = Self::calc_bits_shr(nodes_count);
+    pub fn new_inv_range(
+        phi: &TreeRDomain,
+        h: usize,
+        nodes_count: usize,
+        offset: usize,
+        num: usize,
+    ) -> Self {
+        let bits_shr = Self::calc_bits_shr(h, nodes_count);
         let high_range = Self::calc_high_range(offset, num, bits_shr);
 
         let rhos = high_range
@@ -323,9 +335,7 @@ impl Rhos {
         self.rhos[&high]
     }
 
-    fn calc_bits_shr(nodes_count: usize) -> usize {
-        let h = h_default(nodes_count);
-
+    fn calc_bits_shr(h: usize, nodes_count: usize) -> usize {
         // Right-shift each node-index by `bits_shr` to get its `h` high bits.
         let node_index_bit_len = nodes_count.trailing_zeros() as usize;
         node_index_bit_len - h
@@ -872,6 +882,7 @@ where
         sector_key_path: &Path,
         sector_key_cache_path: &Path,
         staged_data_path: &Path,
+        h: usize,
     ) -> Result<(TreeRDomain, TreeRDomain, TreeDDomain)> {
         // Sanity check all input path types.
         ensure!(
@@ -960,7 +971,7 @@ where
         let data_block_size: usize = chunk_size * FR_SIZE;
 
         // Precompute all rho values.
-        let rhos = Rhos::new(&phi, nodes_count);
+        let rhos = Rhos::new(&phi, h, nodes_count);
 
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()
@@ -1023,6 +1034,7 @@ where
         comm_c: TreeRDomain,
         comm_d_new: TreeDDomain,
         comm_sector_key: TreeRDomain,
+        h: usize,
     ) -> Result<()> {
         // Sanity check all input path types.
         ensure!(
@@ -1091,7 +1103,7 @@ where
         let data_block_size: usize = chunk_size * FR_SIZE;
 
         // Precompute all rho^-1 values.
-        let rho_invs = Rhos::new_inv(&phi, nodes_count);
+        let rho_invs = Rhos::new_inv(&phi, h, nodes_count);
 
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()
@@ -1136,6 +1148,7 @@ where
         comm_c: TreeRDomain,
         comm_d_new: TreeDDomain,
         comm_sector_key: TreeRDomain,
+        h: usize,
     ) -> Result<TreeRDomain> {
         // Sanity check all input path types.
         ensure!(
@@ -1209,7 +1222,7 @@ where
         let data_block_size: usize = chunk_size * FR_SIZE;
 
         // Precompute all rho values.
-        let rhos = Rhos::new(&phi, nodes_count);
+        let rhos = Rhos::new(&phi, h, nodes_count);
 
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()

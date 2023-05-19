@@ -22,7 +22,7 @@ use storage_proofs_core::{
 };
 use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
 use storage_proofs_update::{
-    constants::{TreeDArity, TreeDDomain, TreeRDomain, TreeRHasher},
+    constants::{h_default, TreeDArity, TreeDDomain, TreeRDomain, TreeRHasher},
     phi,
     vanilla::Rhos,
     EmptySectorUpdate, EmptySectorUpdateCompound, PartitionProof, PrivateInputs, PublicInputs,
@@ -174,6 +174,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
             sector_key_path,
             sector_key_cache_path,
             staged_data_path,
+            h_default(config.nodes_count),
         )?;
 
     let mut comm_d = [0; 32];
@@ -233,7 +234,8 @@ pub fn decode_from_range<R: Read, S: Read, W: Write>(
     let comm_d_domain = TreeDDomain::try_from_bytes(&comm_d[..])?;
     let comm_r_domain = TreeRDomain::try_from_bytes(&comm_r[..])?;
     let phi = phi(&comm_d_domain, &comm_r_domain);
-    let rho_invs = Rhos::new_inv_range(&phi, nodes_count, nodes_offset, num_nodes);
+    let h = h_default(nodes_count);
+    let rho_invs = Rhos::new_inv_range(&phi, h, nodes_count, nodes_offset, num_nodes);
 
     let bytes_length = num_nodes * NODE_SIZE;
 
@@ -311,6 +313,7 @@ pub fn decode_from<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
         comm_d_new.into(),
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
+        h_default(config.nodes_count),
     )?;
 
     info!("decode_from:finish");
@@ -347,6 +350,7 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
         comm_d_new.into(),
         <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
+        h_default(config.nodes_count),
     )?;
 
     // Persist p_aux and t_aux into the sector_key_cache_path here
