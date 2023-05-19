@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::fs::{metadata, OpenOptions};
 use std::iter::FromIterator;
 use std::marker::PhantomData;
+use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Error};
@@ -249,6 +251,100 @@ where
             apex_leafs: self.apex_leafs.clone(),
             challenge_proofs: self.challenge_proofs.clone(),
         }
+    }
+}
+
+// Computes all `2^h` rho values for the given `phi` in the given range. Each rho corresponds to
+// a `high` value, where `high` is the `h` high bits of a node-index.
+#[derive(Debug)]
+pub struct Rhos {
+    rhos: HashMap<usize, Fr>,
+    /// The amount of right shift that is needed to get the `h` high bits of a node.
+    bits_shr: usize,
+}
+
+impl Rhos {
+    /// Generate the `rho`s for a certain number of nodes.
+    ///
+    /// Those are used for encoding. The `nodes_count` is the total number of nodes of the sector.
+    pub fn new(phi: &TreeRDomain, h: usize, nodes_count: usize) -> Self {
+        Self::new_range(phi, h, nodes_count, 0, nodes_count)
+    }
+
+    /// Generate the inverted `rho`s for a certain number of nodes.
+    ///
+    /// Those are used for decoding. The `nodes_count` is the total number of nodes of the sector.
+    pub fn new_inv(phi: &TreeRDomain, h: usize, nodes_count: usize) -> Self {
+        Self::new_inv_range(phi, h, nodes_count, 0, nodes_count)
+    }
+
+    /// Generate the `rho`s for a certain number of nodes and range.
+    ///
+    /// Those are used for encoding.
+    ///
+    /// All inputs are in number of nodes. The `nodes_count` is the total number of nodes of the
+    /// sector. `offset` defines where the range should start, with a `num` sized length.
+    pub fn new_range(
+        phi: &TreeRDomain,
+        h: usize,
+        nodes_count: usize,
+        offset: usize,
+        num: usize,
+    ) -> Self {
+        let bits_shr = Self::calc_bits_shr(h, nodes_count);
+        let high_range = Self::calc_high_range(offset, num, bits_shr);
+
+        let rhos = high_range
+            .map(|high| (high, rho(phi, high as u32)))
+            .collect();
+        Self { rhos, bits_shr }
+    }
+
+    /// Generate the inverted `rho`s for a certain number of nodes and range.
+    ///
+    /// Those are used for decoding.
+    ///
+    /// All inputs are in number of nodes. The `nodes_count` is the total number of nodes of the
+    /// sector. `offset` defines where the range should start, with a `num` sized length.
+    pub fn new_inv_range(
+        phi: &TreeRDomain,
+        h: usize,
+        nodes_count: usize,
+        offset: usize,
+        num: usize,
+    ) -> Self {
+        let bits_shr = Self::calc_bits_shr(h, nodes_count);
+        let high_range = Self::calc_high_range(offset, num, bits_shr);
+
+        let rhos = high_range
+            .map(|high| {
+                (
+                    high,
+                    rho(phi, high as u32)
+                        .invert()
+                        .expect("rho inversion should not fail"),
+                )
+            })
+            .collect();
+        Self { rhos, bits_shr }
+    }
+
+    /// Get the rho for a specific node offset.
+    pub fn get(&self, offset: usize) -> Fr {
+        let high = offset >> self.bits_shr;
+        self.rhos[&high]
+    }
+
+    fn calc_bits_shr(h: usize, nodes_count: usize) -> usize {
+        // Right-shift each node-index by `bits_shr` to get its `h` high bits.
+        let node_index_bit_len = nodes_count.trailing_zeros() as usize;
+        node_index_bit_len - h
+    }
+
+    fn calc_high_range(offset: usize, num: usize, bits_shr: usize) -> RangeInclusive<usize> {
+        let first_high = offset >> bits_shr;
+        let last_high = (offset + num - 1) >> bits_shr;
+        first_high..=last_high
     }
 }
 
@@ -513,13 +609,6 @@ pub fn rho(phi: &TreeRDomain, high: u32) -> Fr {
     let phi: Fr = (*phi).into();
     let high = Fr::from(high as u64);
     Poseidon::new_with_preimage(&[phi, high], &POSEIDON_CONSTANTS_GEN_RANDOMNESS).hash()
-}
-
-// Computes all `2^h` rho values for the given `phi`. Each rho corresponds to one of the `2^h`
-// possible `high` values where `high` is the `h` high bits of a node-index.
-#[inline]
-pub fn rhos(h: usize, phi: &TreeRDomain) -> Vec<Fr> {
-    (0..1 << h).map(|high| rho(phi, high)).collect()
 }
 
 fn mmap_read(path: &Path) -> Result<Mmap, Error> {
@@ -881,12 +970,8 @@ where
         // in Fr elements (i.e. chunk_size * sizeof(Fr)).
         let data_block_size: usize = chunk_size * FR_SIZE;
 
-        // Right-shift each node-index by `get_high_bits_shr` to get its `h` high bits.
-        let node_index_bit_len = nodes_count.trailing_zeros() as usize;
-        let get_high_bits_shr = node_index_bit_len - h;
-
         // Precompute all rho values.
-        let rhos = rhos(h, &phi);
+        let rhos = Rhos::new(&phi, h, nodes_count);
 
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()
@@ -898,8 +983,7 @@ where
 
                     // Get the `h` high bits from the node-index.
                     let node_index = input_index / FR_SIZE;
-                    let high = node_index >> get_high_bits_shr;
-                    let rho = rhos[high];
+                    let rho = rhos.get(node_index);
 
                     let sector_key_fr =
                         bytes_into_fr(&sector_key_data[input_index..input_index + FR_SIZE])?;
@@ -1018,15 +1102,8 @@ where
         // in Fr elements (i.e. chunk_size * sizeof(Fr)).
         let data_block_size: usize = chunk_size * FR_SIZE;
 
-        // Right-shift each node-index by `get_high_bits_shr` to get its `h` high bits.
-        let node_index_bit_len = nodes_count.trailing_zeros() as usize;
-        let get_high_bits_shr = node_index_bit_len - h;
-
         // Precompute all rho^-1 values.
-        let rho_invs: Vec<Fr> = rhos(h, &phi)
-            .into_iter()
-            .map(|rho| rho.invert().unwrap())
-            .collect();
+        let rho_invs = Rhos::new_inv(&phi, h, nodes_count);
 
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()
@@ -1038,8 +1115,7 @@ where
 
                     // Get the `h` high bits from the node-index.
                     let node_index = input_index / FR_SIZE;
-                    let high = node_index >> get_high_bits_shr;
-                    let rho_inv = rho_invs[high];
+                    let rho_inv = rho_invs.get(node_index);
 
                     let sector_key_fr =
                         bytes_into_fr(&sector_key_data[input_index..input_index + FR_SIZE])?;
@@ -1145,12 +1221,8 @@ where
         // in Fr elements (i.e. chunk_size * sizeof(Fr)).
         let data_block_size: usize = chunk_size * FR_SIZE;
 
-        // Right-shift each node-index by `get_high_bits_shr` to get its `h` high bits.
-        let node_index_bit_len = nodes_count.trailing_zeros() as usize;
-        let get_high_bits_shr = node_index_bit_len - h;
-
         // Precompute all rho values.
-        let rhos = rhos(h, &phi);
+        let rhos = Rhos::new(&phi, h, nodes_count);
 
         Vec::from_iter((0..end).step_by(data_block_size))
             .into_par_iter()
@@ -1162,8 +1234,7 @@ where
 
                     // Get the `h` high bits from the node-index.
                     let node_index = input_index / FR_SIZE;
-                    let high = node_index >> get_high_bits_shr;
-                    let rho = rhos[high];
+                    let rho = rhos.get(node_index);
 
                     let data_fr = bytes_into_fr(&data[input_index..input_index + FR_SIZE])?;
                     let replica_data_fr =

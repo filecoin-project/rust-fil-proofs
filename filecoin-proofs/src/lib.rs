@@ -4,6 +4,7 @@
 #![allow(clippy::upper_case_acronyms)]
 
 pub mod caches;
+pub mod chunk_iter;
 pub mod constants;
 pub mod param;
 pub mod parameters;
@@ -14,6 +15,7 @@ mod api;
 mod commitment_reader;
 
 pub use api::*;
+pub use chunk_iter::ChunkIterator;
 pub use commitment_reader::*;
 pub use constants::*;
 pub use types::*;
