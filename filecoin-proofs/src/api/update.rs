@@ -18,7 +18,7 @@ use storage_proofs_core::{
     merkle::{get_base_tree_count, MerkleTreeTrait},
     multi_proof::MultiProof,
     proof::ProofScheme,
-    util::{ChunkIterator, NODE_SIZE},
+    util::NODE_SIZE,
 };
 use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
 use storage_proofs_update::{
@@ -31,6 +31,7 @@ use storage_proofs_update::{
 
 use crate::{
     caches::{get_empty_sector_update_params, get_empty_sector_update_verifying_key},
+    chunk_iter::ChunkIterator,
     constants::{DefaultPieceDomain, DefaultPieceHasher},
     pieces::verify_pieces,
     types::{
