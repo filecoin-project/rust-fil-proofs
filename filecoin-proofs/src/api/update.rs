@@ -251,8 +251,8 @@ pub fn decode_from_range<R: Read, S: Read, W: Write>(
             break;
         }
 
-        let input_chunk = input_chunk_result?;
-        let sector_key_chunk = sector_key_chunk_result?;
+        let input_chunk = input_chunk_result.context("cannot read input data")?;
+        let sector_key_chunk = sector_key_chunk_result.context("connot read sector key data")?;
 
         // If the bytes that still need to be read is smaller then the chunk size, then use that
         // size.
