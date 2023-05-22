@@ -23,41 +23,6 @@ use crate::{
     PartitionSnarkProof, PoStType, SnarkProof, SINGLE_PARTITION_PROOF_LEN,
 };
 
-// Ensure that any associated cached data persisted is discarded.
-pub fn clear_cache<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
-    info!("clear_cache:start");
-
-    let mut t_aux: TemporaryAux<Tree, Sha256Hasher> = {
-        let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
-        let aux_bytes = fs::read(&f_aux_path)
-            .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
-
-        deserialize(&aux_bytes)
-    }?;
-
-    t_aux.set_cache_path(cache_dir);
-    let result = TemporaryAux::<Tree, DefaultPieceHasher>::clear_temp(t_aux);
-
-    info!("clear_cache:finish");
-
-    result
-}
-
-// Ensure that any associated cached data persisted is discarded.
-pub fn clear_caches<Tree: MerkleTreeTrait>(
-    replicas: &BTreeMap<SectorId, PrivateReplicaInfo<Tree>>,
-) -> Result<()> {
-    info!("clear_caches:start");
-
-    for replica in replicas.values() {
-        clear_cache::<Tree>(replica.cache_dir.as_path())?;
-    }
-
-    info!("clear_caches:finish");
-
-    Ok(())
-}
-
 /// Generates the challenges per SectorId required for either a Window
 /// proof-of-spacetime or a Winning proof-of-spacetime.
 pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(

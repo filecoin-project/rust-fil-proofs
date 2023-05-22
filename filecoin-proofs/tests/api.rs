@@ -10,8 +10,8 @@ use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
-    add_piece, aggregate_seal_commit_proofs, clear_cache, compute_comm_d, decode_from,
-    decode_from_range, encode_into, fauxrep_aux, generate_empty_sector_update_proof,
+    add_piece, aggregate_seal_commit_proofs, clear_cache, clear_synthetic_proofs, compute_comm_d,
+    decode_from, decode_from_range, encode_into, fauxrep_aux, generate_empty_sector_update_proof,
     generate_empty_sector_update_proof_with_vanilla, generate_fallback_sector_challenges,
     generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
     generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_synth_proofs,
@@ -1578,6 +1578,9 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
         piece_infos,
     )?;
 
+    if config.feature_enabled(ApiFeature::SyntheticPoRep) {
+        clear_synthetic_proofs::<Tree>(cache_dir_path)?;
+    }
     clear_cache::<Tree>(cache_dir_path)?;
 
     ensure!(
@@ -1766,6 +1769,9 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
 
     if skip_proof {
+        if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
+            clear_synthetic_proofs::<Tree>(cache_dir.path())?;
+        }
         clear_cache::<Tree>(cache_dir.path())?;
     } else {
         proof_and_unseal::<Tree>(
@@ -2187,6 +2193,9 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
 
     remove_encoded_file.close()?;
 
+    if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
+        clear_synthetic_proofs::<Tree>(cache_dir.path())?;
+    }
     clear_cache::<Tree>(cache_dir.path())?;
     clear_cache::<Tree>(new_cache_dir.path())?;
 

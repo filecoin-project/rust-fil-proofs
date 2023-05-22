@@ -1,10 +1,11 @@
+use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
-use filecoin_hashers::Hasher;
+use filecoin_hashers::{sha256::Sha256Hasher, Hasher};
 use fr32::{write_unpadded, Fr32Reader};
 use log::{info, trace};
 use memmap2::MmapOptions;
@@ -33,8 +34,8 @@ use crate::{
     parameters::public_params,
     pieces::{get_piece_alignment, sum_piece_bytes_with_alignment},
     types::{
-        Commitment, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, ProverId,
-        SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
+        Commitment, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PrivateReplicaInfo,
+        ProverId, SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
     },
 };
 
@@ -55,6 +56,61 @@ pub use window_post::*;
 pub use winning_post::*;
 
 pub use storage_proofs_update::constants::partition_count;
+
+// Ensure that any associated cached data persisted is discarded.
+pub fn clear_cache<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
+    info!("clear_cache:start");
+
+    let mut t_aux: TemporaryAux<Tree, Sha256Hasher> = {
+        let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
+        let aux_bytes = fs::read(&f_aux_path)
+            .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
+
+        deserialize(&aux_bytes)
+    }?;
+
+    t_aux.set_cache_path(cache_dir);
+    let result = TemporaryAux::<Tree, DefaultPieceHasher>::clear_temp(t_aux);
+
+    info!("clear_cache:finish");
+
+    result
+}
+
+// Ensure that any associated cached data persisted is discarded.
+pub fn clear_caches<Tree: MerkleTreeTrait>(
+    replicas: &BTreeMap<SectorId, PrivateReplicaInfo<Tree>>,
+) -> Result<()> {
+    info!("clear_caches:start");
+
+    for replica in replicas.values() {
+        clear_cache::<Tree>(replica.cache_dir.as_path())?;
+    }
+
+    info!("clear_caches:finish");
+
+    Ok(())
+}
+
+// Ensure that any persisted vanilla proofs generated from synthetic porep are discarded.
+pub fn clear_synthetic_proofs<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
+    info!("clear_synthetic_proofs:start");
+
+    let mut t_aux: TemporaryAux<Tree, Sha256Hasher> = {
+        let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
+        let aux_bytes = fs::read(&f_aux_path)
+            .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
+
+        deserialize(&aux_bytes)
+    }?;
+
+    t_aux.set_cache_path(cache_dir);
+    let result = TemporaryAux::<Tree, DefaultPieceHasher>::clear_synthetic_proofs(&t_aux);
+
+    info!("clear_synthetic_proofs:finish");
+
+    result
+}
 
 /// Unseals the sector at `sealed_path` and returns the bytes for a piece
 /// whose first (unpadded) byte begins at `offset` and ends at `offset` plus
