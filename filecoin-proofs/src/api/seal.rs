@@ -1300,12 +1300,7 @@ pub fn sdr<P, Tree: 'static + MerkleTreeTrait>(
 where
     P: AsRef<Path>,
 {
-    let setup_params = setup_params(
-        porep_config.padded_bytes_amount(),
-        usize::from(porep_config.partitions),
-        porep_config.porep_id,
-        porep_config.api_version,
-    )?;
+    let setup_params = setup_params(porep_config)?;
     let public_params = StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params)?;
 
     StackedDrg::<Tree, DefaultPieceHasher>::replicate_phase1(

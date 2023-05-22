@@ -15,16 +15,16 @@ use filecoin_proofs::{
     generate_empty_sector_update_proof_with_vanilla, generate_fallback_sector_challenges,
     generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
     generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_synth_proofs,
-    generate_window_post, generate_window_post_with_vanilla, generate_winning_post,
-    generate_winning_post_sector_challenge, generate_winning_post_with_vanilla,
-    get_num_partition_for_fallback_post, get_seal_inputs, merge_window_post_partition_proofs,
-    remove_encoded_data, seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1,
-    seal_pre_commit_phase2, unseal_range, validate_cache_for_commit,
-    validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs,
-    verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
-    verify_single_partition_proof, verify_window_post, verify_winning_post, Commitment,
-    DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PoStConfig,
-    PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput,
+    generate_tree_c, generate_tree_r_last, generate_window_post, generate_window_post_with_vanilla,
+    generate_winning_post, generate_winning_post_sector_challenge,
+    generate_winning_post_with_vanilla, get_num_partition_for_fallback_post, get_seal_inputs,
+    merge_window_post_partition_proofs, remove_encoded_data, seal_commit_phase1,
+    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, unseal_range,
+    validate_cache_for_commit, validate_cache_for_precommit_phase2,
+    verify_aggregate_seal_commit_proofs, verify_empty_sector_update_proof, verify_partition_proofs,
+    verify_seal, verify_single_partition_proof, verify_window_post, verify_winning_post,
+    Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
+    PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput,
     SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB,
     SectorShape32KiB, SectorShape4KiB, SectorUpdateConfig, UnpaddedByteIndex, UnpaddedBytesAmount,
     SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
@@ -1743,13 +1743,22 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     // Check if creating only the tree_r_last generates the same output as the full pre commit
     // phase 2 process.
     let tree_r_last_dir = tempdir().expect("failed to create temp dir");
-    generate_tree_r_last::<_, _, Tree>(sector_size, &sealed_sector_file, &tree_r_last_dir)?;
+    generate_tree_r_last::<_, _, Tree>(
+        porep_config.sector_size.into(),
+        &sealed_sector_file,
+        &tree_r_last_dir,
+    )?;
     compare_trees::<Tree>(&tree_r_last_dir, &cache_dir, CacheKey::CommRLastTree)?;
 
     // Check if creating only the tree_r generates the same output as the full pre commit phase 2
     // process.
     let tree_c_dir = tempdir().expect("failed to create temp dir");
-    generate_tree_c::<_, _, Tree>(sector_size, &cache_dir, &tree_c_dir, num_layers)?;
+    generate_tree_c::<_, _, Tree>(
+        porep_config.sector_size.into(),
+        &cache_dir,
+        &tree_c_dir,
+        num_layers,
+    )?;
     compare_trees::<Tree>(&tree_c_dir, &cache_dir, CacheKey::CommCTree)?;
 
     let comm_r = pre_commit_output.comm_r;

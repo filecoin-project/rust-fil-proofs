@@ -516,6 +516,12 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
             .clone()
             .join(SYNTHETIC_POREP_VANILLA_PROOFS_KEY)
     }
+
+    pub fn clear_synthetic_proofs(&self) -> Result<()> {
+        let synth_proofs_path = self.synth_proofs_path();
+        remove_file(&synth_proofs_path)
+            .with_context(|| format!("Failed to delete {:?}", &synth_proofs_path))
+    }
 }
 
 #[derive(Debug)]
