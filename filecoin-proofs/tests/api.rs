@@ -40,8 +40,11 @@ use rand_xorshift::XorShiftRng;
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     api_version::{ApiFeature, ApiVersion},
-    cache_key::CacheKey, is_legacy_porep_id, merkle::get_base_tree_count,
-    sector::SectorId, util::NODE_SIZE,
+    cache_key::CacheKey,
+    is_legacy_porep_id,
+    merkle::get_base_tree_count,
+    sector::SectorId,
+    util::NODE_SIZE,
 };
 use storage_proofs_update::constants::TreeRHasher;
 use tempfile::{tempdir, NamedTempFile, TempDir};
