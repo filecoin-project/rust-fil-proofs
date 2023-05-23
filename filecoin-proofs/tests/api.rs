@@ -1554,6 +1554,7 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
     piece_infos: &[PieceInfo],
 ) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])> {
     if config.feature_enabled(ApiFeature::SyntheticPoRep) {
+        trace!("SyntheticPoRep feature is enabled");
         generate_synth_proofs::<_, Tree>(
             config,
             cache_dir_path,
@@ -1564,6 +1565,8 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
             pre_commit_output.clone(),
             piece_infos,
         )?;
+    } else {
+        trace!("SyntheticPoRep feature is NOT enabled");
     }
 
     let phase1_output = seal_commit_phase1::<_, Tree>(
