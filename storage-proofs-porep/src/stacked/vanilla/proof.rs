@@ -146,6 +146,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             info!("generating synthetic vanilla proofs in a single partition");
         }
 
+        info!(
+            "read_synth_porep: {}, gen_synth_porep {}",
+            read_synth_proofs, gen_synth_proofs
+        );
         let get_drg_parents_columns = |x: usize| -> Result<Vec<Column<Tree::Hasher>>> {
             let base_degree = graph.base_graph().degree();
 
