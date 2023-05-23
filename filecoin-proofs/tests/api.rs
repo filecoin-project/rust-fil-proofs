@@ -7,7 +7,6 @@ use anyhow::{ensure, Context, Error, Result};
 use bellperson::groth16;
 use bincode::serialize;
 use blstrs::{Bls12, Scalar as Fr};
-use log::trace;
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
@@ -1555,7 +1554,6 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
     piece_infos: &[PieceInfo],
 ) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])> {
     if config.feature_enabled(ApiFeature::SyntheticPoRep) {
-        trace!("SyntheticPoRep feature is enabled");
         generate_synth_proofs::<_, Tree>(
             config,
             cache_dir_path,
@@ -1566,8 +1564,6 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
             pre_commit_output.clone(),
             piece_infos,
         )?;
-    } else {
-        trace!("SyntheticPoRep feature is NOT enabled");
     }
 
     let phase1_output = seal_commit_phase1::<_, Tree>(

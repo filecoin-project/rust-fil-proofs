@@ -377,6 +377,13 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     piece_infos: &[PieceInfo],
 ) -> Result<SealCommitPhase1Output<Tree>> {
     info!("seal_commit_phase1:start: {:?}", sector_id);
+
+    if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
+        info!("SyntheticPoRep feature is enabled");
+    } else {
+        info!("SyntheticPoRep feature is NOT enabled");
+    }
+
     let out = seal_commit_phase1_inner::<T, Tree>(
         porep_config,
         cache_path,
