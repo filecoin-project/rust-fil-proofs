@@ -73,6 +73,12 @@ where
 {
     info!("seal_pre_commit_phase1:start: {:?}", sector_id);
 
+    if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
+        info!("SyntheticPoRep feature is enabled");
+    } else {
+        info!("SyntheticPoRep feature is NOT enabled");
+    }
+
     let in_path_is_dev_zero = in_path.as_ref() == Path::new("/dev/zero");
     if in_path_is_dev_zero {
         trace!("using unreplicated data file /dev/zero");
@@ -223,6 +229,12 @@ where
     S: AsRef<Path>,
 {
     info!("seal_pre_commit_phase2:start");
+
+    if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
+        info!("SyntheticPoRep feature is enabled");
+    } else {
+        info!("SyntheticPoRep feature is NOT enabled");
+    }
 
     // Sanity check all input path types.
     ensure!(
