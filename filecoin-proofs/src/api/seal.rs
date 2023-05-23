@@ -598,8 +598,8 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     )?;
     trace!("snark_proof:finish");
 
-    let proof = MultiProof::new(groth_proofs, &groth_params.pvk);
-
+    let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
+    let proof = MultiProof::new(groth_proofs, &verifying_key);
     let mut buf =
         Vec::with_capacity(SINGLE_PARTITION_PROOF_LEN * usize::from(porep_config.partitions));
 

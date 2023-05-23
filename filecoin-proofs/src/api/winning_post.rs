@@ -13,7 +13,7 @@ use storage_proofs_post::fallback::{
 };
 
 use crate::{
-    api::{as_safe_commitment, partition_vanilla_proofs},
+    api::{as_safe_commitment, partition_vanilla_proofs, util},
     caches::{get_post_params, get_post_verifying_key},
     parameters::winning_post_setup_params,
     types::{
@@ -81,17 +81,16 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         &vanilla_proofs,
     )?;
 
-    let proof = FallbackPoStCompound::prove_with_vanilla(
+    let proofs = FallbackPoStCompound::prove_with_vanilla(
         &pub_params,
         &pub_inputs,
         partitioned_proofs,
         &groth_params,
     )?;
-    let proof = proof.to_vec()?;
 
     info!("generate_winning_post_with_vanilla:finish");
 
-    Ok(proof)
+    util::proofs_to_bytes(&proofs)
 }
 
 /// Generates a Winning proof-of-spacetime.
@@ -174,13 +173,12 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
         sectors: &priv_sectors,
     };
 
-    let proof =
+    let proofs =
         FallbackPoStCompound::<Tree>::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)?;
-    let proof = proof.to_vec()?;
 
     info!("generate_winning_post:finish");
 
-    Ok(proof)
+    util::proofs_to_bytes(&proofs)
 }
 
 /// Given some randomness and the length of available sectors, generates the challenged sector.

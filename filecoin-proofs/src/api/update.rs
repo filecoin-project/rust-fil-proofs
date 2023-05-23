@@ -30,6 +30,7 @@ use storage_proofs_update::{
 };
 
 use crate::{
+    api::util,
     caches::{get_empty_sector_update_params, get_empty_sector_update_verifying_key},
     chunk_iter::ChunkIterator,
     constants::{DefaultPieceDomain, DefaultPieceHasher},
@@ -589,7 +590,7 @@ pub fn generate_empty_sector_update_proof_with_vanilla<
     let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
 
     let groth_params = get_empty_sector_update_params::<Tree>(porep_config)?;
-    let multi_proof = EmptySectorUpdateCompound::prove_with_vanilla(
+    let proofs = EmptySectorUpdateCompound::prove_with_vanilla(
         &pub_params_compound,
         &public_inputs,
         vanilla_proofs,
@@ -598,7 +599,8 @@ pub fn generate_empty_sector_update_proof_with_vanilla<
 
     info!("generate_empty_sector_update_proof_with_vanilla:finish");
 
-    Ok(EmptySectorUpdateProof(multi_proof.to_vec()?))
+    let proofs_bytes = util::proofs_to_bytes(&proofs)?;
+    Ok(EmptySectorUpdateProof(proofs_bytes))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -656,7 +658,7 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
     let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
 
     let groth_params = get_empty_sector_update_params::<Tree>(porep_config)?;
-    let multi_proof = EmptySectorUpdateCompound::prove(
+    let proofs = EmptySectorUpdateCompound::prove(
         &pub_params_compound,
         &public_inputs,
         &private_inputs,
@@ -665,7 +667,8 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
 
     info!("generate_empty_sector_update_proof:finish");
 
-    Ok(EmptySectorUpdateProof(multi_proof.to_vec()?))
+    let proofs_bytes = util::proofs_to_bytes(&proofs)?;
+    Ok(EmptySectorUpdateProof(proofs_bytes))
 }
 
 pub fn verify_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(

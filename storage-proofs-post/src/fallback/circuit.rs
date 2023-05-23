@@ -233,7 +233,7 @@ impl<Tree: 'static + MerkleTreeTrait> FallbackPoStCircuit<Tree> {
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
         for sector_cs in css.into_iter() {
-            cs.extend(sector_cs);
+            cs.extend(&sector_cs);
         }
 
         Ok(())

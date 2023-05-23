@@ -37,6 +37,10 @@ pub const SRS_SHARED_KEY_NAME: &str = "fil-inner-product-v1";
 pub struct LockedFile(File);
 
 pub type ParameterMap = BTreeMap<String, ParameterData>;
+#[cfg(not(feature = "cuda-supraseal"))]
+pub type Bls12GrothParams = groth16::MappedParameters<Bls12>;
+#[cfg(feature = "cuda-supraseal")]
+pub type Bls12GrothParams = groth16::SuprasealParameters<Bls12>;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ParameterData {
@@ -273,7 +277,7 @@ where
         rng: Option<&mut R>,
         circuit: C,
         pub_params: &P,
-    ) -> Result<groth16::MappedParameters<Bls12>> {
+    ) -> Result<Bls12GrothParams> {
         let id = Self::cache_identifier(pub_params);
         let cache_path = ensure_ancestor_dirs_exist(parameter_cache_params_path(&id))?;
 
@@ -363,16 +367,21 @@ where
     /// is not set, an error will result if parameters are not
     /// present.
     fn get_verifying_key<R: RngCore>(
-        rng: Option<&mut R>,
-        circuit: C,
+        #[allow(unused_variables)] rng: Option<&mut R>,
+        #[allow(unused_variables)] circuit: C,
         pub_params: &P,
     ) -> Result<groth16::VerifyingKey<Bls12>> {
         let id = Self::cache_identifier(pub_params);
 
+        #[cfg(not(feature = "cuda-supraseal"))]
         let generate = || -> Result<groth16::VerifyingKey<Bls12>> {
             let groth_params = Self::get_groth_params(rng, circuit, pub_params)?;
             info!("Getting verifying key. (id: {})", &id);
             Ok(groth_params.vk)
+        };
+        #[cfg(feature = "cuda-supraseal")]
+        let generate = || -> Result<groth16::VerifyingKey<Bls12>> {
+            Err(anyhow::anyhow!("Cannot find parameters file. For SupraSeal it is expected that the parameter files already exist and don't need to be generated."))
         };
 
         // generate (or load) verifying key
@@ -446,9 +455,8 @@ pub fn verify_production_entry(
     Ok(true)
 }
 
-// Reads parameter mappings using mmap so that they can be lazily
-// loaded later.
-pub fn read_cached_params(cache_entry_path: &Path) -> Result<groth16::MappedParameters<Bls12>> {
+/// Reads parameter from parameter cache.
+pub fn read_cached_params(cache_entry_path: &Path) -> Result<Bls12GrothParams> {
     info!("checking cache_path: {:?} for parameters", cache_entry_path);
 
     let verify_production_params = SETTINGS.verify_production_params;
@@ -474,14 +482,31 @@ pub fn read_cached_params(cache_entry_path: &Path) -> Result<groth16::MappedPara
         verify_production_entry(cache_entry_path, cache_key, selector)?;
     }
 
-    with_exclusive_read_lock::<_, io::Error, _>(cache_entry_path, |_file| {
-        let mapped_params =
-            groth16::Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false)?;
-        info!("read parameters from cache {:?} ", cache_entry_path);
+    read_cached_params_inner(cache_entry_path).map_err(Into::into)
+}
 
-        Ok(mapped_params)
+#[cfg(not(feature = "cuda-supraseal"))]
+fn read_cached_params_inner(
+    cache_entry_path: &Path,
+) -> std::result::Result<groth16::MappedParameters<Bls12>, io::Error> {
+    with_exclusive_read_lock(cache_entry_path, |_file| {
+        let mapped_params =
+            groth16::Parameters::build_mapped_parameters(cache_entry_path.to_path_buf(), false);
+        info!("read parameters from cache {:?} ", cache_entry_path);
+        mapped_params
     })
-    .map_err(Into::into)
+}
+
+#[cfg(feature = "cuda-supraseal")]
+fn read_cached_params_inner(
+    cache_entry_path: &Path,
+) -> std::result::Result<groth16::SuprasealParameters<Bls12>, io::Error> {
+    let supraseal_params = Bls12GrothParams::new(cache_entry_path.to_path_buf());
+    info!(
+        "read parameters into SuprasSeal from cache {:?} ",
+        cache_entry_path
+    );
+    supraseal_params
 }
 
 fn read_cached_verifying_key(cache_entry_path: &Path) -> Result<groth16::VerifyingKey<Bls12>> {
