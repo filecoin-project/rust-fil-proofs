@@ -519,8 +519,18 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
 
     pub fn clear_synthetic_proofs(&self) -> Result<()> {
         let synth_proofs_path = self.synth_proofs_path();
-        remove_file(&synth_proofs_path)
-            .with_context(|| format!("Failed to delete {:?}", &synth_proofs_path))
+        if Path::new(&synth_proofs_path).exists() {
+            trace!("removing synthetic proofs at {:?}", synth_proofs_path);
+            remove_file(&synth_proofs_path)
+                .with_context(|| format!("Failed to delete {:?}", &synth_proofs_path))
+        } else {
+            trace!(
+                "persisted synthetic proofs do not exist at {:?}",
+                synth_proofs_path
+            );
+
+            Ok(())
+        }
     }
 }
 

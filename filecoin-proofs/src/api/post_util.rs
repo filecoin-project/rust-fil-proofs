@@ -1,24 +1,18 @@
 use std::collections::BTreeMap;
-use std::fs;
-use std::path::Path;
 
 use anyhow::{anyhow, ensure, Context, Result};
-use bincode::deserialize;
-use filecoin_hashers::{sha256::Sha256Hasher, Hasher};
+use filecoin_hashers::Hasher;
 use log::{debug, info};
-use storage_proofs_core::{
-    cache_key::CacheKey, merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId,
-};
+use storage_proofs_core::{merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId};
 use storage_proofs_post::fallback::{
     self, generate_leaf_challenge, get_challenge_index, FallbackPoSt, SectorProof,
 };
 
 use crate::{
     api::as_safe_commitment,
-    constants::DefaultPieceHasher,
     types::{
         ChallengeSeed, FallbackPoStSectorProof, PoStConfig, PrivateReplicaInfo, ProverId,
-        TemporaryAux, VanillaProof,
+        VanillaProof,
     },
     PartitionSnarkProof, PoStType, SnarkProof, SINGLE_PARTITION_PROOF_LEN,
 };
