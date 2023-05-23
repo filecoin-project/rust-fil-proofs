@@ -7,6 +7,7 @@ use anyhow::{ensure, Context, Error, Result};
 use bellperson::groth16;
 use bincode::serialize;
 use blstrs::{Bls12, Scalar as Fr};
+use log::trace;
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
