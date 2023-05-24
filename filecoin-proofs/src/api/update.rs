@@ -20,7 +20,7 @@ use storage_proofs_core::{
     proof::ProofScheme,
     util::NODE_SIZE,
 };
-use storage_proofs_porep::stacked::{PersistentAux, StackedCompound, TemporaryAux};
+use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
 use storage_proofs_update::{
     constants::{h_default, TreeDArity, TreeDDomain, TreeRDomain, TreeRHasher},
     phi,
@@ -916,17 +916,8 @@ pub fn aggregate_empty_sector_update_proofs<
         "cannot aggregate with empty sector_update_inputs"
     );
 
-    let target_proofs_len = get_aggregate_target_len(sector_update_inputs.len());
-    ensure!(
-        target_proofs_len > 1,
-        "cannot aggregate less than two proofs"
-    );
-    trace!(
-        "aggregate_empty_sector_update_proofs will pad proofs to target_len {}",
-        target_proofs_len
-    );
-
-    let partitions = usize::from(porep_config.partitions);
+    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let partitions = usize::from(config.update_partitions);
     let verifying_key = get_empty_sector_update_verifying_key::<Tree>(porep_config)?;
 
     let mut proofs: Vec<_> = proofs
@@ -945,6 +936,9 @@ pub fn aggregate_empty_sector_update_proofs<
         proofs.len(),
     );
 
+    // Note that the proofs count here is not the same as the input
+    // proofs since the multi proof type takes the partitions into
+    // account
     let target_proofs_len = get_aggregate_target_len(proofs.len());
     ensure!(
         target_proofs_len > 1,
@@ -970,7 +964,7 @@ pub fn aggregate_empty_sector_update_proofs<
     };
 
     let srs_prover_key = get_stacked_srs_key::<Tree>(porep_config, proofs.len())?;
-    let aggregate_proof = StackedCompound::<Tree, DefaultPieceHasher>::aggregate_proofs(
+    let aggregate_proof = EmptySectorUpdateCompound::<Tree>::aggregate_proofs(
         &srs_prover_key,
         &hashed_commitments,
         &proofs.as_slice(),
@@ -1058,7 +1052,7 @@ pub fn verify_aggregate_sector_update_proofs<
         get_stacked_srs_verifier_key::<Tree>(porep_config, aggregated_proofs_len)?;
 
     trace!("start verifying aggregate sector update proof");
-    let result = StackedCompound::<Tree, DefaultPieceHasher>::verify_aggregate_proofs(
+    let result = EmptySectorUpdateCompound::<Tree>::verify_aggregate_proofs(
         &srs_verifier_key,
         &verifying_key,
         &hashed_commitments,
