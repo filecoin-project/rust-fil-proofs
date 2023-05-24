@@ -120,7 +120,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
-    let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path)
+    let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path, false)
         .expect("failed to restore contents of t_aux");
 
     let priv_inputs = PrivateInputs::<Tree, Sha256Hasher> { p_aux, t_aux };

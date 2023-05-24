@@ -92,6 +92,26 @@ pub fn clear_caches<Tree: MerkleTreeTrait>(
     Ok(())
 }
 
+// Ensure that any persisted layer data generated from porep are discarded.
+pub fn clear_layer_data<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
+    info!("clear_layer_data:start");
+
+    let mut t_aux: TemporaryAux<Tree, Sha256Hasher> = {
+        let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
+        let aux_bytes = fs::read(&f_aux_path)
+            .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
+
+        deserialize(&aux_bytes)
+    }?;
+
+    t_aux.set_cache_path(cache_dir);
+    let result = TemporaryAux::<Tree, DefaultPieceHasher>::clear_layer_data(&t_aux);
+
+    info!("clear_layer_data:finish");
+
+    result
+}
+
 // Ensure that any persisted vanilla proofs generated from synthetic porep are discarded.
 pub fn clear_synthetic_proofs<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
     info!("clear_synthetic_proofs:start");

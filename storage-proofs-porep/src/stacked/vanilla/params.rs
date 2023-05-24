@@ -428,13 +428,27 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
         self.labels.column(column_index)
     }
 
+    fn cached(&self, config: &StoreConfig) -> bool {
+        Path::new(&StoreConfig::data_path(&config.path, &config.id)).exists()
+    }
+
+    // 'clear_layer_data' will discard all persisted layer data that is no longer required.
+    pub fn clear_layer_data(&self) -> Result<()> {
+        for i in 0..self.labels.labels.len() {
+            let cur_config = self.labels.labels[i].clone();
+            if self.cached(&cur_config) {
+                DiskStore::<<Tree::Hasher as Hasher>::Domain>::delete(cur_config)
+                    .with_context(|| format!("labels {}", i))?;
+                trace!("layer {} deleted", i);
+            }
+        }
+
+        Ok(())
+    }
+
     // 'clear_temp' will discard all persisted merkle and layer data
     // that is no longer required.
     pub fn clear_temp(t_aux: TemporaryAux<Tree, G>) -> Result<()> {
-        let cached = |config: &StoreConfig| {
-            Path::new(&StoreConfig::data_path(&config.path, &config.id)).exists()
-        };
-
         let delete_tree_c_store = |config: &StoreConfig, tree_c_size: usize| -> Result<()> {
             let tree_c_store = DiskStore::<<Tree::Hasher as Hasher>::Domain>::new_from_disk(
                 tree_c_size,
@@ -458,13 +472,14 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
             Ok(())
         };
 
-        if cached(&t_aux.tree_d_config) {
+        let tree_d_config = t_aux.tree_d_config.clone();
+        if t_aux.cached(&tree_d_config) {
             let tree_d_size = t_aux
                 .tree_d_config
                 .size
                 .context("tree_d config has no size")?;
             let tree_d_store: DiskStore<G::Domain> =
-                DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &t_aux.tree_d_config)
+                DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &tree_d_config)
                     .context("tree_d")?;
             // Note: from_data_store requires the base tree leaf count
             let tree_d = BinaryMerkleTree::<G>::from_data_store(
@@ -473,7 +488,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
             )
             .context("tree_d")?;
 
-            tree_d.delete(t_aux.tree_d_config).context("tree_d")?;
+            tree_d.delete(tree_d_config).context("tree_d")?;
             trace!("tree d deleted");
         }
 
@@ -484,9 +499,9 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
             .context("tree_c config has no size")?;
         let configs = split_config(t_aux.tree_c_config.clone(), tree_count)?;
 
-        if cached(&t_aux.tree_c_config) {
+        if t_aux.cached(&t_aux.tree_c_config) {
             delete_tree_c_store(&t_aux.tree_c_config, tree_c_size)?;
-        } else if cached(&configs[0]) {
+        } else if t_aux.cached(&configs[0]) {
             for config in &configs {
                 // Trees with sub-trees cannot be instantiated and deleted via the existing tree interface since
                 // knowledge of how the base trees are split exists outside of merkle light.  For now, we manually
@@ -498,16 +513,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
         }
         trace!("tree c deleted");
 
-        for i in 0..t_aux.labels.labels.len() {
-            let cur_config = t_aux.labels.labels[i].clone();
-            if cached(&cur_config) {
-                DiskStore::<<Tree::Hasher as Hasher>::Domain>::delete(cur_config)
-                    .with_context(|| format!("labels {}", i))?;
-                trace!("layer {} deleted", i);
-            }
-        }
-
-        Ok(())
+        t_aux.clear_layer_data()
     }
 
     pub fn synth_proofs_path(&self) -> PathBuf {
@@ -553,7 +559,11 @@ pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher> {
 }
 
 impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
-    pub fn new(t_aux: &TemporaryAux<Tree, G>, replica_path: PathBuf) -> Result<Self> {
+    pub fn new(
+        t_aux: &TemporaryAux<Tree, G>,
+        replica_path: PathBuf,
+        skip_labels: bool,
+    ) -> Result<Self> {
         // tree_d_size stored in the config is the base tree size
         let tree_d_size = t_aux.tree_d_config.size.expect("config size failure");
         let tree_d_leafs = get_merkle_tree_leafs(tree_d_size, BINARY_ARITY)?;
@@ -605,15 +615,29 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
             LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
         >(tree_r_last_size, &configs, &replica_config)?;
 
-        Ok(TemporaryAuxCache {
-            labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
-            tree_d,
-            tree_r_last,
-            tree_r_last_config_rows_to_discard,
-            tree_c,
-            replica_path,
-            t_aux: t_aux.clone(),
-        })
+        // Skipping labels is for when SyntheticPoRep is used and the labels no longer exist.
+        if skip_labels {
+            trace!("Skipping label instantiation");
+            Ok(TemporaryAuxCache {
+                labels: LabelsCache::new(&Labels::new(Vec::new())).context("labels_cache")?,
+                tree_d,
+                tree_r_last,
+                tree_r_last_config_rows_to_discard,
+                tree_c,
+                replica_path,
+                t_aux: t_aux.clone(),
+            })
+        } else {
+            Ok(TemporaryAuxCache {
+                labels: LabelsCache::new(&t_aux.labels).context("labels_cache")?,
+                tree_d,
+                tree_r_last,
+                tree_r_last_config_rows_to_discard,
+                tree_c,
+                replica_path,
+                t_aux: t_aux.clone(),
+            })
+        }
     }
 
     pub fn labels_for_layer(&self, layer: usize) -> &DiskStore<<Tree::Hasher as Hasher>::Domain> {
@@ -755,6 +779,7 @@ impl<Tree: MerkleTreeTrait> LabelsCache<Tree> {
         let mut disk_store_labels: Vec<DiskStore<<Tree::Hasher as Hasher>::Domain>> =
             Vec::with_capacity(labels.len());
         for i in 0..labels.len() {
+            trace!("Instantiating label {}", i);
             disk_store_labels.push(labels.labels_for_layer(i + 1)?);
         }
 

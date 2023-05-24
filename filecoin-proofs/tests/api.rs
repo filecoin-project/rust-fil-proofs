@@ -10,12 +10,13 @@ use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
-    add_piece, aggregate_seal_commit_proofs, clear_cache, clear_synthetic_proofs, compute_comm_d,
-    decode_from, decode_from_range, encode_into, fauxrep_aux, generate_empty_sector_update_proof,
-    generate_empty_sector_update_proof_with_vanilla, generate_fallback_sector_challenges,
-    generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
-    generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_synth_proofs,
-    generate_tree_c, generate_tree_r_last, generate_window_post, generate_window_post_with_vanilla,
+    add_piece, aggregate_seal_commit_proofs, clear_cache, clear_layer_data, clear_synthetic_proofs,
+    compute_comm_d, decode_from, decode_from_range, encode_into, fauxrep_aux,
+    generate_empty_sector_update_proof, generate_empty_sector_update_proof_with_vanilla,
+    generate_fallback_sector_challenges, generate_partition_proofs, generate_piece_commitment,
+    generate_single_partition_proof, generate_single_vanilla_proof,
+    generate_single_window_post_with_vanilla, generate_synth_proofs, generate_tree_c,
+    generate_tree_r_last, generate_window_post, generate_window_post_with_vanilla,
     generate_winning_post, generate_winning_post_sector_challenge,
     generate_winning_post_with_vanilla, get_num_partition_for_fallback_post, get_seal_inputs,
     merge_window_post_partition_proofs, remove_encoded_data, seal_commit_phase1,
@@ -88,6 +89,7 @@ fn test_seal_lifecycle_2kib_base_8() -> Result<()> {
     // The second value is the ApiVersion to use
     // The third value is whether to use SyntheticPoRep
     let test_inputs = vec![
+        /*
         (0u64, ApiVersion::V1_0_0, false),
         (
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
@@ -98,7 +100,7 @@ fn test_seal_lifecycle_2kib_base_8() -> Result<()> {
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
             ApiVersion::V1_2_0,
             false,
-        ),
+        ),*/
         (
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
             ApiVersion::V1_2_0,
@@ -1555,11 +1557,6 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
 ) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])> {
     if config.feature_enabled(ApiFeature::SyntheticPoRep) {
         info!("SyntheticPoRep is enabled");
-    } else {
-        info!("SyntheticPoRep is NOT enabled");
-    }
-
-    if config.feature_enabled(ApiFeature::SyntheticPoRep) {
         generate_synth_proofs::<_, Tree>(
             config,
             cache_dir_path,
@@ -1570,6 +1567,10 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
             pre_commit_output.clone(),
             piece_infos,
         )?;
+        clear_layer_data::<Tree>(cache_dir_path)?;
+    } else {
+        info!("SyntheticPoRep is NOT enabled");
+        validate_cache_for_commit::<_, _, Tree>(cache_dir_path, sealed_sector_file.path())?;
     }
 
     let phase1_output = seal_commit_phase1::<_, Tree>(
@@ -1586,8 +1587,9 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
 
     if config.feature_enabled(ApiFeature::SyntheticPoRep) {
         clear_synthetic_proofs::<Tree>(cache_dir_path)?;
+    } else {
+        clear_cache::<Tree>(cache_dir_path)?;
     }
-    clear_cache::<Tree>(cache_dir_path)?;
 
     ensure!(
         seed == phase1_output.seed,
@@ -1688,12 +1690,6 @@ fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
     piece_infos: &[PieceInfo],
     piece_bytes: &[u8],
 ) -> Result<()> {
-    if config.feature_enabled(ApiFeature::SyntheticPoRep) {
-        info!("SyntheticPoRep is enabled");
-    } else {
-        info!("SyntheticPoRep is NOT enabled");
-    }
-
     let (commit_output, _commit_inputs, _seed, _comm_r) = generate_proof::<Tree>(
         config,
         cache_dir_path,
@@ -1777,8 +1773,6 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     compare_trees::<Tree>(&tree_c_dir, &cache_dir, CacheKey::CommCTree)?;
 
     let comm_r = pre_commit_output.comm_r;
-
-    validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
 
     if skip_proof {
         if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {

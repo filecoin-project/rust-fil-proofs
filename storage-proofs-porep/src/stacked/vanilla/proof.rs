@@ -106,7 +106,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         partition_count: usize,
     ) -> Result<Vec<Vec<Proof<Tree, G>>>> {
         assert!(layers > 0);
-        assert_eq!(t_aux.labels.len(), layers);
+
+        if !layer_challenges.use_synthetic {
+            // This needs to be relaxed now since the layers may not exist in the synth porep case
+            assert_eq!(t_aux.labels.len(), layers);
+        }
 
         let graph_size = graph.size();
 
@@ -136,6 +140,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 t_aux.synth_proofs_path(),
             );
             info!("skipping synthetic proving; generating non-synthetic vanilla proofs");
+
+            return read_res;
         }
 
         // If generating vanilla proofs for the synthetic challenge set, generate those proofs in a

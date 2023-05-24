@@ -73,12 +73,6 @@ where
 {
     info!("seal_pre_commit_phase1:start: {:?}", sector_id);
 
-    if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
-        info!("SyntheticPoRep feature is enabled");
-    } else {
-        info!("SyntheticPoRep feature is NOT enabled");
-    }
-
     let in_path_is_dev_zero = in_path.as_ref() == Path::new("/dev/zero");
     if in_path_is_dev_zero {
         trace!("using unreplicated data file /dev/zero");
@@ -230,12 +224,6 @@ where
 {
     info!("seal_pre_commit_phase2:start");
 
-    if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
-        info!("SyntheticPoRep feature is enabled");
-    } else {
-        info!("SyntheticPoRep feature is NOT enabled");
-    }
-
     // Sanity check all input path types.
     ensure!(
         metadata(cache_path.as_ref())?.is_dir(),
@@ -371,6 +359,7 @@ pub fn generate_synth_proofs<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
         None,
         pre_commit,
         piece_infos,
+        false, /* skip_labels */
     )?;
     info!("seal_gen_synth_proofs:finish: {:?}", sector_id);
     Ok(())
@@ -390,12 +379,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
 ) -> Result<SealCommitPhase1Output<Tree>> {
     info!("seal_commit_phase1:start: {:?}", sector_id);
 
-    if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
-        info!("SyntheticPoRep feature is enabled");
-    } else {
-        info!("SyntheticPoRep feature is NOT enabled");
-    }
-
+    let skip_labels = porep_config.feature_enabled(ApiFeature::SyntheticPoRep);
     let out = seal_commit_phase1_inner::<T, Tree>(
         porep_config,
         cache_path,
@@ -406,6 +390,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
         Some(seed),
         pre_commit,
         piece_infos,
+        skip_labels,
     )?;
     info!("seal_commit_phase1:finish: {:?}", sector_id);
     Ok(out)
@@ -423,7 +408,10 @@ pub fn seal_commit_phase1_inner<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
     seed: Option<Ticket>,
     pre_commit: SealPreCommitOutput,
     piece_infos: &[PieceInfo],
+    skip_labels: bool,
 ) -> Result<SealCommitPhase1Output<Tree>> {
+    trace!("seal_commit_phase1_inner:start: {:?}", sector_id);
+
     // Sanity check all input path types.
     ensure!(
         metadata(cache_path.as_ref())?.is_dir(),
@@ -471,7 +459,7 @@ pub fn seal_commit_phase1_inner<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
     let t_aux_cache: TemporaryAuxCache<Tree, DefaultPieceHasher> =
-        TemporaryAuxCache::new(&t_aux, replica_path.as_ref().to_path_buf())
+        TemporaryAuxCache::new(&t_aux, replica_path.as_ref().to_path_buf(), skip_labels)
             .context("failed to restore contents of t_aux")?;
 
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
@@ -534,6 +522,8 @@ pub fn seal_commit_phase1_inner<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
         seed: seed.unwrap_or_default(),
         ticket,
     };
+
+    trace!("seal_commit_phase1_inner:finish: {:?}", sector_id);
 
     Ok(out)
 }

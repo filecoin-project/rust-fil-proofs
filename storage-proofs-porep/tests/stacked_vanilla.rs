@@ -415,7 +415,7 @@ fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Laye
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
-    let t_aux = TemporaryAuxCache::<Tree, Blake2sHasher>::new(&t_aux, replica_path)
+    let t_aux = TemporaryAuxCache::<Tree, Blake2sHasher>::new(&t_aux, replica_path, false)
         .expect("failed to restore contents of t_aux");
 
     let priv_inputs = PrivateInputs { p_aux, t_aux };
