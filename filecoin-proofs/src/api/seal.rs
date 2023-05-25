@@ -524,17 +524,12 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
         _,
     >>::setup(&compound_setup_params)?;
 
-    trace!("snark_proof:start");
-    let groth_proofs = StackedCompound::<Tree, DefaultPieceHasher>::circuit_proofs(
+    let proof = StackedCompound::<Tree, DefaultPieceHasher>::prove_with_vanilla(
+        &compound_public_params,
         &public_inputs,
         vanilla_proofs,
-        &compound_public_params.vanilla_params,
         &groth_params,
-        compound_public_params.priority,
     )?;
-    trace!("snark_proof:finish");
-
-    let proof = MultiProof::new(groth_proofs, &groth_params.pvk);
 
     let mut buf =
         Vec::with_capacity(SINGLE_PARTITION_PROOF_LEN * usize::from(porep_config.partitions));
