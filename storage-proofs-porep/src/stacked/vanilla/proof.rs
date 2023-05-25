@@ -139,9 +139,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 "failed to read porep proofs from synthetic proofs file: {:?}",
                 t_aux.synth_proofs_path(),
             );
-            info!("skipping synthetic proving; generating non-synthetic vanilla proofs");
 
-            return read_res;
+            // If the synthetic proofs file does not exist and we have the layers available,
+            // we can generate non-synthetic proofs
+            if t_aux.labels.len() == layers {
+                info!("skipping synthetic proving; generating non-synthetic vanilla proofs");
+            } else {
+                error!("synthetic proving failure; synthetic proofs and layers are unavailable");
+
+                return read_res;
+            }
         }
 
         // If generating vanilla proofs for the synthetic challenge set, generate those proofs in a
