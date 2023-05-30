@@ -29,7 +29,7 @@ impl Column {
     /// Create an empty `Column`, used in `blank_circuit`s.
     pub fn empty<Tree: MerkleTreeTrait>(params: &PublicParams<Tree>) -> Self {
         Column {
-            rows: vec![None; params.layer_challenges.layers()],
+            rows: vec![None; params.num_layers],
         }
     }
 

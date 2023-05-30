@@ -1,5 +1,3 @@
-use std::fmt;
-
 use blstrs::Scalar as Fr;
 use log::trace;
 use num_bigint::BigUint;
@@ -16,47 +14,26 @@ fn bigint_to_challenge(bigint: BigUint, sector_nodes: usize) -> usize {
     non_zero_node.to_u32_digits()[0] as usize
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LayerChallenges {
-    /// How many layers we are generating challenges for.
-    layers: usize,
     /// The maximum count of challenges
     max_count: usize,
     pub use_synthetic: bool,
 }
 
-/// Note that since this is used in the PublicParams 'identifier'
-/// method (which affects the cacheable parameters), adding a single
-/// field would normally change the default 'format!' of it, so we now
-/// have to override it for backwards compatibility.
-impl fmt::Debug for LayerChallenges {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("LayerChallenges")
-            .field("layers", &self.layers)
-            .field("max_count", &self.max_count)
-            .finish()
-    }
-}
-
 impl LayerChallenges {
-    pub const fn new(layers: usize, max_count: usize) -> Self {
+    pub const fn new(max_count: usize) -> Self {
         LayerChallenges {
-            layers,
             max_count,
             use_synthetic: false,
         }
     }
 
-    pub const fn new_synthetic(layers: usize, max_count: usize) -> Self {
+    pub const fn new_synthetic(max_count: usize) -> Self {
         LayerChallenges {
-            layers,
             max_count,
             use_synthetic: true,
         }
-    }
-
-    pub fn layers(&self) -> usize {
-        self.layers
     }
 
     /// Porep challenge count per partition.
@@ -87,7 +64,7 @@ impl LayerChallenges {
     }
 
     /// Returns the porep challenges for partition `k`.
-    fn derive_porep<D: Domain>(
+    pub(crate) fn derive_porep<D: Domain>(
         &self,
         sector_nodes: usize,
         replica_id: &D,
@@ -386,7 +363,7 @@ mod test {
 
     #[test]
     fn test_calculate_fixed_challenges() {
-        let layer_challenges = LayerChallenges::new(10, 333);
+        let layer_challenges = LayerChallenges::new(333);
         let expected = 333;
 
         let calculated_count = layer_challenges.challenges_count_all();
@@ -398,7 +375,7 @@ mod test {
         let n = 200;
         let layers = 100;
 
-        let challenges = LayerChallenges::new(layers, n);
+        let challenges = LayerChallenges::new(n);
         let leaves = 1 << 30;
         let rng = &mut thread_rng();
         let replica_id: Sha256Domain = Sha256Domain::random(rng);
@@ -445,16 +422,11 @@ mod test {
         let total_challenges = n * partitions;
 
         for _layer in 1..=layers {
-            let one_partition_challenges = LayerChallenges::new(layers, total_challenges)
-                .derive_porep(leaves, &replica_id, &seed, 0);
+            let one_partition_challenges =
+                LayerChallenges::new(total_challenges).derive_porep(leaves, &replica_id, &seed, 0);
             let many_partition_challenges = (0..partitions)
                 .flat_map(|k| {
-                    LayerChallenges::new(layers, n).derive_porep(
-                        leaves,
-                        &replica_id,
-                        &seed,
-                        k as u8,
-                    )
+                    LayerChallenges::new(n).derive_porep(leaves, &replica_id, &seed, k as u8)
                 })
                 .collect::<Vec<_>>();
 

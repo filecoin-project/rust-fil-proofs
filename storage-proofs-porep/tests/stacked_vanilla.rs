@@ -101,14 +101,15 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
     let replica_path = cache_dir.path().join("replica-path");
     let mut mmapped_data = setup_replica(&data, &replica_path);
 
-    let layer_challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+    let challenges = LayerChallenges::new(5);
 
     let sp = SetupParams {
         nodes,
         degree: BASE_DEGREE,
         expansion_degree: EXP_DEGREE,
         porep_id: [32; 32],
-        layer_challenges,
+        challenges,
+        num_layers: DEFAULT_STACKED_LAYERS,
         api_version: ApiVersion::V1_2_0,
         api_features: vec![],
     };
@@ -154,7 +155,7 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
 
     StackedDrg::<Tree, Blake2sHasher>::extract_and_invert_transform_layers(
         &pp.graph,
-        &pp.layer_challenges,
+        pp.num_layers,
         &replica_id,
         mmapped_data.as_mut(),
         config,
@@ -196,14 +197,15 @@ fn test_stacked_porep_resume_seal() {
     let mut mmapped_data2 = setup_replica(&data, &replica_path2);
     let mut mmapped_data3 = setup_replica(&data, &replica_path3);
 
-    let layer_challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+    let challenges = LayerChallenges::new(5);
 
     let sp = SetupParams {
         nodes,
         degree: BASE_DEGREE,
         expansion_degree: EXP_DEGREE,
         porep_id: [32; 32],
-        layer_challenges,
+        challenges,
+        num_layers: DEFAULT_STACKED_LAYERS,
         api_version: ApiVersion::V1_2_0,
         api_features: vec![],
     };
@@ -270,7 +272,7 @@ fn test_stacked_porep_resume_seal() {
 
     StackedDrg::<Tree, Blake2sHasher>::extract_and_invert_transform_layers(
         &pp.graph,
-        &pp.layer_challenges,
+        pp.num_layers,
         &replica_id,
         mmapped_data1.as_mut(),
         config,
@@ -289,7 +291,7 @@ table_tests! {
 }
 
 fn test_prove_verify_fixed(n: usize) {
-    let challenges = LayerChallenges::new(DEFAULT_STACKED_LAYERS, 5);
+    let challenges = LayerChallenges::new(5);
 
     test_prove_verify::<DiskTree<Sha256Hasher, U8, U0, U0>>(n, challenges.clone());
     test_prove_verify::<DiskTree<Sha256Hasher, U8, U2, U0>>(n, challenges.clone());
@@ -350,7 +352,8 @@ fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Laye
         degree,
         expansion_degree,
         porep_id: arbitrary_porep_id,
-        layer_challenges: challenges,
+        challenges,
+        num_layers: DEFAULT_STACKED_LAYERS,
         api_version: ApiVersion::V1_2_0,
         api_features: vec![],
     };
@@ -414,13 +417,15 @@ fn test_stacked_porep_setup_terminates() {
     let degree = BASE_DEGREE;
     let expansion_degree = EXP_DEGREE;
     let nodes = 1024 * 1024 * 32 * 8; // This corresponds to 8GiB sectors (32-byte nodes)
-    let layer_challenges = LayerChallenges::new(10, 333);
+    let challenges = LayerChallenges::new(333);
+    let num_layers = 10;
     let sp = SetupParams {
         nodes,
         degree,
         expansion_degree,
         porep_id: [32; 32],
-        layer_challenges,
+        challenges,
+        num_layers,
         api_version: ApiVersion::V1_2_0,
         api_features: vec![],
     };
@@ -433,7 +438,7 @@ fn test_stacked_porep_setup_terminates() {
 
 #[test]
 fn test_stacked_porep_generate_labels() {
-    let layers = 11;
+    let num_layers = 11;
     let nodes_2k = 1 << 11;
     let nodes_4k = 1 << 12;
     let replica_id = [9u8; 32];
@@ -441,7 +446,7 @@ fn test_stacked_porep_generate_labels() {
     let porep_id = [123; 32];
     test_generate_labels_aux(
         nodes_2k,
-        layers,
+        num_layers,
         replica_id,
         legacy_porep_id,
         ApiVersion::V1_0_0,
@@ -456,7 +461,7 @@ fn test_stacked_porep_generate_labels() {
 
     test_generate_labels_aux(
         nodes_4k,
-        layers,
+        num_layers,
         replica_id,
         legacy_porep_id,
         ApiVersion::V1_0_0,
@@ -471,7 +476,7 @@ fn test_stacked_porep_generate_labels() {
 
     test_generate_labels_aux(
         nodes_2k,
-        layers,
+        num_layers,
         replica_id,
         porep_id,
         ApiVersion::V1_1_0,
@@ -486,7 +491,7 @@ fn test_stacked_porep_generate_labels() {
 
     test_generate_labels_aux(
         nodes_4k,
-        layers,
+        num_layers,
         replica_id,
         porep_id,
         ApiVersion::V1_1_0,
@@ -501,7 +506,7 @@ fn test_stacked_porep_generate_labels() {
 
     test_generate_labels_aux(
         nodes_2k,
-        layers,
+        num_layers,
         replica_id,
         porep_id,
         ApiVersion::V1_2_0,
@@ -516,7 +521,7 @@ fn test_stacked_porep_generate_labels() {
 
     test_generate_labels_aux(
         nodes_4k,
-        layers,
+        num_layers,
         replica_id,
         porep_id,
         ApiVersion::V1_2_0,
@@ -532,7 +537,7 @@ fn test_stacked_porep_generate_labels() {
 
 fn test_generate_labels_aux(
     sector_size: usize,
-    layers: usize,
+    num_layers: usize,
     replica_id: [u8; 32],
     porep_id: [u8; 32],
     api_version: ApiVersion,
@@ -557,8 +562,6 @@ fn test_generate_labels_aux(
     )
     .unwrap();
 
-    let unused_layer_challenges = LayerChallenges::new(layers, 0);
-
     let labels = StackedDrg::<
         // Although not generally correct for every size, the hasher shape is not used,
         // so for purposes of testing label creation, it is safe to supply a dummy.
@@ -566,7 +569,7 @@ fn test_generate_labels_aux(
         Sha256Hasher,
     >::generate_labels_for_decoding(
         &graph,
-        &unused_layer_challenges,
+        num_layers,
         &<PoseidonHasher as Hasher>::Domain::try_from_bytes(&replica_id).unwrap(),
         config,
     )
