@@ -7,11 +7,13 @@ use rayon::prelude::{ParallelIterator, ParallelSlice};
 
 use crate::{constants::DefaultPieceHasher, pieces::piece_hash};
 
+const BUFFER_SIZE: usize = 4096;
+
 /// Calculates comm-d of the data piped through to it.
 /// Data must be bit padded and power of 2 bytes.
 pub struct CommitmentReader<R> {
     source: R,
-    buffer: [u8; 64],
+    buffer: Vec<u8>,
     buffer_pos: usize,
     current_tree: Vec<<DefaultPieceHasher as Hasher>::Domain>,
 }
@@ -20,7 +22,7 @@ impl<R: Read> CommitmentReader<R> {
     pub fn new(source: R) -> Self {
         CommitmentReader {
             source,
-            buffer: [0u8; 64],
+            buffer: vec![0u8; BUFFER_SIZE],
             buffer_pos: 0,
             current_tree: Vec::new(),
         }
@@ -28,13 +30,16 @@ impl<R: Read> CommitmentReader<R> {
 
     /// Attempt to generate the next hash, but only if the buffers are full.
     fn try_hash(&mut self) {
-        if self.buffer_pos < 63 {
+        // Get more bytes in case we cannot iterate cleanly in 64 byte chunks.
+        if self.buffer_pos % 64 != 0 {
             return;
         }
 
-        // WARNING: keep in sync with DefaultPieceHasher and its .node impl
-        let hash = <DefaultPieceHasher as Hasher>::Function::hash(&self.buffer);
-        self.current_tree.push(hash);
+        for chunk in self.buffer[..self.buffer_pos].chunks_exact(64) {
+            // WARNING: keep in sync with DefaultPieceHasher and its .node impl
+            let hash = <DefaultPieceHasher as Hasher>::Function::hash(chunk);
+            self.current_tree.push(hash);
+        }
         self.buffer_pos = 0;
 
         // TODO: reduce hashes when possible, instead of keeping them around.
@@ -67,7 +72,7 @@ impl<R: Read> CommitmentReader<R> {
 impl<R: Read> Read for CommitmentReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let start = self.buffer_pos;
-        let left = 64 - self.buffer_pos;
+        let left = BUFFER_SIZE - self.buffer_pos;
         let end = start + min(left, buf.len());
 
         // fill the buffer as much as possible
