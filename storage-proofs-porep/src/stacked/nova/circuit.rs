@@ -6,8 +6,10 @@ use bellperson::{
 };
 use ff::{PrimeField, PrimeFieldBits};
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher, HashFunction, PoseidonArity};
+use log::info;
 use nova_snark::traits::circuit::StepCircuit;
 use storage_proofs_core::{
+    api_version::ApiVersion,
     drgraph::Graph,
     gadgets::{boolean::assign_bits, por::blank_merkle_path},
     merkle::{MerkleProofTrait, MerkleTreeTrait},
@@ -16,69 +18,78 @@ use storage_proofs_core::{
     SECTOR_NODES_32_KIB,
 };
 
-use crate::stacked::{vanilla, nova::gadgets::ChallengeCircuit};
+use crate::stacked::{nova::gadgets::ChallengeCircuit, vanilla, LayerChallenges, StackedBucketGraph};
 
 pub const DRG_PARENTS: usize = storage_proofs_core::drgraph::BASE_DEGREE;
 pub const EXP_PARENTS: usize = vanilla::EXP_DEGREE;
 pub const TOTAL_PARENTS: usize = vanilla::DEGREE;
 pub const REPEATED_PARENTS: usize = vanilla::TOTAL_PARENTS;
 
-// Each challenge and parent is associated with one public input for its merkle challenge.
+// Each PoRep challenge is associated with one public input for itself and one public inputs for
+// each of its parents.
 const PUB_INPUTS_PER_CHALLENGE: usize = 1 + TOTAL_PARENTS;
-// Each step has public inputs: ReplicaID, CommD, CommR, and merkle challenges.
-const PUB_INPUTS_PER_STEP: usize = 3 + PUB_INPUTS_PER_CHALLENGE;
+
+type VanillaPublicInputs<F> = vanilla::PublicInputs<
+    <PoseidonHasher<F> as Hasher>::Domain,
+    <Sha256Hasher<F> as Hasher>::Domain,
+>;
+type VanillaChallengeProof<Tree> =
+    vanilla::Proof<Tree, Sha256Hasher<<Tree as MerkleTreeTrait>::Field>>;
+type VanillaPartitionProof<Tree> = Vec<VanillaChallengeProof<Tree>>;
+type VanillaPartitionProofs<Tree> = Vec<VanillaPartitionProof<Tree>>;
 
 #[derive(Clone, Copy)]
 pub struct SetupParams {
     pub sector_nodes: usize,
     pub num_layers: usize,
-    pub total_challenge_count: usize,
+    pub porep_challenge_count: usize,
     pub challenges_per_step: usize,
-    pub num_steps: usize,
 }
 
 impl SetupParams {
-    pub fn default(sector_nodes: usize) -> Self {
-        if sector_nodes < SECTOR_NODES_32_KIB {
-            SetupParams {
-                sector_nodes,
-                num_layers: 2,
-                total_challenge_count: 4,
-                challenges_per_step: 2,
-                num_steps: 2,
-            }
-        } else {
-            SetupParams {
-                sector_nodes,
-                num_layers: 11,
-                total_challenge_count: 176,
-                challenges_per_step: 1,
-                num_steps: 176,
-            }
-        }
-    }
-
-    pub fn custom(
+    #[inline]
+    pub fn new(
         sector_nodes: usize,
         num_layers: usize,
-        total_challenge_count: usize,
+        porep_challenge_count: usize,
         challenges_per_step: usize,
     ) -> Self {
-        assert_eq!(total_challenge_count % challenges_per_step, 0);
-        let num_steps = total_challenge_count / challenges_per_step;
-
+        assert_eq!(porep_challenge_count % challenges_per_step, 0);
         SetupParams {
             sector_nodes,
             num_layers,
-            total_challenge_count,
+            porep_challenge_count,
             challenges_per_step,
-            num_steps,
         }
+    }
+
+    pub fn default(sector_nodes: usize) -> Self {
+        let (num_layers, porep_challenge_count, challenges_per_step);
+        if sector_nodes < SECTOR_NODES_32_KIB {
+            num_layers = 2;
+            porep_challenge_count = 4;
+            challenges_per_step = 2;
+        } else {
+            num_layers = 11;
+            porep_challenge_count = 176;
+            challenges_per_step = 1;
+        }
+        Self::new(sector_nodes, num_layers, porep_challenge_count, challenges_per_step)
+    }
+
+    // The number of step circuits required to recursively prove a single sector's PoRep challenges.
+    const fn steps_per_sector(&self) -> usize {
+        self.porep_challenge_count / self.challenges_per_step
+    }
+
+    // Each step has public inputs: ReplicaID, CommD, CommR, and Merkle challenges.
+    const fn pub_inputs_per_step(&self) -> usize {
+        3 + self.challenges_per_step * PUB_INPUTS_PER_CHALLENGE
     }
 }
 
 #[derive(Clone)]
-pub struct PublicInputs<F: PrimeField> {
+pub struct SectorPublicInputs<F: PrimeField> {
     pub replica_id: F,
     pub comm_d: F,
     pub comm_r: F,
@@ -87,53 +98,45 @@ pub struct PublicInputs<F: PrimeField> {
     pub parents: Vec<Vec<u32>>,
 }
 
-impl<F: PrimeField> PublicInputs<F> {
+impl<F: PrimeField> SectorPublicInputs<F> {
+    #[inline]
     fn blank(sp: &SetupParams) -> Self {
-        let zero = F::zero();
-        PublicInputs {
-            replica_id: zero,
-            comm_d: zero,
-            comm_r: zero,
-            challenges: vec![0; sp.total_challenge_count],
-            parents: vec![vec![0; TOTAL_PARENTS]; sp.total_challenge_count],
+        SectorPublicInputs {
+            replica_id: F::zero(),
+            comm_d: F::zero(),
+            comm_r: F::zero(),
+            challenges: vec![0; sp.porep_challenge_count],
+            parents: vec![vec![0; TOTAL_PARENTS]; sp.porep_challenge_count],
         }
     }
 
     pub fn from_vanilla(
         sp: &SetupParams,
-        vanilla_sp: &vanilla::SetupParams,
-        vanilla_pub_inputs: &vanilla::PublicInputs<
-            <PoseidonHasher<F> as Hasher>::Domain,
-            <Sha256Hasher<F> as Hasher>::Domain,
-        >,
+        porep_id: [u8; 32],
+        api_version: ApiVersion,
+        vanilla_pub_inputs: &VanillaPublicInputs<F>,
     ) -> Self
     where
         Sha256Hasher<F>: Hasher<Field = F>,
         PoseidonHasher<F>: Hasher<Field = F>,
     {
-        assert_eq!(sp.sector_nodes, vanilla_sp.nodes);
-        assert!(
-            vanilla_sp.degree == DRG_PARENTS && vanilla_sp.expansion_degree == EXP_PARENTS,
-            "vanilla setup params contain invalid graph degree(s)",
-        );
-
         let (comm_d, comm_r) = vanilla_pub_inputs.tau
             .clone()
             .map(|tau| (tau.comm_d.into(), tau.comm_r.into()))
             .expect("public inputs do not contain CommD and CommR");
 
-        let layer_challenges = vanilla::LayerChallenges::new(sp.num_layers, sp.total_challenge_count);
-        let graph = vanilla::StackedBucketGraph::<PoseidonHasher<F>>::new_stacked(
+        let layer_challenges = LayerChallenges::new(sp.num_layers, sp.porep_challenge_count);
+        let graph = StackedBucketGraph::<PoseidonHasher<F>>::new_stacked(
             sp.sector_nodes,
             DRG_PARENTS,
             EXP_PARENTS,
-            vanilla_sp.porep_id,
-            vanilla_sp.api_version,
+            porep_id,
+            api_version,
         )
         .expect("graph construction should not fail");
 
         let challenges = vanilla_pub_inputs.challenges(&layer_challenges, sp.sector_nodes, Some(0));
-        assert_eq!(challenges.len(), sp.total_challenge_count);
+        assert_eq!(challenges.len(), sp.porep_challenge_count);
 
         let parents = challenges
             .iter()
@@ -144,7 +147,7 @@ impl<F: PrimeField> PublicInputs<F> {
             })
             .collect();
 
-        PublicInputs {
+        SectorPublicInputs {
             replica_id: vanilla_pub_inputs.replica_id.into(),
             comm_d,
             comm_r,
@@ -154,15 +157,15 @@ impl<F: PrimeField> PublicInputs<F> {
     }
 
     pub fn to_vec(&self, sp: &SetupParams) -> Vec<Vec<F>> {
-        assert_eq!(self.challenges.len(), sp.total_challenge_count);
-        assert_eq!(self.parents.len(), sp.total_challenge_count);
+        assert_eq!(self.challenges.len(), sp.porep_challenge_count);
+        assert_eq!(self.parents.len(), sp.porep_challenge_count);
         assert!(self.parents.iter().map(Vec::len).all(|len| len == TOTAL_PARENTS));
 
         self.challenges
             .chunks(sp.challenges_per_step)
             .zip(self.parents.chunks(sp.challenges_per_step))
             .map(|(challenges, parents)| {
-                let mut step_inputs = Vec::with_capacity(PUB_INPUTS_PER_STEP);
+                let mut step_inputs = Vec::with_capacity(sp.pub_inputs_per_step());
                 step_inputs.push(self.replica_id);
                 step_inputs.push(self.comm_d);
                 step_inputs.push(self.comm_r);
@@ -174,6 +177,49 @@ impl<F: PrimeField> PublicInputs<F> {
                 }
                 step_inputs
             })
+            .collect()
+    }
+}
+
+#[derive(Clone)]
+pub struct PublicInputs<F: PrimeField> {
+    sectors: Vec<SectorPublicInputs<F>>,
+}
+
+impl<F: PrimeField> PublicInputs<F> {
+    #[inline]
+    fn blank(sp: &SetupParams) -> Self {
+        PublicInputs {
+            sectors: vec![SectorPublicInputs::blank(sp)],
+        }
+    }
+
+    #[inline]
+    pub fn from_vanilla(
+        sp: &SetupParams,
+        porep_id: [u8; 32],
+        api_version: ApiVersion,
+        vanilla_pub_inputs: &[VanillaPublicInputs<F>],
+    ) -> Self
+    where
+        Sha256Hasher<F>: Hasher<Field = F>,
+        PoseidonHasher<F>: Hasher<Field = F>,
+    {
+        PublicInputs {
+            sectors: vanilla_pub_inputs
+                .iter()
+                .map(|vanilla_pub_inputs| {
+                    SectorPublicInputs::from_vanilla(sp, porep_id, api_version, vanilla_pub_inputs)
+                })
+                .collect(),
+        }
+    }
+
+    #[inline]
+    pub fn to_vec(&self, sp: &SetupParams) -> Vec<Vec<F>> {
+        self.sectors
+            .iter()
+            .flat_map(|sector| sector.to_vec(sp))
             .collect()
     }
 }
@@ -195,34 +241,32 @@ pub struct ChallengeProof<F: PrimeField> {
 }
 
 #[derive(Clone)]
-pub struct PrivateInputs<F: PrimeField> {
+pub struct SectorPrivateInputs<F: PrimeField> {
     pub comm_c: F,
     pub root_r: F,
     // All porep challenge proofs.
     pub challenge_proofs: Vec<ChallengeProof<F>>,
 }
 
-impl<F: PrimeField> PrivateInputs<F> {
+impl<F: PrimeField> SectorPrivateInputs<F> {
     fn blank<U, V, W>(sp: &SetupParams) -> Self
     where
         U: PoseidonArity<F>,
         V: PoseidonArity<F>,
         W: PoseidonArity<F>,
     {
-        let zero = F::zero();
-
         let challenge_bit_len = sp.sector_nodes.trailing_zeros() as usize;
-        let path_d = vec![zero; challenge_bit_len];
+        let path_d = vec![F::zero(); challenge_bit_len];
 
         let path_cr = blank_merkle_path::<F, U, V, W>(sp.sector_nodes);
 
         let parent_proof = ParentProof {
-            column: vec![zero; sp.num_layers],
+            column: vec![F::zero(); sp.num_layers],
             path_c: path_cr.clone(),
         };
 
         let challenge_proof = ChallengeProof {
-            leaf_d: zero,
+            leaf_d: F::zero(),
             path_d,
             path_c: path_cr.clone(),
             path_r: path_cr,
@@ -230,20 +274,30 @@ impl<F: PrimeField> PrivateInputs<F> {
             exp_parent_proofs: vec![parent_proof; EXP_PARENTS],
         };
 
-        PrivateInputs {
-            comm_c: zero,
-            root_r: zero,
-            challenge_proofs: vec![challenge_proof; sp.total_challenge_count],
+        SectorPrivateInputs {
+            comm_c: F::zero(),
+            root_r: F::zero(),
+            challenge_proofs: vec![challenge_proof; sp.porep_challenge_count],
         }
     }
+}
 
-    fn challenge_proofs_for_step(
-        &self,
-        step_index: usize,
-        challenges_per_step: usize,
-    ) -> &[ChallengeProof<F>] {
-        let offset = step_index * challenges_per_step;
-        &self.challenge_proofs[offset..offset + challenges_per_step]
+#[derive(Clone)]
+pub struct PrivateInputs<F: PrimeField> {
+    sectors: Vec<SectorPrivateInputs<F>>,
+}
+
+impl<F: PrimeField> PrivateInputs<F> {
+    #[inline]
+    fn blank<U, V, W>(sp: &SetupParams) -> Self
+    where
+        U: PoseidonArity<F>,
+        V: PoseidonArity<F>,
+        W: PoseidonArity<F>,
+    {
+        PrivateInputs {
+            sectors: vec![SectorPrivateInputs::blank::<U, V, W>(sp)],
+        }
     }
 }
 
@@ -262,120 +316,6 @@ where
     pub _a: PhantomData<(U, V, W)>,
 }
 
-impl<F, U, V, W> NovaCircuit<F::G> for SdrPorepCircuit<F, U, V, W>
-where
-    F: CycleScalar + PrimeFieldBits,
-    U: PoseidonArity<F>,
-    V: PoseidonArity<F>,
-    W: PoseidonArity<F>,
-    Sha256Hasher<F>: Hasher<Field = F>,
-    PoseidonHasher<F>: Hasher<Field = F>,
-{
-    #[inline]
-    fn circ_name(&self) -> String {
-        format!(
-            "SDR-PoRep-{} {{ step_challenges: {}, layers: {} }}",
-            pretty_print_sector_size(self.sp.sector_nodes),
-            self.sp.challenges_per_step,
-            self.sp.num_layers,
-        )
-    }
-
-    #[inline]
-    fn cur_step(&self) -> usize {
-        self.step_index
-    }
-
-    #[inline]
-    fn num_steps(&self) -> usize {
-        self.sp.num_steps
-    }
-
-    #[inline]
-    fn next_step(&mut self) {
-        self.step_index += 1;
-    }
-
-    fn step_inputs(&self) -> Vec<F> {
-        assert!(self.step_index < self.sp.num_steps);
-        assert_eq!(
-            self.pub_inputs.challenges.len(), self.sp.total_challenge_count,
-            "pub-inputs contain invalid number of challenges",
-        );
-        assert_eq!(
-            self.pub_inputs.parents.len(), self.sp.total_challenge_count,
-            "pub-inputs do not contain one set of parents per challenge",
-        );
-        assert!(
-            self.pub_inputs.parents.iter().map(Vec::len).all(|len| len == TOTAL_PARENTS),
-            "pub-inputs contain invalid number of parents for challenge",
-        );
-
-        let num_inputs = self.arity();
-        let mut inputs = Vec::<F>::with_capacity(num_inputs);
-
-        inputs.push(self.pub_inputs.replica_id);
-        inputs.push(self.pub_inputs.comm_d);
-        inputs.push(self.pub_inputs.comm_r);
-
-        for (challenge, parents) in self.pub_inputs.challenges
-            .iter()
-            .zip(&self.pub_inputs.parents)
-            .skip(self.step_index * self.sp.challenges_per_step)
-            .take(self.sp.challenges_per_step)
-        {
-            inputs.push(F::from(*challenge as u64));
-            for parent in parents {
-                inputs.push(F::from(*parent as u64));
-            }
-        }
-
-        assert_eq!(inputs.len(), num_inputs);
-        inputs
-    }
-
-    fn step_outputs(&self) -> Vec<F> {
-        assert!(self.step_index < self.sp.num_steps);
-        assert_eq!(
-            self.pub_inputs.challenges.len(), self.sp.total_challenge_count,
-            "pub-inputs contain invalid number of challenges",
-        );
-        assert_eq!(
-            self.pub_inputs.parents.len(), self.sp.total_challenge_count,
-            "pub-inputs do not contain one set of parents per challenge",
-        );
-        assert!(
-            self.pub_inputs.parents.iter().map(Vec::len).all(|len| len == TOTAL_PARENTS),
-            "pub-inputs contain invalid number of parents for challenge",
-        );
-
-        let num_inputs = self.arity();
-        if self.step_index == self.sp.num_steps - 1 {
-            return vec![F::zero(); num_inputs];
-        }
-        let mut inputs = Vec::<F>::with_capacity(num_inputs);
-
-        inputs.push(self.pub_inputs.replica_id);
-        inputs.push(self.pub_inputs.comm_d);
-        inputs.push(self.pub_inputs.comm_r);
-
-        for (challenge, parents) in self.pub_inputs.challenges
-            .iter()
-            .zip(&self.pub_inputs.parents)
-            .skip((self.step_index + 1) * self.sp.challenges_per_step)
-            .take(self.sp.challenges_per_step)
-        {
-            inputs.push(F::from(*challenge as u64));
-            for parent in parents {
-                inputs.push(F::from(*parent as u64));
-            }
-        }
-
-        assert_eq!(inputs.len(), num_inputs);
-        inputs
-    }
-}
-
 impl<F, U, V, W> StepCircuit<F> for SdrPorepCircuit<F, U, V, W>
 where
     Self: NovaCircuit<F::G>,
@@ -388,7 +328,7 @@ where
 {
     #[inline]
     fn arity(&self) -> usize {
-        PUB_INPUTS_PER_STEP
+        self.sp.pub_inputs_per_step()
     }
 
     fn synthesize<CS: ConstraintSystem<F>>(
@@ -398,16 +338,13 @@ where
     ) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
         assert_eq!(z.len(), self.arity());
 
-        let SdrPorepCircuit {
-            sp: SetupParams {
-                sector_nodes,
-                num_layers,
-                challenges_per_step,
-                ..
-            },
-            ref priv_inputs,
+        let SetupParams {
+            sector_nodes,
+            num_layers,
+            challenges_per_step,
             ..
-        } = *self;
+        } = self.sp;
+        let priv_inputs = &self.priv_inputs.sectors[0];
 
         let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
 
@@ -420,6 +357,20 @@ where
         assert_eq!(challenges.len(), challenges_per_step);
         assert_eq!(parents.len(), challenges_per_step);
         assert!(parents.iter().all(|challenge_parents| challenge_parents.len() == TOTAL_PARENTS));
+
+        let is_keygen = z.iter().any(|input| input.get_value().is_none());
+        if !is_keygen {
+            let steps_per_sector = self.sp.steps_per_sector();
+            let sector_index = self.step_index / steps_per_sector;
+            let challenge_offset = self.step_index % steps_per_sector * self.sp.challenges_per_step;
+            info!(
+                "synthesizing step circuit sector={}, replica_id={:?}, challenges=[{},{})",
+                sector_index,
+                replica_id.get_value().expect("replica_id input should be set"),
+                challenge_offset,
+                challenge_offset + self.sp.challenges_per_step,
+            );
+        }
 
         let replica_id_bits = {
             let bits = assign_bits(cs, "replica_id", replica_id, F::NUM_BITS as usize)?;
@@ -451,7 +402,7 @@ where
         for (i, ((challenge, parents), challenge_proof)) in challenges
             .iter()
             .zip(&parents)
-            .zip(priv_inputs.challenge_proofs_for_step(self.step_index, challenges_per_step))
+            .zip(&priv_inputs.challenge_proofs)
             .enumerate()
         {
             let challenge_circ =
@@ -502,6 +453,164 @@ where
     }
 }
 
+impl<F, U, V, W> NovaCircuit<F::G> for SdrPorepCircuit<F, U, V, W>
+where
+    F: CycleScalar + PrimeFieldBits,
+    U: PoseidonArity<F>,
+    V: PoseidonArity<F>,
+    W: PoseidonArity<F>,
+    Sha256Hasher<F>: Hasher<Field = F>,
+    PoseidonHasher<F>: Hasher<Field = F>,
+{
+    #[inline]
+    fn circ_name(&self) -> String {
+        format!(
+            "SDR-PoRep-{} {{ layers: {}, step_challenges: {} }}",
+            pretty_print_sector_size(self.sp.sector_nodes),
+            self.sp.num_layers,
+            self.sp.challenges_per_step,
+        )
+    }
+
+    #[inline]
+    fn step_index(&self) -> usize {
+        self.step_index
+    }
+
+    #[inline]
+    fn num_steps(&self) -> usize {
+        self.pub_inputs.sectors.len() * self.sp.steps_per_sector()
+    }
+
+    fn next_step(&mut self) {
+        assert!(
+            !self.pub_inputs.sectors.is_empty() && !self.priv_inputs.sectors.is_empty(),
+            "recursive circuit contains no remaining sectors",
+        );
+
+        self.pub_inputs.sectors[0].challenges.drain(..self.sp.challenges_per_step);
+        self.pub_inputs.sectors[0].parents.drain(..self.sp.challenges_per_step);
+        self.priv_inputs.sectors[0].challenge_proofs.drain(..self.sp.challenges_per_step);
+
+        if self.pub_inputs.sectors[0].challenges.is_empty() {
+            self.pub_inputs.sectors.remove(0);
+            self.priv_inputs.sectors.remove(0);
+        }
+
+        self.step_index += 1;
+    }
+
+    fn step_inputs(&self) -> Vec<F> {
+        assert!(
+            !self.pub_inputs.sectors.is_empty(),
+            "recursive circuit's public inputs contains no sectors",
+        );
+        let sector = &self.pub_inputs.sectors[0];
+        let challenges_rem = sector.challenges.len();
+        assert_ne!(
+            challenges_rem,
+            0,
+            "current sector's public inputs contains no challenges",
+        );
+        assert_eq!(
+            challenges_rem % self.sp.challenges_per_step,
+            0,
+            "current sector's public inputs contains unexpected number of challenges",
+        );
+        assert_eq!(
+            challenges_rem,
+            sector.parents.len(),
+            "current sector's public inputs contains differing numbers of challenges and parents",
+        );
+        assert!(
+            sector.parents.iter().all(|parents| parents.len() == TOTAL_PARENTS),
+            "current sector's public inputs contains invalid number of parents for challenge",
+        );
+
+        let num_inputs = self.arity();
+        let mut inputs = Vec::<F>::with_capacity(num_inputs);
+
+        inputs.push(sector.replica_id);
+        inputs.push(sector.comm_d);
+        inputs.push(sector.comm_r);
+
+        for (challenge, parents) in
+            sector.challenges.iter().zip(&sector.parents).take(self.sp.challenges_per_step)
+        {
+            inputs.push(F::from(*challenge as u64));
+            for parent in parents {
+                inputs.push(F::from(*parent as u64));
+            }
+        }
+
+        assert_eq!(inputs.len(), num_inputs);
+        inputs
+    }
+
+    fn step_outputs(&self) -> Vec<F> {
+        assert!(
+            !self.pub_inputs.sectors.is_empty(),
+            "recursive circuit's public inputs contains no sectors",
+        );
+
+        let mut sector = &self.pub_inputs.sectors[0];
+        let mut challenges_rem = sector.challenges.len();
+        let mut challenges_offset = self.sp.challenges_per_step;
+        let sector_done = challenges_rem == self.sp.challenges_per_step;
+        let num_inputs = self.arity();
+
+        if sector_done {
+            let proving_done = self.pub_inputs.sectors.len() == 1;
+            if proving_done {
+                return vec![F::zero(); num_inputs];
+            }
+            sector = &self.pub_inputs.sectors[1];
+            challenges_rem = sector.challenges.len();
+            challenges_offset = 0;
+        }
+
+        assert_ne!(
+            challenges_rem,
+            0,
+            "current sector's public inputs contains no challenges",
+        );
+        assert_eq!(
+            challenges_rem % self.sp.challenges_per_step,
+            0,
+            "current sector's public inputs contains unexpected number of challenges",
+        );
+        assert_eq!(
+            challenges_rem,
+            sector.parents.len(),
+            "current sector's public inputs contains differing numbers of challenges and parents",
+        );
+        assert!(
+            sector.parents.iter().all(|parents| parents.len() == TOTAL_PARENTS),
+            "current sector's public inputs contains invalid number of parents for challenge",
+        );
+
+        let mut inputs = Vec::<F>::with_capacity(num_inputs);
+        inputs.push(sector.replica_id);
+        inputs.push(sector.comm_d);
+        inputs.push(sector.comm_r);
+
+        for (challenge, parents) in sector.challenges
+            .iter()
+            .zip(&sector.parents)
+            .skip(challenges_offset)
+            .take(self.sp.challenges_per_step)
+        {
+            inputs.push(F::from(*challenge as u64));
+            for parent in parents {
+                inputs.push(F::from(*parent as u64));
+            }
+        }
+
+        assert_eq!(inputs.len(), num_inputs);
+        inputs
+    }
+}
+
 impl<F, U, V, W> SdrPorepCircuit<F, U, V, W>
 where
     F: PrimeField,
@@ -511,11 +620,12 @@ where
     Sha256Hasher<F>: Hasher<Field = F>,
     PoseidonHasher<F>: Hasher<Field = F>,
 {
-    // Creates a mock circuit instance which can be used to generate nova params/keys for circuit
-    // instances that have the same setup parameters as `sp`.
+    // Creates a mock circuit which can be used to generate nova params and keys for any circuit
+    // having the same `SetupParams`.
+    #[inline]
     pub fn blank(sp: &SetupParams) -> Self {
         SdrPorepCircuit {
-            sp: sp.clone(),
+            sp: *sp,
             step_index: 0,
             pub_inputs: PublicInputs::blank(sp),
             priv_inputs: PrivateInputs::blank::<U, V, W>(sp),
@@ -525,11 +635,7 @@ where
 
     pub fn from_vanilla<Tree>(
         sp: SetupParams,
-        vanilla_pub_inputs: &vanilla::PublicInputs<
-            <PoseidonHasher<F> as Hasher>::Domain,
-            <Sha256Hasher<F> as Hasher>::Domain,
-        >,
-        vanilla_partition_proofs: &[Vec<vanilla::Proof<Tree, Sha256Hasher<F>>>],
+        sectors: &[(VanillaPublicInputs<F>, VanillaPartitionProofs<Tree>)],
     ) -> Self
     where
         Tree: MerkleTreeTrait<
@@ -542,62 +648,47 @@ where
     {
         let challenge_bit_len = sp.sector_nodes.trailing_zeros() as usize;
 
-        let replica_id: F = vanilla_pub_inputs.replica_id.into();
+        let num_sectors = sectors.len();
+        let mut pub_inputs = PublicInputs {
+            sectors: Vec::with_capacity(num_sectors),
+        };
+        let mut priv_inputs = PrivateInputs {
+            sectors: Vec::with_capacity(num_sectors),
+        };
 
-        let (comm_d, comm_r): (F, F) = vanilla_pub_inputs.tau
-            .clone()
-            .map(|tau| (tau.comm_d.into(), tau.comm_r.into()))
-            .expect("vanilla public inputs missing comm_d and comm_r");
+        for (vanilla_pub_inputs, vanilla_partition_proofs) in sectors.iter() {
+            let replica_id: F = vanilla_pub_inputs.replica_id.into();
 
-        let comm_c: F = vanilla_partition_proofs[0][0].comm_c().into();
-        let root_r: F = vanilla_partition_proofs[0][0].comm_r_last().into();
+            let (comm_d, comm_r): (F, F) = vanilla_pub_inputs.tau
+                .clone()
+                .map(|tau| (tau.comm_d.into(), tau.comm_r.into()))
+                .expect("vanilla public inputs missing comm_d and comm_r");
 
-        let mut challenges = Vec::<u32>::with_capacity(sp.total_challenge_count);
-        let mut parents = Vec::<Vec<u32>>::with_capacity(sp.total_challenge_count);
-        let mut challenge_proofs =
-            Vec::<ChallengeProof<F>>::with_capacity(sp.total_challenge_count);
+            let comm_c: F = vanilla_partition_proofs[0][0].comm_c().into();
+            let root_r: F = vanilla_partition_proofs[0][0].comm_r_last().into();
 
-        for partition_proof in vanilla_partition_proofs {
-            for challenge_proof in partition_proof {
-                let proof_d = &challenge_proof.comm_d_proofs;
-                let proof_r = &challenge_proof.comm_r_last_proof;
-                let proof_c = &challenge_proof.replica_column_proofs.c_x.inclusion_proof;
-                let drg_proofs = &challenge_proof.replica_column_proofs.drg_parents;
-                let exp_proofs = &challenge_proof.replica_column_proofs.exp_parents;
+            let mut challenges = Vec::<u32>::with_capacity(sp.porep_challenge_count);
+            let mut parents = Vec::<Vec<u32>>::with_capacity(sp.porep_challenge_count);
+            let mut challenge_proofs =
+                Vec::<ChallengeProof<F>>::with_capacity(sp.porep_challenge_count);
 
-                assert_eq!(drg_proofs.len(), DRG_PARENTS);
-                assert_eq!(exp_proofs.len(), EXP_PARENTS);
+            for partition_proof in vanilla_partition_proofs {
+                for challenge_proof in partition_proof {
+                    let proof_d = &challenge_proof.comm_d_proofs;
+                    let proof_r = &challenge_proof.comm_r_last_proof;
+                    let proof_c = &challenge_proof.replica_column_proofs.c_x.inclusion_proof;
+                    let drg_proofs = &challenge_proof.replica_column_proofs.drg_parents;
+                    let exp_proofs = &challenge_proof.replica_column_proofs.exp_parents;
 
-                challenges.push(proof_d.path_index() as u32);
+                    assert_eq!(drg_proofs.len(), DRG_PARENTS);
+                    assert_eq!(exp_proofs.len(), EXP_PARENTS);
 
-                let leaf_d: F = proof_d.leaf().into();
-                let path_d: Vec<F> =
-                    proof_d.path().iter().map(|(sibs, _)| sibs[0].into()).collect();
-                assert_eq!(path_d.len(), challenge_bit_len);
+                    challenges.push(proof_d.path_index() as u32);
 
-                let path_c: Vec<Vec<F>> = proof_c
-                    .path()
-                    .iter()
-                    .map(|(sibs, _)| sibs.iter().copied().map(Into::into).collect())
-                    .collect();
-
-                let path_r: Vec<Vec<F>> = proof_r
-                    .path()
-                    .iter()
-                    .map(|(sibs, _)| sibs.iter().copied().map(Into::into).collect())
-                    .collect();
-
-                let mut challenge_parents = Vec::<u32>::with_capacity(TOTAL_PARENTS);
-
-                let mut parent_proofs = drg_proofs.iter().chain(exp_proofs).map(|parent_proof| {
-                    let (column, proof_c) =
-                        (&parent_proof.column.rows, &parent_proof.inclusion_proof);
-
-                    assert_eq!(column.len(), sp.num_layers);
-
-                    challenge_parents.push(proof_c.path_index() as u32);
-
-                    let column: Vec<F> = column.iter().copied().map(Into::into).collect();
+                    let leaf_d: F = proof_d.leaf().into();
+                    let path_d: Vec<F> =
+                        proof_d.path().iter().map(|(sibs, _)| sibs[0].into()).collect();
+                    assert_eq!(path_d.len(), challenge_bit_len);
 
                     let path_c: Vec<Vec<F>> = proof_c
                         .path()
@@ -605,66 +696,72 @@ where
                         .map(|(sibs, _)| sibs.iter().copied().map(Into::into).collect())
                         .collect();
 
-                    ParentProof { column, path_c }
-                });
+                    let path_r: Vec<Vec<F>> = proof_r
+                        .path()
+                        .iter()
+                        .map(|(sibs, _)| sibs.iter().copied().map(Into::into).collect())
+                        .collect();
 
-                let drg_parent_proofs = (&mut parent_proofs).take(DRG_PARENTS).collect();
-                let exp_parent_proofs = parent_proofs.collect();
-                parents.push(challenge_parents);
+                    let mut challenge_parents = Vec::<u32>::with_capacity(TOTAL_PARENTS);
 
-                challenge_proofs.push(ChallengeProof {
-                    leaf_d,
-                    path_d,
-                    path_c,
-                    path_r,
-                    drg_parent_proofs,
-                    exp_parent_proofs,
-                });
+                    let mut parent_proofs = drg_proofs.iter().chain(exp_proofs).map(|parent_proof| {
+                        let (column, proof_c) =
+                            (&parent_proof.column.rows, &parent_proof.inclusion_proof);
+
+                        assert_eq!(column.len(), sp.num_layers);
+
+                        challenge_parents.push(proof_c.path_index() as u32);
+
+                        let column: Vec<F> = column.iter().copied().map(Into::into).collect();
+
+                        let path_c: Vec<Vec<F>> = proof_c
+                            .path()
+                            .iter()
+                            .map(|(sibs, _)| sibs.iter().copied().map(Into::into).collect())
+                            .collect();
+
+                        ParentProof { column, path_c }
+                    });
+
+                    let drg_parent_proofs = (&mut parent_proofs).take(DRG_PARENTS).collect();
+                    let exp_parent_proofs = parent_proofs.collect();
+                    parents.push(challenge_parents);
+
+                    challenge_proofs.push(ChallengeProof {
+                        leaf_d,
+                        path_d,
+                        path_c,
+                        path_r,
+                        drg_parent_proofs,
+                        exp_parent_proofs,
+                    });
+                }
             }
-        }
 
-        assert_eq!(challenges.len(), sp.total_challenge_count);
-        assert_eq!(parents.len(), sp.total_challenge_count);
-        assert!(parents.iter().all(|challenge_parents| challenge_parents.len() == TOTAL_PARENTS));
-        assert_eq!(challenge_proofs.len(), sp.total_challenge_count);
+            assert_eq!(challenges.len(), sp.porep_challenge_count);
+            assert_eq!(parents.len(), sp.porep_challenge_count);
+            assert!(parents.iter().all(|parents| parents.len() == TOTAL_PARENTS));
+            assert_eq!(challenge_proofs.len(), sp.porep_challenge_count);
 
-        SdrPorepCircuit {
-            sp,
-            step_index: 0,
-            pub_inputs: PublicInputs {
+            pub_inputs.sectors.push(SectorPublicInputs {
                 replica_id,
                 comm_d,
                 comm_r,
                 challenges,
                 parents,
-            },
-            priv_inputs: PrivateInputs {
+            });
+            priv_inputs.sectors.push(SectorPrivateInputs {
                 comm_c,
                 root_r,
                 challenge_proofs,
-            },
-            _a: PhantomData,
+            });
         }
-    }
 
-    #[inline]
-    pub fn verifier_from_vanilla<Tree>(
-        sp: SetupParams,
-        vanilla_sp: &vanilla::SetupParams,
-        vanilla_pub_inputs: &vanilla::PublicInputs<
-            <PoseidonHasher<F> as Hasher>::Domain,
-            <Sha256Hasher<F> as Hasher>::Domain,
-        >,
-    ) -> Self {
         SdrPorepCircuit {
             sp,
             step_index: 0,
-            pub_inputs: PublicInputs::from_vanilla(&sp, vanilla_sp, vanilla_pub_inputs),
-            priv_inputs: PrivateInputs {
-                comm_c: F::zero(),
-                root_r: F::zero(),
-                challenge_proofs: vec![],
-            },
+            pub_inputs,
+            priv_inputs,
             _a: PhantomData,
         }
     }
@@ -697,6 +794,10 @@ mod tests {
         PoRep,
     };
 
+    // Configures the number of sectors proved via a single recursive PoRep proof; this
+    // parameter can be changed.
+    const NUM_SECTORS: usize = 1;
+
     type TreeR<F, U, V, W> = DiskTree<PoseidonHasher<F>, U, V, W>;
 
     fn test_inner<F, U, V, W>(sector_nodes: usize)
@@ -710,101 +811,107 @@ mod tests {
     {
         fil_logger::maybe_init();
 
-        #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-        log::info!("using Pasta-MSM crate for MSMs of >= 128 bases");
-
         let sp = SetupParams::default(sector_nodes);
 
         let mut circ = if cfg!(feature = "mock-test-circ") {
-            SdrPorepCircuit::<F, U, V, W>::blank(&sp)
+            let mut circ = SdrPorepCircuit::<F, U, V, W>::blank(&sp);
+            circ.pub_inputs.sectors.resize(NUM_SECTORS, circ.pub_inputs.sectors[0].clone());
+            circ.priv_inputs.sectors.resize(NUM_SECTORS, circ.priv_inputs.sectors[0].clone());
+            circ
         } else {
             let mut rng = XorShiftRng::from_seed(TEST_SEED);
-            let replica_id = F::random(&mut rng);
 
             let sector_bytes = sector_nodes << 5;
-            let mut data = Vec::<u8>::with_capacity(sector_bytes);
-            for _ in 0..sector_nodes {
-                data.extend_from_slice(F::random(&mut rng).to_repr().as_ref());
-            }
 
-            let cache_dir = tempdir().expect("failed to create tmp dir");
-
-            // TreeD config.
-            let config = StoreConfig::new(
-                cache_dir.path(),
-                CacheKey::CommDTree.to_string(),
-                default_rows_to_discard(sector_nodes, BINARY_ARITY),
-            );
-
-            let replica_path = cache_dir.path().join("replica-path");
-            let mut mmapped_data = setup_replica(&data, &replica_path);
-
-            let vanilla_setup_params = vanilla::SetupParams {
+            let vanilla_sp = vanilla::SetupParams {
                 nodes: sector_nodes,
                 degree: DRG_PARENTS,
                 expansion_degree: EXP_PARENTS,
                 porep_id: [1; 32],
                 // Generate one vanilla partition proof for all challenges.
-                layer_challenges: LayerChallenges::new(sp.num_layers, sp.total_challenge_count),
+                layer_challenges: LayerChallenges::new(sp.num_layers, sp.porep_challenge_count),
                 api_version: ApiVersion::V1_1_0,
             };
 
             let vanilla_pub_params =
-                StackedDrg::<TreeR<F, U, V, W>, Sha256Hasher<F>>::setup(&vanilla_setup_params)
+                StackedDrg::<TreeR<F, U, V, W>, Sha256Hasher<F>>::setup(&vanilla_sp)
                     .expect("failed to create vanilla public params");
 
-            // Create replica.
-            let (tau, (p_aux, t_aux)) = StackedDrg::<TreeR<F, U, V, W>, Sha256Hasher<F>>::replicate(
-                &vanilla_pub_params,
-                &replica_id.into(),
-                (mmapped_data.as_mut()).into(),
-                None,
-                config,
-                replica_path.clone(),
-            )
-            .expect("replication failed");
+            let sectors = (0..NUM_SECTORS)
+                .map(|_| {
+                    let replica_id = F::random(&mut rng);
 
-            // Store copy of original t_aux for later resource deletion.
-            let t_aux_orig = t_aux.clone();
+                    let mut data = Vec::<u8>::with_capacity(sector_bytes);
+                    for _ in 0..sector_nodes {
+                        data.extend_from_slice(F::random(&mut rng).to_repr().as_ref());
+                    }
 
-            // Convert TemporaryAux to TemporaryAuxCache, which instantiates all elements based on the
-            // configs stored in TemporaryAux.
-            let t_aux = TemporaryAuxCache::new(&t_aux, replica_path)
-                .expect("failed to restore contents of t_aux");
+                    let cache_dir = tempdir().expect("failed to create tmp dir");
 
-            let vanilla_pub_inputs = vanilla::PublicInputs {
-                replica_id: replica_id.into(),
-                seed: rng.gen(),
-                tau: Some(tau),
-                k: Some(0),
-            };
+                    // TreeD config.
+                    let config = StoreConfig::new(
+                        cache_dir.path(),
+                        CacheKey::CommDTree.to_string(),
+                        default_rows_to_discard(sector_nodes, BINARY_ARITY),
+                    );
 
-            let vanilla_priv_inputs = vanilla::PrivateInputs { p_aux, t_aux };
+                    let replica_path = cache_dir.path().join("replica-path");
+                    let mut mmapped_data = setup_replica(&data, &replica_path);
 
-            let vanilla_partition_proof = StackedDrg::prove(
-                &vanilla_pub_params,
-                &vanilla_pub_inputs,
-                &vanilla_priv_inputs,
-            )
-            .expect("failed to generate vanilla partition proofs");
+                    // Create replica.
+                    let (tau, (p_aux, t_aux)) =
+                        StackedDrg::<TreeR<F, U, V, W>, Sha256Hasher<F>>::replicate(
+                            &vanilla_pub_params,
+                            &replica_id.into(),
+                            (mmapped_data.as_mut()).into(),
+                            None,
+                            config,
+                            replica_path.clone(),
+                        )
+                        .expect("replication failed");
 
-            let vanilla_is_valid = StackedDrg::verify_all_partitions(
-                &vanilla_pub_params,
-                &vanilla_pub_inputs,
-                &[vanilla_partition_proof.clone()],
-            )
-            .expect("failed to verify vanilla proof");
-            assert!(vanilla_is_valid);
+                    // Store copy of original t_aux for later resource deletion.
+                    let t_aux_orig = t_aux.clone();
 
-            // Discard cached Merkle trees that are no longer needed.
-            TemporaryAux::clear_temp(t_aux_orig).expect("t_aux delete failed");
+                    // Convert TemporaryAux to TemporaryAuxCache, which instantiates all elements
+                    // based on the configs stored in TemporaryAux.
+                    let t_aux = TemporaryAuxCache::new(&t_aux, replica_path)
+                        .expect("failed to restore contents of t_aux");
 
-            // Create recursive circuit from vanilla artifacts.
-            SdrPorepCircuit::<F, U, V, W>::from_vanilla(
-                sp,
-                &vanilla_pub_inputs,
-                &[vanilla_partition_proof],
-            )
+                    let vanilla_pub_inputs = vanilla::PublicInputs {
+                        replica_id: replica_id.into(),
+                        seed: rng.gen(),
+                        tau: Some(tau),
+                        k: Some(0),
+                    };
+
+                    let vanilla_priv_inputs = vanilla::PrivateInputs { p_aux, t_aux };
+
+                    let vanilla_partition_proofs = StackedDrg::prove(
+                        &vanilla_pub_params,
+                        &vanilla_pub_inputs,
+                        &vanilla_priv_inputs,
+                    )
+                    .map(|partition_proof| vec![partition_proof])
+                    .expect("failed to generate vanilla partition proofs");
+
+                    assert!(
+                        StackedDrg::verify_all_partitions(
+                            &vanilla_pub_params,
+                            &vanilla_pub_inputs,
+                            &vanilla_partition_proofs,
+                        )
+                        .expect("failed to verify vanilla proof")
+                    );
+
+                    // Discard cached Merkle trees that are no longer needed.
+                    TemporaryAux::clear_temp(t_aux_orig).expect("t_aux delete failed");
+
+                    (vanilla_pub_inputs, vanilla_partition_proofs)
+                })
+                .collect::<Vec<_>>();
+
+            SdrPorepCircuit::<F, U, V, W>::from_vanilla(sp, &sectors)
         };
 
         let params = circ.gen_params();
@@ -817,10 +924,11 @@ mod tests {
 
         let c_proof =
             r_proof.compress(&params, &cpk).expect("failed to generated compressed proof");
-        let c_proof_size =
-            c_proof.proof_bytes().expect("failed to serialize compressed proof").len();
-        log::info!("nova compressed proof size: {} bytes", c_proof_size);
         assert!(c_proof.verify(&cvk).expect("failed to verify compressed proof"));
+        info!(
+            "nova compressed proof size: {} bytes",
+            c_proof.proof_bytes().expect("failed to serialize compressed proof").len(),
+        );
     }
 
     #[test]
