@@ -55,7 +55,7 @@ lazy_static! {
 /// cached differently (as a hashmap per type, keyed by identifier
 /// consisting of sector size and pow2 num proofs to aggregate).
 #[derive(Debug, Default)]
-pub struct SRSCache<G> {
+struct SRSCache<G> {
     data: HashMap<String, OnceCell<Arc<G>>>,
 }
 
@@ -102,7 +102,7 @@ impl<G> SRSCache<G> {
     }
 }
 
-pub fn cache_lookup<F, G>(
+fn cache_lookup<F, G>(
     cache_ref: &Mutex<Cache<G>>,
     identifier: String,
     generator: F,
@@ -133,7 +133,7 @@ where
     Ok(res)
 }
 
-pub fn srs_cache_lookup<F, G>(
+fn srs_cache_lookup<F, G>(
     cache_ref: &SRSCache<G>,
     identifier: String,
     generator: F,
@@ -151,7 +151,7 @@ where
 }
 
 #[inline]
-pub fn lookup_groth_params<F>(identifier: String, generator: F) -> Result<Arc<Bls12GrothParams>>
+fn lookup_groth_params<F>(identifier: String, generator: F) -> Result<Arc<Bls12GrothParams>>
 where
     F: FnOnce() -> Result<Bls12GrothParams>,
 {
@@ -159,7 +159,7 @@ where
 }
 
 #[inline]
-pub fn lookup_verifying_key<F>(
+fn lookup_verifying_key<F>(
     identifier: String,
     generator: F,
 ) -> Result<Arc<Bls12PreparedVerifyingKey>>
@@ -171,7 +171,7 @@ where
 }
 
 #[inline]
-pub fn lookup_srs_key<F>(identifier: String, generator: F) -> Result<Arc<Bls12ProverSRSKey>>
+fn lookup_srs_key<F>(identifier: String, generator: F) -> Result<Arc<Bls12ProverSRSKey>>
 where
     F: FnOnce() -> Result<Bls12ProverSRSKey>,
 {
@@ -180,10 +180,7 @@ where
 }
 
 #[inline]
-pub fn lookup_srs_verifier_key<F>(
-    identifier: String,
-    generator: F,
-) -> Result<Arc<Bls12VerifierSRSKey>>
+fn lookup_srs_verifier_key<F>(identifier: String, generator: F) -> Result<Arc<Bls12VerifierSRSKey>>
 where
     F: FnOnce() -> Result<Bls12VerifierSRSKey>,
 {
@@ -195,7 +192,7 @@ where
     )
 }
 
-pub fn get_stacked_params<Tree: 'static + MerkleTreeTrait>(
+pub(crate) fn get_stacked_params<Tree: 'static + MerkleTreeTrait>(
     porep_config: &PoRepConfig,
 ) -> Result<Arc<Bls12GrothParams>> {
     let public_params = public_params::<Tree>(
@@ -222,7 +219,7 @@ pub fn get_stacked_params<Tree: 'static + MerkleTreeTrait>(
     )
 }
 
-pub fn get_post_params<Tree: 'static + MerkleTreeTrait>(
+pub(crate) fn get_post_params<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
 ) -> Result<Arc<Bls12GrothParams>> {
     match post_config.typ {
@@ -267,7 +264,9 @@ pub fn get_post_params<Tree: 'static + MerkleTreeTrait>(
     }
 }
 
-pub fn get_empty_sector_update_params<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+pub(crate) fn get_empty_sector_update_params<
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
+>(
     porep_config: &PoRepConfig,
 ) -> Result<Arc<Bls12GrothParams>> {
     let public_params: storage_proofs_update::PublicParams =
@@ -290,7 +289,7 @@ pub fn get_empty_sector_update_params<Tree: 'static + MerkleTreeTrait<Hasher = T
     )
 }
 
-pub fn get_stacked_verifying_key<Tree: 'static + MerkleTreeTrait>(
+pub(crate) fn get_stacked_verifying_key<Tree: 'static + MerkleTreeTrait>(
     porep_config: &PoRepConfig,
 ) -> Result<Arc<Bls12PreparedVerifyingKey>> {
     let public_params = public_params(
@@ -317,7 +316,7 @@ pub fn get_stacked_verifying_key<Tree: 'static + MerkleTreeTrait>(
     )
 }
 
-pub fn get_post_verifying_key<Tree: 'static + MerkleTreeTrait>(
+pub(crate) fn get_post_verifying_key<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
 ) -> Result<Arc<Bls12PreparedVerifyingKey>> {
     match post_config.typ {
@@ -362,6 +361,7 @@ pub fn get_post_verifying_key<Tree: 'static + MerkleTreeTrait>(
     }
 }
 
+// It is not pub(crate) only because there is a benchmark using it.
 pub fn get_stacked_srs_key<Tree: 'static + MerkleTreeTrait>(
     porep_config: &PoRepConfig,
     num_proofs_to_aggregate: usize,
@@ -395,6 +395,7 @@ pub fn get_stacked_srs_key<Tree: 'static + MerkleTreeTrait>(
     )
 }
 
+// It is not pub(crate) only because there is a benchmark using it.
 pub fn get_stacked_srs_verifier_key<Tree: 'static + MerkleTreeTrait>(
     porep_config: &PoRepConfig,
     num_proofs_to_aggregate: usize,
@@ -430,7 +431,7 @@ pub fn get_stacked_srs_verifier_key<Tree: 'static + MerkleTreeTrait>(
     )
 }
 
-pub fn get_empty_sector_update_verifying_key<
+pub(crate) fn get_empty_sector_update_verifying_key<
     Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
 >(
     porep_config: &PoRepConfig,
