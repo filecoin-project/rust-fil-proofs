@@ -18,7 +18,7 @@ use crate::{
     compound_proof::{CircuitComponent, CompoundProof},
     error::Result,
     gadgets::{constraint, insertion::insert, variables::Root},
-    merkle::{base_path_length, MerkleProofTrait, MerkleTreeTrait},
+    merkle::{base_path_length, tree_heights, MerkleProofTrait, MerkleTreeTrait},
     parameter_cache::{CacheableParameters, ParameterSetMetadata},
     por::{PoR, PublicInputs, PublicParams},
     proof::ProofScheme,
@@ -638,7 +638,6 @@ where
         .collect::<Result<Vec<Vec<AllocatedNum<F>>>, SynthesisError>>()
 }
 
-#[cfg(feature = "nova")]
 pub fn blank_merkle_path<F, U, V, W>(sector_nodes: usize) -> Vec<Vec<F>>
 where
     F: ff::PrimeField,
@@ -646,19 +645,14 @@ where
     V: PoseidonArity<F>,
     W: PoseidonArity<F>,
 {
-    use std::iter;
-
     let (base_arity, sub_arity, top_arity) = (U::to_usize(), V::to_usize(), W::to_usize());
-    let (sub_height, top_height) = ((sub_arity != 0) as u32, (top_arity != 0) as u32);
-    let sub_bits = sub_height * sub_arity.trailing_zeros();
-    let top_bits = top_height * top_arity.trailing_zeros();
-    let base_bits = sector_nodes.trailing_zeros() - sub_bits - top_bits;
-    let base_height = base_bits / base_arity.trailing_zeros();
+    let (base_height, sub_height, top_height) =
+        tree_heights(sector_nodes, base_arity, sub_arity, top_arity);
 
-    iter::repeat(base_arity)
-        .take(base_height as usize)
-        .chain(iter::once(sub_arity).take(sub_height as usize))
-        .chain(iter::once(top_arity).take(top_height as usize))
+    std::iter::repeat(base_arity)
+        .take(base_height)
+        .chain(std::iter::once(sub_arity).take(sub_height))
+        .chain(std::iter::once(top_arity).take(top_height))
         .map(|arity| vec![F::zero(); arity - 1])
         .collect()
 }

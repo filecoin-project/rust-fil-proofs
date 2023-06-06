@@ -389,6 +389,20 @@ pub fn get_base_tree_leafs<Tree: MerkleTreeTrait>(base_tree_size: usize) -> Resu
     get_merkle_tree_leafs(base_tree_size, Tree::Arity::to_usize())
 }
 
+pub fn tree_heights(
+    num_leafs: usize,
+    base_arity: usize,
+    sub_arity: usize,
+    top_arity: usize,
+) -> (usize, usize, usize) {
+    let (sub_height, top_height) = ((sub_arity != 0) as u32, (top_arity != 0) as u32);
+    let sub_bits = sub_height * sub_arity.trailing_zeros();
+    let top_bits = top_height * top_arity.trailing_zeros();
+    let base_bits = num_leafs.trailing_zeros() - sub_bits - top_bits;
+    let base_height = base_bits / base_arity.trailing_zeros();
+    (base_height as usize, sub_height as usize, top_height as usize)
+}
+
 pub type ResTree<Tree> = MerkleTreeWrapper<
     <Tree as MerkleTreeTrait>::Hasher,
     <Tree as MerkleTreeTrait>::Store,
