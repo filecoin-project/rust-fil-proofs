@@ -42,6 +42,14 @@ impl<
         }
     }
 
+    #[inline]
+    pub fn mock(sector_nodes: usize, num_layers: usize) -> Self {
+        ColumnProof {
+            column: Column::mock(num_layers),
+            inclusion_path: AuthPath::mock(sector_nodes),
+        }
+    }
+
     /// Allocate the private inputs for this column proof, and return the inclusion path for verification.
     pub fn alloc<CS: ConstraintSystem<H::Field>>(
         self,
@@ -55,6 +63,11 @@ impl<
         let column = column.alloc(cs.namespace(|| "column"))?;
 
         Ok((column, inclusion_path))
+    }
+
+    #[inline]
+    pub fn challenge(&self) -> usize {
+        self.inclusion_path.challenge()
     }
 }
 

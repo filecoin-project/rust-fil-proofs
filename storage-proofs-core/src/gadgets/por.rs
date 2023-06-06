@@ -230,6 +230,29 @@ impl<H: Hasher, U: PoseidonArity<H::Field>, V: PoseidonArity<H::Field>, W: Posei
             top: SubPath { path: top },
         }
     }
+
+    #[inline]
+    pub fn mock(num_leafs: usize) -> Self {
+        blank_merkle_path::<H::Field, U, V, W>(num_leafs)
+            .into_iter()
+            .map(|sibs| (sibs.into_iter().map(Some).collect(), Some(0)))
+            .collect::<Vec<(Vec<Option<H::Field>>, Option<usize>)>>()
+            .into()
+    }
+
+    pub fn challenge(&self) -> usize {
+        self.base.path
+            .iter()
+            .map(|path_elem| (path_elem.hashes.len(), path_elem.index))
+            .chain(self.sub.path.iter().map(|path_elem| (path_elem.hashes.len(), path_elem.index)))
+            .chain(self.top.path.iter().map(|path_elem| (path_elem.hashes.len(), path_elem.index)))
+            .rev()
+            .fold(0usize, |acc, (sibs, pos)| {
+                let arity = sibs + 1;
+                let arity_bit_len = arity.trailing_zeros() as usize;
+                (acc << arity_bit_len) + pos.unwrap_or(0)
+            })
+    }
 }
 
 impl<Tree: MerkleTreeTrait> CircuitComponent for PoRCircuit<Tree> {
@@ -378,6 +401,13 @@ impl<Tree: MerkleTreeTrait> Circuit<Tree::Field> for PoRCircuit<Tree> {
             {
                 // Validate that the root of the merkle tree that we calculated is the same as the input.
                 let rt = root.allocated(cs.namespace(|| "root_value"))?;
+
+                let rt = if cfg!(feature = "mock-por-circ") {
+                    &computed_root
+                } else {
+                    &rt
+                };
+
                 constraint::equal(cs, || "enforce root is correct", &computed_root, &rt);
 
                 if !self.private {
@@ -591,7 +621,7 @@ where
     // Assert equality between the computed root and the provided root.
     let computed_root = cur;
 
-    let root = if cfg!(all(feature = "nova", feature = "mock-por-circ")) {
+    let root = if cfg!(feature = "mock-por-circ") {
         &computed_root
     } else {
         &root

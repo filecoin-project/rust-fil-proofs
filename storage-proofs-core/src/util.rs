@@ -177,7 +177,6 @@ pub fn default_rows_to_discard(leafs: usize, arity: usize) -> usize {
     }
 }
 
-#[cfg(feature = "nova")]
 pub fn pretty_print_sector_size(sector_nodes: usize) -> String {
     match sector_nodes << 5 {
         sector_bytes if sector_bytes >= 1 << 30 => format!("{}GiB", sector_bytes >> 30),

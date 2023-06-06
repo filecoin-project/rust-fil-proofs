@@ -33,6 +33,13 @@ impl<F: PrimeField> Column<F> {
         }
     }
 
+    #[inline]
+    pub fn mock(num_layers: usize) -> Self {
+        Column {
+            rows: vec![Some(F::zero()); num_layers],
+        }
+    }
+
     /// Consume this column, and allocate its values in the circuit.
     pub fn alloc<CS: ConstraintSystem<F>>(
         self,

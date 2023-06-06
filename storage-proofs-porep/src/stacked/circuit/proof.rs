@@ -90,6 +90,46 @@ where
         circuit.synthesize(&mut cs)
     }
 
+    pub fn mock(
+        public_params: <StackedDrg<'a, Tree, G> as ProofScheme<'a>>::PublicParams,
+    ) -> Self {
+        use ff::Field;
+        use storage_proofs_core::gadgets::por::AuthPath;
+
+        use crate::stacked::circuit::column_proof::ColumnProof;
+
+        let sector_nodes = public_params.graph.size();
+        let drg_parents = public_params.graph.base_graph().degree();
+        let exp_parents = public_params.graph.expansion_degree();
+        let num_layers = public_params.layer_challenges.layers();
+        let partition_challenge_count = public_params.layer_challenges.challenges_count_all();
+
+        let path_d = AuthPath::mock(sector_nodes);
+        let path_cr = AuthPath::mock(sector_nodes);
+        let col_proof = ColumnProof::mock(sector_nodes, num_layers);
+
+        let challenge_proof = Proof {
+            comm_d_path: path_d,
+            data_leaf: Some(Tree::Field::zero()),
+            challenge: Some(0),
+            comm_r_last_path: path_cr.clone(),
+            comm_c_path: path_cr,
+            drg_parents_proofs: vec![col_proof.clone(); drg_parents],
+            exp_parents_proofs: vec![col_proof; exp_parents],
+            _t: PhantomData,
+        };
+
+        StackedCircuit {
+            public_params,
+            replica_id: Some(Tree::Field::zero().into()),
+            comm_d: Some(Tree::Field::zero().into()),
+            comm_r: Some(Tree::Field::zero().into()),
+            comm_r_last: Some(Tree::Field::zero().into()),
+            comm_c: Some(Tree::Field::zero().into()),
+            proofs: vec![challenge_proof; partition_challenge_count],
+        }
+    }
+
     pub fn generate_public_inputs(
         pub_params: &vanilla::PublicParams<Tree>,
         pub_in: &vanilla::PublicInputs<<Tree::Hasher as Hasher>::Domain, G::Domain>,
@@ -171,6 +211,32 @@ where
 
         Ok(inputs)
     }
+
+    pub fn pub_inputs_vec(&self) -> Vec<Tree::Field> {
+        let mut inputs = vec![];
+        inputs.push(self.replica_id.unwrap().into());
+        inputs.push(self.comm_d.unwrap().into());
+        inputs.push(self.comm_r.unwrap().into());
+
+        for challenge_proof in &self.proofs {
+            let challenge = Tree::Field::from(challenge_proof.challenge.unwrap());
+            inputs.push(challenge);
+
+            for parent in challenge_proof.drg_parents_proofs
+                .iter()
+                .chain(&challenge_proof.exp_parents_proofs)
+                .map(|col_proof| col_proof.challenge())
+            {
+                inputs.push(Tree::Field::from(parent as u64));
+            }
+
+            inputs.push(challenge);
+            inputs.push(challenge);
+            inputs.push(challenge);
+        }
+
+        inputs
+    }
 }
 
 impl<'a, Tree: MerkleTreeTrait, G: Hasher<Field = Tree::Field>> Circuit<Tree::Field> for StackedCircuit<'a, Tree, G>
@@ -244,11 +310,17 @@ where
                 &comm_r_last_num,
             )?;
 
+            let comm_r_num = if cfg!(feature = "mock-test-circ") {
+                &hash_num
+            } else {
+                &comm_r_num
+            };
+
             // Check actual equality
             constraint::equal(
                 cs,
                 || "enforce comm_r = H(comm_c || comm_r_last)",
-                &comm_r_num,
+                comm_r_num,
                 &hash_num,
             );
         }

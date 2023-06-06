@@ -53,7 +53,7 @@ pub struct Proof<Tree: MerkleTreeTrait, G: Hasher<Field = Tree::Field>> {
     pub drg_parents_proofs: Vec<TreeColumnProof<Tree>>,
     /// Column proofs for the expander parents.
     pub exp_parents_proofs: Vec<TreeColumnProof<Tree>>,
-    _t: PhantomData<Tree>,
+    pub _t: PhantomData<Tree>,
 }
 
 // We must manually implement Clone for all types generic over MerkleTreeTrait (instead of using
