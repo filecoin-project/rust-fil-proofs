@@ -244,7 +244,10 @@ fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
     assert!(is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_0_0)
+
+    let mut porep_config =
+        PoRepConfig::new_groth16(SECTOR_SIZE_512_MIB, porep_id, ApiVersion::V1_0_0);
+    seal_lifecycle::<SectorShape512MiB>(&porep_config)
 }
 
 #[cfg(feature = "big-tests")]
@@ -256,7 +259,10 @@ fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1_1() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape512MiB>(SECTOR_SIZE_512_MIB, &porep_id, ApiVersion::V1_1_0)
+
+    let mut porep_config =
+        PoRepConfig::new_groth16(SECTOR_SIZE_512_MIB, porep_id, ApiVersion::V1_1_0);
+    seal_lifecycle::<SectorShape512MiB>(&porep_config)
 }
 
 #[cfg(feature = "big-tests")]
@@ -277,7 +283,10 @@ fn test_seal_lifecycle_32gib_porep_id_v1_top_8_8_0_api_v1() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
     assert!(is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_0_0)
+
+    let mut porep_config =
+        PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id, ApiVersion::V1_0_0);
+    seal_lifecycle::<SectorShape32GiB>(&porep_config)
 }
 
 #[cfg(feature = "big-tests")]
@@ -288,12 +297,15 @@ fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_1() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape32GiB>(SECTOR_SIZE_32_GIB, &porep_id, ApiVersion::V1_1_0)
+
+    let mut porep_config =
+        PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id, ApiVersion::V1_1_0);
+    seal_lifecycle::<SectorShape32GiB>(&porep_config)
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
-fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_2() -> Result<()> {
+fn test_seal_lifecycle_32gib_porep_id_v1_2_top_8_8_0_api_v1_2() -> Result<()> {
     let porep_id_v1_2: u64 = 8; // This is a RegisteredSealProof value
 
     let porep_id = to_porep_id_verified(porep_id_v1_2, ApiVersion::V1_2_0);
@@ -324,7 +336,10 @@ fn test_seal_lifecycle_64gib_porep_id_v1_top_8_8_2_api_v1() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
     assert!(is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_0_0)
+
+    let mut porep_config =
+        PoRepConfig::new_groth16(SECTOR_SIZE_64_GIB, porep_id, ApiVersion::V1_0_0);
+    seal_lifecycle::<SectorShape64GiB>(&porep_config)
 }
 
 #[cfg(feature = "big-tests")]
@@ -335,7 +350,25 @@ fn test_seal_lifecycle_64gib_porep_id_v1_1_top_8_8_2_api_v1_1() -> Result<()> {
     let mut porep_id = [0u8; 32];
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
-    seal_lifecycle::<SectorShape64GiB>(SECTOR_SIZE_64_GIB, &porep_id, ApiVersion::V1_1_0)
+
+    let mut porep_config =
+        PoRepConfig::new_groth16(SECTOR_SIZE_64_GIB, porep_id, ApiVersion::V1_1_0);
+    seal_lifecycle::<SectorShape64GiB>(&porep_config)
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_64gib_porep_id_v1_2_top_8_8_2_api_v1_2() -> Result<()> {
+    let porep_id_v1_2: u64 = 9; // This is a RegisteredSealProof value
+
+    let porep_id = to_porep_id_verified(porep_id_v1_2, ApiVersion::V1_2_0);
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let mut porep_config =
+        PoRepConfig::new_groth16(SECTOR_SIZE_64_GIB, porep_id, ApiVersion::V1_2_0);
+    porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+
+    seal_lifecycle::<SectorShape64GiB>(&porep_config)
 }
 
 #[cfg(feature = "big-tests")]
