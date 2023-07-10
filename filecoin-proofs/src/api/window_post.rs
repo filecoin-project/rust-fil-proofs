@@ -227,7 +227,7 @@ pub fn verify_window_post<Tree: 'static + MerkleTreeTrait>(
 
     let is_valid = {
         let verifying_key = get_post_verifying_key::<Tree>(post_config)?;
-        let multi_proof = MultiProof::new_from_reader(partitions, proof, &verifying_key)?;
+        let multi_proof = MultiProof::new_from_bytes(partitions, proof, &verifying_key)?;
 
         FallbackPoStCompound::verify(
             &pub_params,
