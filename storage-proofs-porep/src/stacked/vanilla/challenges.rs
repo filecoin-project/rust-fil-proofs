@@ -192,7 +192,8 @@ pub mod synthetic {
     };
     use ff::PrimeField;
 
-    pub const SYNTHETIC_POREP_VANILLA_PROOFS_KEY: &str = "SynPoRepVanillaProofs";
+    pub const SYNTHETIC_POREP_VANILLA_PROOFS_KEY: &str = "syn-porep-vanilla-proofs";
+    pub const SYNTHETIC_POREP_VANILLA_PROOFS_EXT: &str = "dat";
 
     // Default synthetic challenge count for production sector sizes.
     const DEFAULT_SYNTH_CHALLENGE_COUNT: usize = 1 << 18;

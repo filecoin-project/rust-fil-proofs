@@ -320,10 +320,7 @@ impl Rhos {
             .map(|high| {
                 (
                     high,
-                    rho(phi, high as u32)
-                        .invert()
-                        .unwrap()
-                        //.expect("rho inversion should not fail"),
+                    rho(phi, high as u32).invert().unwrap(), //.expect("rho inversion should not fail"),
                 )
             })
             .collect();

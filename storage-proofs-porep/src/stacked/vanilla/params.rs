@@ -28,7 +28,7 @@ use storage_proofs_core::{
 
 use crate::stacked::vanilla::{
     Column, ColumnProof, EncodingProof, LabelingProof, LayerChallenges, StackedBucketGraph,
-    SYNTHETIC_POREP_VANILLA_PROOFS_KEY,
+    SYNTHETIC_POREP_VANILLA_PROOFS_EXT, SYNTHETIC_POREP_VANILLA_PROOFS_KEY,
 };
 
 pub const BINARY_ARITY: usize = 2;
@@ -517,10 +517,10 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
     }
 
     pub fn synth_proofs_path(&self) -> PathBuf {
-        self.tree_d_config
-            .path
-            .clone()
-            .join(SYNTHETIC_POREP_VANILLA_PROOFS_KEY)
+        self.tree_d_config.path.clone().join(format!(
+            "{}.{}",
+            SYNTHETIC_POREP_VANILLA_PROOFS_KEY, SYNTHETIC_POREP_VANILLA_PROOFS_EXT
+        ))
     }
 
     pub fn clear_synthetic_proofs(&self) -> Result<()> {

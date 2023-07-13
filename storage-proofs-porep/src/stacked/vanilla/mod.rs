@@ -23,8 +23,8 @@ mod proof_scheme;
 mod utils;
 
 pub use challenges::{
-    synthetic::SYNTHETIC_POREP_VANILLA_PROOFS_KEY, ChallengeRequirements, LayerChallenges,
-    SynthChallenges,
+    synthetic::SYNTHETIC_POREP_VANILLA_PROOFS_EXT, synthetic::SYNTHETIC_POREP_VANILLA_PROOFS_KEY,
+    ChallengeRequirements, LayerChallenges, SynthChallenges,
 };
 pub use column::Column;
 pub use column_proof::ColumnProof;
