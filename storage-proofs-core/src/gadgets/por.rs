@@ -683,6 +683,6 @@ where
         .take(base_height)
         .chain(std::iter::once(sub_arity).take(sub_height))
         .chain(std::iter::once(top_arity).take(top_height))
-        .map(|arity| vec![F::zero(); arity - 1])
+        .map(|arity| vec![F::ZERO; arity - 1])
         .collect()
 }

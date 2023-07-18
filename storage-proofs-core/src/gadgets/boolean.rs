@@ -26,7 +26,7 @@ where
         .collect::<Result<Vec<AllocatedBit>, SynthesisError>>()?;
 
     let mut lc = LinearCombination::zero();
-    let mut coeff = F::one();
+    let mut coeff = F::ONE;
     for bit in &bits {
         lc = lc + (coeff, bit.get_variable());
         coeff = coeff.double();

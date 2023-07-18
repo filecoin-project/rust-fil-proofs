@@ -255,7 +255,7 @@ where
             for i in (elts.len() + 1)..arity {
                 preimage[i] =
                     AllocatedNum::alloc(cs.namespace(|| format!("padding {}", i)), || {
-                        Ok(F::zero())
+                        Ok(F::ZERO)
                     })
                     .expect("alloc failure");
             }
@@ -299,7 +299,7 @@ where
 
     #[inline]
     fn reset(&mut self) {
-        self.0 = F::zero();
+        self.0 = F::ZERO;
     }
 
     fn leaf(&mut self, leaf: PoseidonDomain<F>) -> PoseidonDomain<F> {

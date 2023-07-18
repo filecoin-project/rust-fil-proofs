@@ -122,7 +122,7 @@ pub trait NovaCircuit<G: Cycle>: StepCircuit<G::F> {
     // identifies the circuit's parameters/keys on disk.
     fn id(&self) -> Result<String, SynthesisError> {
         let mut cs = TestConstraintSystem::<G::F>::new();
-        let zero = AllocatedNum::alloc(cs.namespace(|| "zero"), || Ok(G::F::zero()))
+        let zero = AllocatedNum::alloc(cs.namespace(|| "zero"), || Ok(G::F::ZERO))
             .expect("failed to allocate input");
         let inputs = vec![zero; self.arity()];
         self.synthesize(&mut cs, &inputs)?;
@@ -153,7 +153,7 @@ pub trait NovaCircuit<G: Cycle>: StepCircuit<G::F> {
 
     fn create_secondary() -> (Circ2<G::F2>, Vec<G::F2>) {
         let circ_sec = Circ2::default();
-        let inputs_sec = vec![G::F2::zero(); circ_sec.arity()];
+        let inputs_sec = vec![G::F2::ZERO; circ_sec.arity()];
         (circ_sec, inputs_sec)
     }
 

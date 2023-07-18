@@ -110,7 +110,7 @@ where
 
         let challenge_proof = Proof {
             comm_d_path: path_d,
-            data_leaf: Some(Tree::Field::zero()),
+            data_leaf: Some(Tree::Field::ZERO),
             challenge: Some(0),
             comm_r_last_path: path_cr.clone(),
             comm_c_path: path_cr,
@@ -121,11 +121,11 @@ where
 
         StackedCircuit {
             public_params,
-            replica_id: Some(Tree::Field::zero().into()),
-            comm_d: Some(Tree::Field::zero().into()),
-            comm_r: Some(Tree::Field::zero().into()),
-            comm_r_last: Some(Tree::Field::zero().into()),
-            comm_c: Some(Tree::Field::zero().into()),
+            replica_id: Some(Tree::Field::ZERO.into()),
+            comm_d: Some(Tree::Field::ZERO.into()),
+            comm_r: Some(Tree::Field::ZERO.into()),
+            comm_r_last: Some(Tree::Field::ZERO.into()),
+            comm_c: Some(Tree::Field::ZERO.into()),
             proofs: vec![challenge_proof; partition_challenge_count],
         }
     }

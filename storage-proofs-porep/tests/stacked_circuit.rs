@@ -196,7 +196,7 @@ where
         "wrong number of constraints"
     );
 
-    assert_eq!(cs.get_input(0, "ONE"), Tree::Field::one());
+    assert_eq!(cs.get_input(0, "ONE"), Tree::Field::ONE);
 
     let generated_inputs = StackedCircuit::<'_, Tree, Sha256Hasher<_>>::generate_public_inputs(
         &pp,

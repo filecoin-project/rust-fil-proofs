@@ -176,7 +176,7 @@ fn test_por_validates_proof<Tree: MerkleTreeTrait>() {
     let bad_proof = {
         let mut proof = good_proof;
         let mut bad_leaf = Into::<Tree::Field>::into(proof.data);
-        bad_leaf += Tree::Field::one();
+        bad_leaf += Tree::Field::ONE;
         proof.data = bad_leaf.into();
         proof
     };

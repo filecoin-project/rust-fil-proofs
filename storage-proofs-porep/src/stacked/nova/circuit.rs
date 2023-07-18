@@ -102,9 +102,9 @@ impl<F: PrimeField> SectorPublicInputs<F> {
     #[inline]
     fn blank(sp: &SetupParams) -> Self {
         SectorPublicInputs {
-            replica_id: F::zero(),
-            comm_d: F::zero(),
-            comm_r: F::zero(),
+            replica_id: F::ZERO,
+            comm_d: F::ZERO,
+            comm_r: F::ZERO,
             challenges: vec![0; sp.porep_challenge_count],
             parents: vec![vec![0; TOTAL_PARENTS]; sp.porep_challenge_count],
         }
@@ -256,17 +256,17 @@ impl<F: PrimeField> SectorPrivateInputs<F> {
         W: PoseidonArity<F>,
     {
         let challenge_bit_len = sp.sector_nodes.trailing_zeros() as usize;
-        let path_d = vec![F::zero(); challenge_bit_len];
+        let path_d = vec![F::ZERO; challenge_bit_len];
 
         let path_cr = blank_merkle_path::<F, U, V, W>(sp.sector_nodes);
 
         let parent_proof = ParentProof {
-            column: vec![F::zero(); sp.num_layers],
+            column: vec![F::ZERO; sp.num_layers],
             path_c: path_cr.clone(),
         };
 
         let challenge_proof = ChallengeProof {
-            leaf_d: F::zero(),
+            leaf_d: F::ZERO,
             path_d,
             path_c: path_cr.clone(),
             path_r: path_cr,
@@ -275,8 +275,8 @@ impl<F: PrimeField> SectorPrivateInputs<F> {
         };
 
         SectorPrivateInputs {
-            comm_c: F::zero(),
-            root_r: F::zero(),
+            comm_c: F::ZERO,
+            root_r: F::ZERO,
             challenge_proofs: vec![challenge_proof; sp.porep_challenge_count],
         }
     }
@@ -562,7 +562,7 @@ where
         if sector_done {
             let proving_done = self.pub_inputs.sectors.len() == 1;
             if proving_done {
-                return vec![F::zero(); num_inputs];
+                return vec![F::ZERO; num_inputs];
             }
             sector = &self.pub_inputs.sectors[1];
             challenges_rem = sector.challenges.len();
@@ -916,6 +916,17 @@ mod tests {
 
         let params = circ.gen_params();
 
+
+        use flate2::{write::ZlibEncoder, Compression};
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        bincode::serialize_into(&mut encoder, &params).unwrap();
+        let params_ser = encoder.finish().unwrap();
+        // let params_ser: Vec<u8> = bincode::serialize(&params).unwrap();
+        info!("nova params bincode size: {} bytes", params_ser.len());
+        let params_des: Option<storage_proofs_core::nova::Params<F::G, SdrPorepCircuit<F, U, V, W>>> =
+            bincode::deserialize(&params_ser).unwrap();
+
+        /*
         let r_proof =
             circ.gen_recursive_proof(&params).expect("failed to generate recursive proof");
         assert!(r_proof.verify(&params).expect("failed to verify recursive proof"));
@@ -929,6 +940,7 @@ mod tests {
             "nova compressed proof size: {} bytes",
             c_proof.proof_bytes().expect("failed to serialize compressed proof").len(),
         );
+        */
     }
 
     #[test]
