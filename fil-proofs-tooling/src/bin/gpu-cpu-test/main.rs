@@ -17,10 +17,11 @@ use filecoin_proofs::{
     WINNING_POST_SECTOR_COUNT,
 };
 use log::{debug, info};
-use storage_proofs_core::api_version::ApiVersion;
+use storage_proofs_core::api_version::{ApiFeature, ApiVersion};
 use storage_proofs_core::sector::SectorId;
 
-const FIXED_API_VERSION: ApiVersion = ApiVersion::V1_0_0;
+const FIXED_API_VERSION: ApiVersion = ApiVersion::V1_2_0;
+const FIXED_API_FEATURES: Vec<ApiFeature> = Vec::new();
 
 type MerkleTree = SectorShape8MiB;
 const SECTOR_SIZE: u64 = SECTOR_SIZE_8_MIB;
@@ -155,8 +156,13 @@ fn threads_mode(parallel: u8, gpu_stealing: bool) {
     let arbitrary_porep_id = [234; 32];
 
     // Create fixtures only once for both threads
-    let (sector_id, replica_output) =
-        create_replica::<MerkleTree>(SECTOR_SIZE, arbitrary_porep_id, false, FIXED_API_VERSION);
+    let (sector_id, replica_output) = create_replica::<MerkleTree>(
+        SECTOR_SIZE,
+        arbitrary_porep_id,
+        false,
+        FIXED_API_VERSION,
+        FIXED_API_FEATURES,
+    );
     let priv_replica_info = (sector_id, replica_output.private_replica_info);
 
     // Put each proof into it's own scope (the other one is due to the if statement)

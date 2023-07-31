@@ -3,10 +3,11 @@ use std::fs::File;
 use std::io::{BufWriter, Seek, Write};
 
 use filecoin_proofs::{
-    add_piece, fauxrep_aux, seal_pre_commit_phase1, seal_pre_commit_phase2,
-    validate_cache_for_precommit_phase2, MerkleTreeTrait, PaddedBytesAmount, PieceInfo,
-    PoRepConfig, PrivateReplicaInfo, PublicReplicaInfo, SealPreCommitOutput,
-    SealPreCommitPhase1Output, SectorSize, UnpaddedBytesAmount,
+    add_piece, clear_layer_data, fauxrep_aux, generate_synth_proofs, seal_pre_commit_phase1,
+    seal_pre_commit_phase2, validate_cache_for_commit, validate_cache_for_precommit_phase2,
+    MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PrivateReplicaInfo,
+    PublicReplicaInfo, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize,
+    UnpaddedBytesAmount,
 };
 use generic_array::typenum::Unsigned;
 use log::info;
@@ -16,7 +17,7 @@ use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
 };
 use storage_proofs_core::{
-    api_version::ApiVersion,
+    api_version::{ApiFeature, ApiVersion},
     sector::SectorId,
     util::{default_rows_to_discard, NODE_SIZE},
 };
@@ -82,6 +83,7 @@ pub fn create_replica<Tree: 'static + MerkleTreeTrait>(
     porep_id: [u8; 32],
     fake_replica: bool,
     api_version: ApiVersion,
+    api_features: Vec<ApiFeature>,
 ) -> (SectorId, PreCommitReplicaOutput<Tree>) {
     let (_porep_config, result) = create_replicas::<Tree>(
         SectorSize(sector_size),
@@ -90,6 +92,7 @@ pub fn create_replica<Tree: 'static + MerkleTreeTrait>(
         fake_replica,
         porep_id,
         api_version,
+        api_features,
     );
     // Extract the sector ID and replica output out of the result
     result
@@ -107,6 +110,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     fake_replicas: bool,
     porep_id: [u8; 32],
     api_version: ApiVersion,
+    api_features: Vec<ApiFeature>,
 ) -> (
     PoRepConfig,
     Option<(
@@ -118,7 +122,10 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     let sector_size_unpadded_bytes_ammount =
         UnpaddedBytesAmount::from(PaddedBytesAmount::from(sector_size));
 
-    let porep_config = PoRepConfig::new_groth16(u64::from(sector_size), porep_id, api_version);
+    let mut porep_config = PoRepConfig::new_groth16(u64::from(sector_size), porep_id, api_version);
+    for feature in api_features {
+        porep_config.enable_feature(feature);
+    }
 
     let mut out: Vec<(SectorId, PreCommitReplicaOutput<Tree>)> = Default::default();
     let mut sector_ids = Vec::new();
@@ -262,7 +269,35 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
                         &sealed_files[i],
                         &phase1,
                     )?;
-                    seal_pre_commit_phase2(&porep_config, phase1, &cache_dirs[i], &sealed_files[i])
+                    let res = seal_pre_commit_phase2(
+                        &porep_config,
+                        phase1,
+                        &cache_dirs[i],
+                        &sealed_files[i],
+                    )?;
+
+                    if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
+                        info!("SyntheticPoRep is enabled");
+                        generate_synth_proofs::<std::path::PathBuf, Tree>(
+                            &porep_config,
+                            cache_dirs[i].path().to_path_buf(),
+                            sealed_files[i].clone(),
+                            PROVER_ID,
+                            sector_ids[i],
+                            TICKET_BYTES,
+                            res.clone(),
+                            piece_infos[i].as_slice(),
+                        )
+                        .expect("failed to generate synthetic proofs");
+                        clear_layer_data::<Tree>(cache_dirs[i].path())
+                            .expect("failed to clear synthetic porep layer data");
+                    } else {
+                        info!("SyntheticPoRep is NOT enabled");
+                        validate_cache_for_commit::<_, _, Tree>(&cache_dirs[i], &sealed_files[i])
+                            .expect("failed to validate_cache_for_commit");
+                    }
+
+                    Ok(res)
                 })
                 .collect::<Result<Vec<_>, _>>()
         }

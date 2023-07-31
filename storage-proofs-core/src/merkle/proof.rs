@@ -227,7 +227,7 @@ pub struct PathElement<H: Hasher, Arity: PoseidonArity> {
 }
 
 /// Representation of a merkle proof.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct MerkleProof<
     H: Hasher,
     BaseArity: PoseidonArity,
@@ -317,6 +317,18 @@ enum ProofData<
         deserialize = "H::Domain: Deserialize<'de>"
     ))]
     Top(TopProof<H, BaseArity, SubTreeArity, TopTreeArity>),
+}
+
+impl<
+        H: Hasher,
+        Arity: 'static + PoseidonArity,
+        SubTreeArity: 'static + PoseidonArity,
+        TopTreeArity: 'static + PoseidonArity,
+    > Default for ProofData<H, Arity, SubTreeArity, TopTreeArity>
+{
+    fn default() -> Self {
+        ProofData::Single(SingleProof::default())
+    }
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]

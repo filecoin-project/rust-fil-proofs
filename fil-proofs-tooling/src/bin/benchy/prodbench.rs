@@ -187,6 +187,7 @@ pub fn run(
 
     assert!(inputs.num_sectors > 0, "Missing num_sectors");
 
+    let api_features = Vec::new();
     let (cfg, repls) = create_replicas::<DefaultOctLCTree>(
         sector_size,
         inputs.num_sectors as usize,
@@ -194,6 +195,7 @@ pub fn run(
         false, /* fake replica */
         arbitrary_porep_id,
         inputs.api_version(),
+        api_features,
     );
 
     if only_add_piece || only_replicate {

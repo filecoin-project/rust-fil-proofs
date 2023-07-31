@@ -245,8 +245,7 @@ fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1() -> Result<()> {
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
     assert!(is_legacy_porep_id(porep_id));
 
-    let mut porep_config =
-        PoRepConfig::new_groth16(SECTOR_SIZE_512_MIB, porep_id, ApiVersion::V1_0_0);
+    let porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_512_MIB, porep_id, ApiVersion::V1_0_0);
     seal_lifecycle::<SectorShape512MiB>(&porep_config)
 }
 
@@ -260,8 +259,7 @@ fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1_1() -> Result<()> {
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
 
-    let mut porep_config =
-        PoRepConfig::new_groth16(SECTOR_SIZE_512_MIB, porep_id, ApiVersion::V1_1_0);
+    let porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_512_MIB, porep_id, ApiVersion::V1_1_0);
     seal_lifecycle::<SectorShape512MiB>(&porep_config)
 }
 
@@ -284,8 +282,7 @@ fn test_seal_lifecycle_32gib_porep_id_v1_top_8_8_0_api_v1() -> Result<()> {
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
     assert!(is_legacy_porep_id(porep_id));
 
-    let mut porep_config =
-        PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id, ApiVersion::V1_0_0);
+    let porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id, ApiVersion::V1_0_0);
     seal_lifecycle::<SectorShape32GiB>(&porep_config)
 }
 
@@ -298,8 +295,7 @@ fn test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_1() -> Result<()> {
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
 
-    let mut porep_config =
-        PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id, ApiVersion::V1_1_0);
+    let porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id, ApiVersion::V1_1_0);
     seal_lifecycle::<SectorShape32GiB>(&porep_config)
 }
 
@@ -337,8 +333,7 @@ fn test_seal_lifecycle_64gib_porep_id_v1_top_8_8_2_api_v1() -> Result<()> {
     porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
     assert!(is_legacy_porep_id(porep_id));
 
-    let mut porep_config =
-        PoRepConfig::new_groth16(SECTOR_SIZE_64_GIB, porep_id, ApiVersion::V1_0_0);
+    let porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_64_GIB, porep_id, ApiVersion::V1_0_0);
     seal_lifecycle::<SectorShape64GiB>(&porep_config)
 }
 
@@ -351,8 +346,7 @@ fn test_seal_lifecycle_64gib_porep_id_v1_1_top_8_8_2_api_v1_1() -> Result<()> {
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
 
-    let mut porep_config =
-        PoRepConfig::new_groth16(SECTOR_SIZE_64_GIB, porep_id, ApiVersion::V1_1_0);
+    let porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_64_GIB, porep_id, ApiVersion::V1_1_0);
     seal_lifecycle::<SectorShape64GiB>(&porep_config)
 }
 
