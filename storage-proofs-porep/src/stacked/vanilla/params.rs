@@ -1,5 +1,8 @@
 use std::fs::remove_file;
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::iter;
 use std::marker::PhantomData;
+use std::mem;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
@@ -15,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     api_version::{ApiFeature, ApiVersion},
-    drgraph::Graph,
+    drgraph::{Graph, BASE_DEGREE},
     error::Result,
     merkle::{
         create_disk_tree, create_lc_tree, get_base_tree_count, split_config,
@@ -23,12 +26,13 @@ use storage_proofs_core::{
         MerkleProofTrait, MerkleTreeTrait,
     },
     parameter_cache::ParameterSetMetadata,
-    util::data_at_node,
+    util::{data_at_node, NODE_SIZE},
 };
 
 use crate::stacked::vanilla::{
     Column, ColumnProof, EncodingProof, LabelingProof, LayerChallenges, StackedBucketGraph,
-    SYNTHETIC_POREP_VANILLA_PROOFS_EXT, SYNTHETIC_POREP_VANILLA_PROOFS_KEY,
+    EXP_DEGREE, SYNTHETIC_POREP_VANILLA_PROOFS_EXT, SYNTHETIC_POREP_VANILLA_PROOFS_KEY,
+    TOTAL_PARENTS,
 };
 
 pub const BINARY_ARITY: usize = 2;
@@ -304,6 +308,77 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
 
         true
     }
+
+    #[allow(clippy::type_complexity)]
+    fn from_parts(
+        proof_d: MerkleProof<G, U2>,
+        col_proof: ColumnProof<
+            MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+        >,
+        drg_col_proofs: Vec<
+            ColumnProof<
+                MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+            >,
+        >,
+        exp_col_proofs: Vec<
+            ColumnProof<
+                MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+            >,
+        >,
+        proof_r: MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+    ) -> Self {
+        let challenge = col_proof.column.index as u64;
+        let num_layers = col_proof.column.rows.len();
+        let num_drg_parents = drg_col_proofs.len();
+        let num_exp_parents = exp_col_proofs.len();
+
+        let labeling_proofs: Vec<LabelingProof<Tree::Hasher>> = (0..num_layers)
+            .map(|layer_index| {
+                let has_exp_parents = (layer_index != 0) as usize;
+                let layer_parents = num_drg_parents + has_exp_parents * num_exp_parents;
+                let (layer, prev_layer) = (layer_index + 1, layer_index);
+
+                let repeated_parent_labels = drg_col_proofs
+                    .iter()
+                    .zip(iter::repeat(layer))
+                    .chain(exp_col_proofs.iter().zip(iter::repeat(prev_layer)))
+                    .map(|(col_proof, layer)| {
+                        *col_proof
+                            .get_node_at_layer(layer)
+                            .expect("layer index should never be invalid")
+                    })
+                    .take(layer_parents)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .cycle()
+                    .take(TOTAL_PARENTS)
+                    .collect();
+
+                LabelingProof::new(layer as u32, challenge, repeated_parent_labels)
+            })
+            .collect();
+
+        let encoding_proof = {
+            let enc_key_proof = &labeling_proofs[num_layers - 1];
+            EncodingProof::new(
+                enc_key_proof.layer_index,
+                enc_key_proof.node,
+                enc_key_proof.parents.clone(),
+            )
+        };
+
+        Proof {
+            comm_d_proofs: proof_d,
+            comm_r_last_proof: proof_r,
+            replica_column_proofs: ReplicaColumnProof {
+                c_x: col_proof,
+                drg_parents: drg_col_proofs,
+                exp_parents: exp_col_proofs,
+            },
+            labeling_proofs,
+            encoding_proof,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -347,6 +422,367 @@ impl<Proof: MerkleProofTrait> ReplicaColumnProof<Proof> {
         }
 
         true
+    }
+}
+
+/// Type for serializing/deserializing synthetic proofs' file.
+///
+/// Note that the synthetic proofs' serialization format differs from the standard `serde`
+/// serialization format for `Proof` to achieve a smaller synthetic proofs file.
+///
+/// The synthetic proofs serialization format is:
+///
+/// 1) root_d (32 bytes)
+/// 2) root_c (32 bytes)
+/// 3) root_r (32 bytes)
+/// 4) For each synthetic challenge proof:
+///     4.1) Challenge's node index (8 bytes)
+///     4.2) Parents' node indices (8 bytes per parent)
+///     4.3) Challenge's proof_d (32 bytes for leaf_d and 32 bytes per path_d sibling)
+///     4.4) Challenge's column (32 bytes per layer)
+///     4.5) Challenge's proof_c (32 bytes for leaf_c and 32 bytes per path_c sibling)
+///     4.6) For each parent:
+///         4.6.1) Parent's column (32 bytes per layer)
+///         4.6.2) Parent's proof_c (32 bytes for leaf_c and 32 bytes per path_c sibling)
+///     4.7) Challenge's proof_r (32 bytes for leaf_r and 32 bytes per path_r sibling)
+pub(crate) struct SynthProofs;
+
+impl SynthProofs {
+    /// Serializes and writes synthetic proofs `proofs` into `writer`.
+    pub fn write<Tree, G, W>(mut writer: W, proofs: &[Proof<Tree, G>]) -> Result<()>
+    where
+        Tree: MerkleTreeTrait,
+        G: Hasher,
+        W: Write,
+    {
+        // Write each Merkle root.
+        let root_d = proofs[0].comm_d_proofs.root();
+        let root_c = proofs[0].replica_column_proofs.c_x.inclusion_proof.root();
+        let root_r = proofs[0].comm_r_last_proof.root();
+
+        writer.write_all(root_d.as_ref())?;
+        writer.write_all(root_c.as_ref())?;
+        writer.write_all(root_r.as_ref())?;
+
+        for proof in proofs {
+            let proof_d = &proof.comm_d_proofs;
+            let col_proof = &proof.replica_column_proofs.c_x;
+            let drg_col_proofs = &proof.replica_column_proofs.drg_parents;
+            let exp_col_proofs = &proof.replica_column_proofs.exp_parents;
+            let proof_c = &col_proof.inclusion_proof;
+            let proof_r = &proof.comm_r_last_proof;
+
+            // Write challenge and parents.
+            let challenge = proof_d.path_index() as u64;
+            let parents = drg_col_proofs
+                .iter()
+                .chain(exp_col_proofs)
+                .map(|col_proof| col_proof.inclusion_proof.path_index() as u64);
+
+            writer.write_all(&challenge.to_le_bytes())?;
+            for parent in parents {
+                writer.write_all(&parent.to_le_bytes())?;
+            }
+
+            // Write challenge's `proof_d`.
+            let leaf_d = proof_d.leaf();
+            let path_d = proof_d.path().into_iter().map(|(sibs, _)| sibs[0]);
+
+            writer.write_all(leaf_d.as_ref())?;
+            for sib in path_d {
+                writer.write_all(sib.as_ref())?;
+            }
+
+            // Write challenge's column and `proof_c`.
+            let col = &col_proof.column.rows;
+            let leaf_c = proof_c.leaf();
+            let path_c = proof_c.path().into_iter().map(|(sibs, _)| sibs);
+
+            for label in col {
+                writer.write_all(label.as_ref())?;
+            }
+            writer.write_all(leaf_c.as_ref())?;
+            for sibs in path_c {
+                for sib in sibs {
+                    writer.write_all(sib.as_ref())?;
+                }
+            }
+
+            // Write each parent's column and `proof_c`.
+            for col_proof in drg_col_proofs.iter().chain(exp_col_proofs) {
+                let col = &col_proof.column.rows;
+                let proof_c = &col_proof.inclusion_proof;
+                let leaf_c = proof_c.leaf();
+                let path_c = proof_c.path().into_iter().map(|(sibs, _)| sibs);
+
+                for label in col {
+                    writer.write_all(label.as_ref())?;
+                }
+                writer.write_all(leaf_c.as_ref())?;
+                for sibs in path_c {
+                    for sib in sibs {
+                        writer.write_all(sib.as_ref())?;
+                    }
+                }
+            }
+
+            // Write challenge's `proof_r`.
+            let leaf_r = proof_r.leaf();
+            let path_r = proof_r.path().into_iter().map(|(sibs, _)| sibs);
+
+            writer.write_all(leaf_r.as_ref())?;
+            for sibs in path_r {
+                for sib in sibs {
+                    writer.write_all(sib.as_ref())?;
+                }
+            }
+        }
+
+        writer.flush()?;
+        Ok(())
+    }
+
+    /// Reads a subset of synthetic proofs, specified by synthetic proof indexes `selected_proofs`,
+    /// from `reader`.
+    pub fn read<Tree, G, R>(
+        mut reader: R,
+        sector_nodes: usize,
+        num_layers: usize,
+        selected_proofs: impl Iterator<Item = usize>,
+    ) -> Result<Vec<Proof<Tree, G>>>
+    where
+        Tree: MerkleTreeTrait,
+        G: Hasher,
+        R: Read + Seek,
+    {
+        let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
+        let (num_drg_parents, num_exp_parents) = (BASE_DEGREE, EXP_DEGREE);
+        let num_parents = num_drg_parents + num_exp_parents;
+
+        // Reads and deserializes a TreeD Merkle proof from reader.
+        fn read_proof_d<R: Read, G: Hasher>(
+            reader: &mut R,
+            challenge: u64,
+            root: G::Domain,
+            path_len: usize,
+        ) -> io::Result<MerkleProof<G, U2>> {
+            let mut buf_32 = [0u8; 32];
+            let leaf = reader.read_exact(&mut buf_32).map(|_| buf_32.into())?;
+            let path = (0..path_len)
+                .map(|i| {
+                    let index = (challenge >> i) & 1;
+                    let sib = reader.read_exact(&mut buf_32).map(|_| buf_32.into())?;
+                    Ok((vec![sib], index as usize))
+                })
+                .collect::<io::Result<Vec<_>>>()?;
+            Ok(MerkleProof::from_parts(leaf, root, path))
+        }
+
+        let base_arity = Tree::Arity::to_usize();
+        let sub_arity = Tree::SubTreeArity::to_usize();
+        let top_arity = Tree::TopTreeArity::to_usize();
+
+        let has_sub = (sub_arity != 0) as usize;
+        let has_top = (top_arity != 0) as usize;
+
+        let base_bit_len = base_arity.trailing_zeros() as usize;
+        let sub_bit_len = has_sub * sub_arity.trailing_zeros() as usize;
+        let top_bit_len = has_top * top_arity.trailing_zeros() as usize;
+        let base_path_r_len = (challenge_bit_len - sub_bit_len - top_bit_len) / base_bit_len;
+        let path_r_len = base_path_r_len + has_sub + has_top;
+
+        let (path_r_sibs, path_r_bit_masks): (Vec<usize>, Vec<u64>) = iter::repeat(base_arity)
+            .take(base_path_r_len)
+            .chain([sub_arity, top_arity])
+            .take(path_r_len)
+            .map(|arity| {
+                let arity_minus_1 = arity - 1;
+                (arity_minus_1, arity_minus_1 as u64)
+            })
+            .unzip();
+
+        let path_r_bit_lens: Vec<usize> = iter::repeat(base_bit_len)
+            .take(base_path_r_len)
+            .chain([sub_bit_len, top_bit_len])
+            .take(path_r_len)
+            .collect();
+
+        // Returns the TreeC/TreeR Merkle path indices corresponding to `challenge`.
+        #[inline]
+        fn path_r_indexes(
+            mut challenge: u64,
+            path_r_bit_masks: &[u64],
+            path_r_bit_lens: &[usize],
+        ) -> Vec<usize> {
+            path_r_bit_masks
+                .iter()
+                .zip(path_r_bit_lens)
+                .map(|(mask, bit_len)| {
+                    let index = challenge & mask;
+                    challenge >>= bit_len;
+                    index as usize
+                })
+                .collect()
+        }
+
+        // Reads and deserializes a TreeC/TreeR Merkle proof from reader.
+        fn read_proof_r<R: Read, Tree: MerkleTreeTrait>(
+            reader: &mut R,
+            path_indexes: &[usize],
+            root: <Tree::Hasher as Hasher>::Domain,
+            path_r_sibs: &[usize],
+        ) -> io::Result<
+            MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+        > {
+            let mut buf_32 = [0u8; 32];
+            let leaf = reader.read_exact(&mut buf_32).map(|_| buf_32.into())?;
+            let path = path_r_sibs
+                .iter()
+                .zip(path_indexes)
+                .map(|(&num_sibs, &index)| {
+                    let sibs = (0..num_sibs)
+                        .map(|_| reader.read_exact(&mut buf_32).map(|_| buf_32.into()))
+                        .collect::<io::Result<Vec<_>>>()?;
+                    Ok((sibs, index))
+                })
+                .collect::<io::Result<Vec<_>>>()?;
+            Ok(MerkleProof::from_parts(leaf, root, path))
+        }
+
+        // Reads and deserializes a column proof (a column and TreeC Merkle proof) from `reader`.
+        #[allow(clippy::type_complexity)]
+        fn read_col_proof<R: Read, Tree: MerkleTreeTrait>(
+            reader: &mut R,
+            challenge: u64,
+            path_indexes: &[usize],
+            root: <Tree::Hasher as Hasher>::Domain,
+            path_r_sibs: &[usize],
+            num_layers: usize,
+        ) -> io::Result<
+            ColumnProof<
+                MerkleProof<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+            >,
+        > {
+            let mut buf_32 = [0u8; 32];
+            let col = (0..num_layers)
+                .map(|_| reader.read_exact(&mut buf_32).map(|_| buf_32.into()))
+                .collect::<io::Result<Vec<_>>>()?;
+            let proof_c = read_proof_r::<R, Tree>(reader, path_indexes, root, path_r_sibs)?;
+            Ok(ColumnProof::new(challenge as u32, col, proof_c))
+        }
+
+        // Read Merkle roots.
+        reader.rewind()?;
+        let mut buf_32 = [0u8; 32];
+        let root_d = reader.read_exact(&mut buf_32).map(|_| buf_32.into())?;
+        let root_c = reader.read_exact(&mut buf_32).map(|_| buf_32.into())?;
+        let root_r = reader.read_exact(&mut buf_32).map(|_| buf_32.into())?;
+
+        let roots_size = 3 * NODE_SIZE;
+        let proof_size = Self::proof_size::<Tree>(sector_nodes, num_layers);
+
+        selected_proofs
+            .map(|proof_index| {
+                let offset = roots_size + proof_index * proof_size;
+                reader.seek(SeekFrom::Start(offset as u64))?;
+
+                let mut buf_8 = [0u8; 8];
+                let challenge = reader
+                    .read_exact(&mut buf_8)
+                    .map(|_| u64::from_le_bytes(buf_8))?;
+                let parents = (0..num_parents)
+                    .map(|_| {
+                        reader
+                            .read_exact(&mut buf_8)
+                            .map(|_| u64::from_le_bytes(buf_8))
+                    })
+                    .collect::<io::Result<Vec<u64>>>()?;
+
+                let proof_d =
+                    read_proof_d::<R, G>(&mut reader, challenge, root_d, challenge_bit_len)?;
+
+                let challenge_path_indexes =
+                    path_r_indexes(challenge, &path_r_bit_masks, &path_r_bit_lens);
+
+                let col_proof = read_col_proof::<R, Tree>(
+                    &mut reader,
+                    challenge,
+                    &challenge_path_indexes,
+                    root_c,
+                    &path_r_sibs,
+                    num_layers,
+                )?;
+
+                let mut parent_col_proofs = parents.into_iter().map(|parent| {
+                    read_col_proof::<R, Tree>(
+                        &mut reader,
+                        parent,
+                        &path_r_indexes(parent, &path_r_bit_masks, &path_r_bit_lens),
+                        root_c,
+                        &path_r_sibs,
+                        num_layers,
+                    )
+                });
+                let drg_col_proofs = (&mut parent_col_proofs)
+                    .take(num_drg_parents)
+                    .collect::<io::Result<_>>()?;
+                let exp_col_proofs = parent_col_proofs.collect::<io::Result<_>>()?;
+
+                let proof_r = read_proof_r::<R, Tree>(
+                    &mut reader,
+                    &challenge_path_indexes,
+                    root_r,
+                    &path_r_sibs,
+                )?;
+
+                Ok(Proof::from_parts(
+                    proof_d,
+                    col_proof,
+                    drg_col_proofs,
+                    exp_col_proofs,
+                    proof_r,
+                ))
+            })
+            .collect()
+    }
+
+    /// Returns the size of a single challenge's serialized synthetic proof.
+    pub fn proof_size<Tree: MerkleTreeTrait>(sector_nodes: usize, num_layers: usize) -> usize {
+        // The number of node indices associated with each challenge proof: one node index for the
+        // challenge and one for each of the challenge's parents.
+        let num_merkle_challenges = 1 + BASE_DEGREE + EXP_DEGREE;
+
+        // The number of 32-byte nodes in a TreeD Merkle proof. Add one node for leaf_d to path_d's
+        // length.
+        let challenge_bit_len = sector_nodes.trailing_zeros() as usize;
+        let proof_d_nodes = 1 + challenge_bit_len;
+
+        // The number of 32-byte nodes in a TreeC/TreeR Merkle proof.
+        let proof_r_nodes = {
+            let base_arity = Tree::Arity::to_usize();
+            let sub_arity = Tree::SubTreeArity::to_usize();
+            let top_arity = Tree::TopTreeArity::to_usize();
+
+            let base_arity_bit_len = base_arity.trailing_zeros() as usize;
+            let sub_arity_bit_len = (sub_arity != 0) as usize * sub_arity.trailing_zeros() as usize;
+            let top_arity_bit_len = (top_arity != 0) as usize * top_arity.trailing_zeros() as usize;
+            let base_path_len =
+                (challenge_bit_len - sub_arity_bit_len - top_arity_bit_len) / base_arity_bit_len;
+
+            let base_path_nodes = base_path_len * (base_arity - 1);
+            let sub_path_nodes = sub_arity.saturating_sub(1);
+            let top_path_nodes = top_arity.saturating_sub(1);
+            // Add one node for leaf_r to path_r's length.
+            1 + base_path_nodes + sub_path_nodes + top_path_nodes
+        };
+
+        // A column proof is comprised of a column (of `num_layers` nodes) and a TreeC Merkle proof.
+        let col_proof_nodes = num_layers + proof_r_nodes;
+
+        let total_proof_nodes =
+            proof_d_nodes + num_merkle_challenges * col_proof_nodes + proof_r_nodes;
+
+        num_merkle_challenges * mem::size_of::<u64>() + total_proof_nodes * NODE_SIZE
     }
 }
 

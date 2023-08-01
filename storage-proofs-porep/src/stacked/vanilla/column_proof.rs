@@ -21,6 +21,18 @@ pub struct ColumnProof<Proof: MerkleProofTrait> {
 }
 
 impl<Proof: MerkleProofTrait> ColumnProof<Proof> {
+    #[inline]
+    pub fn new(
+        challenge: u32,
+        col: Vec<<Proof::Hasher as Hasher>::Domain>,
+        inclusion_proof: Proof,
+    ) -> Self {
+        ColumnProof {
+            column: Column::new(challenge, col).expect("column creation should not fail"),
+            inclusion_proof,
+        }
+    }
+
     pub fn from_column(column: Column<Proof::Hasher>, inclusion_proof: Proof) -> Result<Self> {
         Ok(ColumnProof {
             column,

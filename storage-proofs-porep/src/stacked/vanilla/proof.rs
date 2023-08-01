@@ -1,13 +1,13 @@
 use std::any::TypeId;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{BufReader, BufWriter};
 use std::marker::PhantomData;
 use std::panic::panic_any;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
 use anyhow::{ensure, Context};
-use bincode::{deserialize, serialize};
+use bincode::deserialize;
 use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
 use ff::PrimeField;
@@ -48,8 +48,8 @@ use crate::{
         hash::hash_single_column,
         params::{
             get_node, Labels, LabelsCache, PersistentAux, Proof, PublicInputs, PublicParams,
-            ReplicaColumnProof, Tau, TemporaryAux, TemporaryAuxCache, TransformedLayers,
-            BINARY_ARITY,
+            ReplicaColumnProof, SynthProofs, Tau, TemporaryAux, TemporaryAuxCache,
+            TransformedLayers, BINARY_ARITY,
         },
         EncodingProof, LabelingProof,
     },
@@ -408,15 +408,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         let path = t_aux.synth_proofs_path();
         info!("writing synth-porep vanilla proofs to file: {:?}", path);
-        let mut file = File::create(&path).with_context(|| {
+        let file = File::create(&path).map(BufWriter::new).with_context(|| {
             format!(
                 "failed to create synth-porep vanilla proofs file: {:?}",
                 path,
             )
         })?;
-        let synth_proofs_bytes = serialize(&synth_proofs)
-            .with_context(|| "failed to serialize synth-porep vanilla proofs")?;
-        file.write_all(&synth_proofs_bytes).with_context(|| {
+        SynthProofs::write(file, synth_proofs).with_context(|| {
             format!(
                 "failed to write synth-porep vanilla proofs to file: {:?}",
                 path,
@@ -456,19 +454,38 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             .expect("unwrapping should not fail");
         let path = t_aux.synth_proofs_path();
         info!("reading synthetic vanilla proofs from file: {:?}", path);
-        let proofs_bytes = fs::read(&path)
-            .with_context(|| format!("failed to read synthetic vanilla proofs file: {:?}", path))?;
-        let synth_proofs: Vec<Proof<Tree, G>> = deserialize(&proofs_bytes)
-            .with_context(|| "failed to deserialize synth-porep vanilla proofs file")?;
+
+        let num_layers = layer_challenges.layers();
+
+        let mut file = File::open(&path)
+            .map(BufReader::new)
+            .with_context(|| format!("failed to open synthetic vanilla proofs file: {:?}", path))?;
+
         let porep_proofs = (0..partition_count as u8)
             .map(|k| {
-                layer_challenges
-                    .derive_synth_indexes(sector_nodes, &pub_inputs.replica_id, comm_r, seed, k)
-                    .into_iter()
-                    .map(|i| synth_proofs[i].clone())
-                    .collect()
+                let synth_indexes = layer_challenges.derive_synth_indexes(
+                    sector_nodes,
+                    &pub_inputs.replica_id,
+                    comm_r,
+                    seed,
+                    k,
+                );
+
+                SynthProofs::read(
+                    &mut file,
+                    sector_nodes,
+                    num_layers,
+                    synth_indexes.into_iter(),
+                )
+                .with_context(|| {
+                    format!(
+                        "failed to read partition k={} synthetic proofs from file: {:?}",
+                        k, path,
+                    )
+                })
             })
-            .collect::<Vec<Vec<Proof<Tree, G>>>>();
+            .collect::<Result<Vec<Vec<Proof<Tree, G>>>>>()?;
+
         info!("successfully read porep vanilla proofs from synthetic file");
         Ok(porep_proofs)
     }
