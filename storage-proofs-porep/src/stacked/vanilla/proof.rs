@@ -1,6 +1,6 @@
 use std::any::TypeId;
 use std::fs::{self, File};
-use std::io::{Write, BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Write};
 use std::marker::PhantomData;
 use std::panic::panic_any;
 use std::path::{Path, PathBuf};
