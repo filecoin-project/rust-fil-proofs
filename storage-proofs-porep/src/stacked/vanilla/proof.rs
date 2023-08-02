@@ -116,10 +116,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         // Sanity checks on restored trees.
         assert!(pub_inputs.tau.is_some());
-        assert_eq!(
-            pub_inputs.tau.as_ref().expect("as_ref failure").comm_d,
-            t_aux.tree_d.root()
-        );
+        // Skip this check in the case of synthetic porep
+        if t_aux.tree_d.is_some() {
+            assert_eq!(
+                pub_inputs.tau.as_ref().expect("as_ref failure").comm_d,
+                t_aux.tree_d.as_ref().expect("failed to get tree_d").root()
+            );
+        }
 
         // If synthetic vanilla proofs are stored on disk, read and return the proofs corresponding
         // to the porep challlenge set.
@@ -210,7 +213,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             assert!(challenge < graph.size(), "Invalid challenge");
                             assert!(challenge > 0, "Invalid challenge");
 
-                            let comm_d_proof = t_aux.tree_d.gen_proof(challenge)?;
+                            let comm_d_proof = t_aux
+                                .tree_d
+                                .as_ref()
+                                .expect("failed to get tree_d")
+                                .gen_proof(challenge)?;
 
                             let comm_d_proof_inner = comm_d_proof.clone();
                             let challenge_inner = challenge;
@@ -221,8 +228,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             // Stacked replica column openings
                             let rcp = {
                                 let (c_x, drg_parents, exp_parents) = {
-                                    assert_eq!(p_aux.comm_c, t_aux.tree_c.root());
-                                    let tree_c = &t_aux.tree_c;
+                                    assert!(t_aux.tree_c.is_some());
+                                    let tree_c =
+                                        t_aux.tree_c.as_ref().expect("failed to get tree_c");
+                                    assert_eq!(p_aux.comm_c, tree_c.root());
 
                                     // All labels in C_X
                                     trace!("  c_x");

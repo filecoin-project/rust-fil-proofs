@@ -868,8 +868,86 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
         Path::new(&StoreConfig::data_path(&config.path, &config.id)).exists()
     }
 
-    // 'clear_layer_data' will discard all persisted layer data that is no longer required.
+    // 'clear_layer_data' will discard all persisted layer data that
+    // is no longer required.  Unfortunately, it also clears TreeC and
+    // TreeD, which means this method is strangely named, but those
+    // are also no longer needed in the SynthPoRep case (which this
+    // call is only used for).
     pub fn clear_layer_data(&self) -> Result<()> {
+        let delete_tree_c_store = |config: &StoreConfig, tree_c_size: usize| -> Result<()> {
+            let tree_c_store = DiskStore::<<Tree::Hasher as Hasher>::Domain>::new_from_disk(
+                tree_c_size,
+                Tree::Arity::to_usize(),
+                config,
+            )
+            .context("tree_c")?;
+            // Note: from_data_store requires the base tree leaf count
+            let tree_c = DiskTree::<
+                Tree::Hasher,
+                Tree::Arity,
+                Tree::SubTreeArity,
+                Tree::TopTreeArity,
+            >::from_data_store(
+                tree_c_store,
+                get_merkle_tree_leafs(tree_c_size, Tree::Arity::to_usize())?,
+            )
+            .context("tree_c")?;
+            tree_c.delete(config.clone()).context("tree_c")?;
+
+            Ok(())
+        };
+
+        let tree_d_config = self.tree_d_config.clone();
+        if self.cached(&tree_d_config) {
+            let tree_d_size = self
+                .tree_d_config
+                .size
+                .context("tree_d config has no size")?;
+            let tree_d_store: DiskStore<G::Domain> =
+                DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &tree_d_config)
+                    .context("tree_d")?;
+            // Note: from_data_store requires the base tree leaf count
+            let tree_d = BinaryMerkleTree::<G>::from_data_store(
+                tree_d_store,
+                get_merkle_tree_leafs(tree_d_size, BINARY_ARITY)?,
+            )
+            .context("tree_d")?;
+
+            tree_d.delete(tree_d_config).context("tree_d")?;
+            trace!("tree d deleted");
+        }
+
+        let tree_count = get_base_tree_count::<Tree>();
+        let tree_c_size = self
+            .tree_c_config
+            .size
+            .context("tree_c config has no size")?;
+        let configs = split_config(self.tree_c_config.clone(), tree_count)?;
+
+        if self.cached(&self.tree_c_config) {
+            delete_tree_c_store(&self.tree_c_config, tree_c_size)?;
+            trace!("tree c deleted");
+        } else if self.cached(&configs[0]) {
+            for config in &configs {
+                // Trees with sub-trees cannot be instantiated and deleted via the existing tree interface since
+                // knowledge of how the base trees are split exists outside of merkle light.  For now, we manually
+                // remove each on disk tree file since we know where they are here.
+                let tree_c_path = StoreConfig::data_path(&config.path, &config.id);
+                remove_file(&tree_c_path)
+                    .with_context(|| format!("Failed to delete {:?}", &tree_c_path))?
+            }
+            trace!("tree c deleted");
+        }
+
+        self.clear_layer_data_inner()
+    }
+
+    // 'clear_layer_data' will discard all persisted layer data that
+    // is no longer required.  Unfortunately, it also clears TreeC and
+    // TreeD, which means this method is strangely named, but those
+    // are also no longer needed in the SynthPoRep case (which this
+    // call is only used for).
+    fn clear_layer_data_inner(&self) -> Result<()> {
         for i in 0..self.labels.labels.len() {
             let cur_config = self.labels.labels[i].clone();
             if self.cached(&cur_config) {
@@ -937,6 +1015,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
 
         if t_aux.cached(&t_aux.tree_c_config) {
             delete_tree_c_store(&t_aux.tree_c_config, tree_c_size)?;
+            trace!("tree c deleted");
         } else if t_aux.cached(&configs[0]) {
             for config in &configs {
                 // Trees with sub-trees cannot be instantiated and deleted via the existing tree interface since
@@ -946,8 +1025,8 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
                 remove_file(&tree_c_path)
                     .with_context(|| format!("Failed to delete {:?}", &tree_c_path))?
             }
+            trace!("tree c deleted");
         }
-        trace!("tree c deleted");
 
         t_aux.clear_layer_data()
     }
@@ -980,7 +1059,7 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
 pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher> {
     /// The encoded nodes for 1..layers.
     pub labels: LabelsCache<Tree>,
-    pub tree_d: BinaryMerkleTree<G>,
+    pub tree_d: Option<BinaryMerkleTree<G>>,
 
     // Notably this is a LevelCacheTree instead of a full merkle.
     pub tree_r_last: LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
@@ -989,7 +1068,7 @@ pub struct TemporaryAuxCache<Tree: MerkleTreeTrait, G: Hasher> {
     // StoreConfig for later use (i.e. proof generation).
     pub tree_r_last_config_rows_to_discard: usize,
 
-    pub tree_c: DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+    pub tree_c: Option<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>,
     pub t_aux: TemporaryAux<Tree, G>,
     pub replica_path: PathBuf,
 }
@@ -1000,34 +1079,42 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
         replica_path: PathBuf,
         skip_labels: bool,
     ) -> Result<Self> {
-        // tree_d_size stored in the config is the base tree size
-        let tree_d_size = t_aux.tree_d_config.size.expect("config size failure");
-        let tree_d_leafs = get_merkle_tree_leafs(tree_d_size, BINARY_ARITY)?;
-        trace!(
-            "Instantiating tree d with size {} and leafs {}",
-            tree_d_size,
-            tree_d_leafs,
-        );
-        let tree_d_store: DiskStore<G::Domain> =
-            DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &t_aux.tree_d_config)
-                .context("tree_d_store")?;
-        let tree_d =
-            BinaryMerkleTree::<G>::from_data_store(tree_d_store, tree_d_leafs).context("tree_d")?;
-
         let tree_count = get_base_tree_count::<Tree>();
-        let configs = split_config(t_aux.tree_c_config.clone(), tree_count)?;
 
-        // tree_c_size stored in the config is the base tree size
-        let tree_c_size = t_aux.tree_c_config.size.expect("config size failure");
-        trace!(
-            "Instantiating tree c [count {}] with size {} and arity {}",
-            tree_count,
-            tree_c_size,
-            Tree::Arity::to_usize(),
-        );
-        let tree_c = create_disk_tree::<
-            DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
-        >(tree_c_size, &configs)?;
+        // Skip Labels is true in the case of SyntheticPoRep which doesn't need the labels nor TreeD/TreeC
+        let (tree_d, tree_c) = if skip_labels {
+            (None, None)
+        } else {
+            // tree_d_size stored in the config is the base tree size
+            let tree_d_size = t_aux.tree_d_config.size.expect("config size failure");
+            let tree_d_leafs = get_merkle_tree_leafs(tree_d_size, BINARY_ARITY)?;
+            trace!(
+                "Instantiating tree d with size {} and leafs {}",
+                tree_d_size,
+                tree_d_leafs,
+            );
+            let tree_d_store: DiskStore<G::Domain> =
+                DiskStore::new_from_disk(tree_d_size, BINARY_ARITY, &t_aux.tree_d_config)
+                    .context("tree_d_store")?;
+            let tree_d = BinaryMerkleTree::<G>::from_data_store(tree_d_store, tree_d_leafs)
+                .context("tree_d")?;
+
+            let configs = split_config(t_aux.tree_c_config.clone(), tree_count)?;
+
+            // tree_c_size stored in the config is the base tree size
+            let tree_c_size = t_aux.tree_c_config.size.expect("config size failure");
+            trace!(
+                "Instantiating tree c [count {}] with size {} and arity {}",
+                tree_count,
+                tree_c_size,
+                Tree::Arity::to_usize(),
+            );
+            let tree_c = create_disk_tree::<
+                DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>,
+            >(tree_c_size, &configs)?;
+
+            (Some(tree_d), Some(tree_c))
+        };
 
         // tree_r_last_size stored in the config is the base tree size
         let tree_r_last_size = t_aux.tree_r_last_config.size.expect("config size failure");
@@ -1056,10 +1143,10 @@ impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAuxCache<Tree, G> {
             trace!("Skipping label instantiation");
             Ok(TemporaryAuxCache {
                 labels: LabelsCache::new(&Labels::new(Vec::new())).context("labels_cache")?,
-                tree_d,
+                tree_d: None, //tree_d,
                 tree_r_last,
                 tree_r_last_config_rows_to_discard,
-                tree_c,
+                tree_c: None, //tree_c,
                 replica_path,
                 t_aux: t_aux.clone(),
             })

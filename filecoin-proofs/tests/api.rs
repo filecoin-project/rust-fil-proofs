@@ -124,15 +124,32 @@ fn test_seal_lifecycle_2kib_base_8() -> Result<()> {
 fn test_seal_lifecycle_upgrade_2kib_base_8() -> Result<()> {
     // The first value is RegisteredSealProof value
     // The second value is the ApiVersion to use
+    // The third value is whether to use SyntheticPoRep
     let test_inputs = vec![
-        (0u64, ApiVersion::V1_0_0),
-        (MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, ApiVersion::V1_1_0),
-        (MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, ApiVersion::V1_2_0),
+        (
+            MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
+            ApiVersion::V1_1_0,
+            false,
+        ),
+        (
+            MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
+            ApiVersion::V1_2_0,
+            false,
+        ),
+        (
+            MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
+            ApiVersion::V1_2_0,
+            true,
+        ),
     ];
 
-    for (porep_id_num, api_version) in test_inputs {
+    for (porep_id_num, api_version, use_synthetic) in test_inputs {
         let porep_id = to_porep_id_verified(porep_id_num, api_version);
-        seal_lifecycle_upgrade::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, api_version)?;
+        let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_2_KIB, porep_id, api_version);
+        if use_synthetic {
+            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        }
+        seal_lifecycle_upgrade::<SectorShape2KiB>(&porep_config)?;
     }
 
     Ok(())
@@ -163,13 +180,18 @@ fn test_seal_lifecycle_4kib_base_8() -> Result<()> {
 #[ignore]
 fn test_seal_lifecycle_upgrade_4kib_base_8() -> Result<()> {
     let test_inputs = vec![
-        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0),
-        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, false),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, false),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, false),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, true),
     ];
 
-    for (porep_id, api_version) in test_inputs {
-        seal_lifecycle_upgrade::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &porep_id, api_version)?;
+    for (porep_id, api_version, use_synthetic) in test_inputs {
+        let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_4_KIB, porep_id, api_version);
+        if use_synthetic {
+            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        }
+        seal_lifecycle_upgrade::<SectorShape4KiB>(&porep_config)?;
     }
 
     Ok(())
@@ -200,13 +222,18 @@ fn test_seal_lifecycle_16kib_base_8() -> Result<()> {
 #[ignore]
 fn test_seal_lifecycle_upgrade_16kib_base_8() -> Result<()> {
     let test_inputs = vec![
-        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0),
-        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0),
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, false),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, false),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, false),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, true),
     ];
 
-    for (porep_id, api_version) in test_inputs {
-        seal_lifecycle_upgrade::<SectorShape16KiB>(SECTOR_SIZE_16_KIB, &porep_id, api_version)?;
+    for (porep_id, api_version, use_synthetic) in test_inputs {
+        let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_16_KIB, porep_id, api_version);
+        if use_synthetic {
+            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        }
+        seal_lifecycle_upgrade::<SectorShape16KiB>(&porep_config)?;
     }
 
     Ok(())
@@ -392,9 +419,7 @@ fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(porep_config: &PoRepConfig) -
 }
 
 fn seal_lifecycle_upgrade<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
-    sector_size: u64,
-    porep_id: &[u8; 32],
-    api_version: ApiVersion,
+    porep_config: &PoRepConfig,
 ) -> Result<()> {
     let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
@@ -402,16 +427,10 @@ fn seal_lifecycle_upgrade<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
     info!(
-        "Creating seal proof for upgrade with ApiVersion {} and PoRep ID {:?}",
-        api_version, porep_id
+        "Creating seal proof for upgrade with ApiVersion {}",
+        porep_config.api_version
     );
-    let (_, replica, _, _) = create_seal_for_upgrade::<_, Tree>(
-        &mut rng,
-        sector_size,
-        prover_id,
-        porep_id,
-        api_version,
-    )?;
+    let (_, replica, _, _) = create_seal_for_upgrade::<_, Tree>(porep_config, &mut rng, prover_id)?;
     replica.close()?;
 
     Ok(())
@@ -1986,25 +2005,23 @@ fn decode_from_range_in_parts<R: Rng>(
 }
 
 fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+    porep_config: &PoRepConfig,
     rng: &mut R,
-    sector_size: u64,
     prover_id: ProverId,
-    porep_id: &[u8; 32],
-    api_version: ApiVersion,
 ) -> Result<(SectorId, NamedTempFile, Commitment, TempDir)> {
     fil_logger::maybe_init();
 
+    let sector_size = porep_config.sector_size.into();
     let (mut piece_file, _piece_bytes) = generate_piece_file(sector_size)?;
     let sealed_sector_file = NamedTempFile::new()?;
     let cache_dir = tempdir().expect("failed to create temp dir");
 
-    let porep_config = porep_config(sector_size, *porep_id, api_version);
-    let config = SectorUpdateConfig::from_porep_config(&porep_config);
+    let config = SectorUpdateConfig::from_porep_config(porep_config);
     let ticket = rng.gen();
     let sector_id = rng.gen::<u64>().into();
 
-    let (_piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
-        &porep_config,
+    let (piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
+        porep_config,
         prover_id,
         sector_id,
         ticket,
@@ -2014,14 +2031,30 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     )?;
 
     let pre_commit_output = seal_pre_commit_phase2(
-        &porep_config,
+        porep_config,
         phase1_output,
         cache_dir.path(),
         sealed_sector_file.path(),
     )?;
     let comm_r = pre_commit_output.comm_r;
 
-    validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
+    if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
+        info!("SyntheticPoRep is enabled");
+        generate_synth_proofs::<_, Tree>(
+            porep_config,
+            cache_dir.path(),
+            sealed_sector_file.path(),
+            prover_id,
+            sector_id,
+            ticket,
+            pre_commit_output,
+            &piece_infos,
+        )?;
+        clear_layer_data::<Tree>(cache_dir.path())?;
+    } else {
+        info!("SyntheticPoRep is NOT enabled");
+        validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
+    }
 
     // Upgrade the cc sector here.
     let new_sealed_sector_file = NamedTempFile::new()?;
@@ -2059,7 +2092,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     f_sealed_sector.set_len(new_replica_target_len)?;
 
     let encoded = encode_into::<Tree>(
-        &porep_config,
+        porep_config,
         new_sealed_sector_file.path(),
         new_cache_dir.path(),
         sealed_sector_file.path(),
@@ -2115,14 +2148,14 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     ensure!(proofs_are_valid, "Partition proofs failed to verify");
 
     let proof = generate_empty_sector_update_proof_with_vanilla::<Tree>(
-        &porep_config,
+        porep_config,
         partition_proofs,
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,
     )?;
     let valid = verify_empty_sector_update_proof::<Tree>(
-        &porep_config,
+        porep_config,
         &proof.0,
         comm_r,
         encoded.comm_r_new,
@@ -2131,7 +2164,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     ensure!(valid, "Compound proof failed to verify");
 
     let proof = generate_empty_sector_update_proof::<Tree>(
-        &porep_config,
+        porep_config,
         comm_r,
         encoded.comm_r_new,
         encoded.comm_d_new,
@@ -2141,7 +2174,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         new_cache_dir.path(),
     )?;
     let valid = verify_empty_sector_update_proof::<Tree>(
-        &porep_config,
+        porep_config,
         &proof.0,
         comm_r,
         encoded.comm_r_new,
