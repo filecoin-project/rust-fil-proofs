@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use anyhow::Result;
 use byte_slice_cast::{AsSliceOf, FromByteSlice};
-use log::{info, warn};
+use log::{info, trace};
 use memmap2::{Mmap, MmapMut, MmapOptions};
 
 pub struct CacheReader<T> {
@@ -285,7 +285,7 @@ fn allocate_layer(sector_size: usize) -> Result<MmapMut> {
         Ok(layer) => Ok(layer),
         Err(err) => {
             // fallback to not locked if permissions are not available
-            warn!("failed to lock map {:?}, falling back", err);
+            trace!("failed to lock map {:?}, falling back", err);
             let layer = MmapOptions::new().len(sector_size).map_anon()?;
             Ok(layer)
         }
