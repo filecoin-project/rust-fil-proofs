@@ -104,20 +104,21 @@ pub fn setup_params(porep_config: &PoRepConfig) -> Result<stacked::SetupParams> 
     })
 }
 
+/// Division of x by y, rounding up.
+/// x and y must be > 0
+const fn div_ceil(x: usize, y: usize) -> usize {
+    1 + ((x - 1) / y)
+}
+
 fn select_challenges(
     partitions: usize,
     minimum_total_challenges: usize,
     use_synthetic: bool,
 ) -> LayerChallenges {
-    let mut count = 1;
-    let mut guess = LayerChallenges::new(count);
-    while partitions * guess.challenges_count_all() < minimum_total_challenges {
-        count += 1;
-        guess = LayerChallenges::new(count);
-    }
-
-    guess.use_synthetic = use_synthetic;
-    guess
+    let challenges = div_ceil(minimum_total_challenges, partitions);
+    let mut result = LayerChallenges::new(challenges);
+    result.use_synthetic = use_synthetic;
+    result
 }
 
 #[cfg(test)]
