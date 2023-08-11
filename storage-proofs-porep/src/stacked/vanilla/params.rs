@@ -334,8 +334,11 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Proof<Tree, G> {
 
         let labeling_proofs: Vec<LabelingProof<Tree::Hasher>> = (0..num_layers)
             .map(|layer_index| {
-                let has_exp_parents = (layer_index != 0) as usize;
-                let layer_parents = num_drg_parents + has_exp_parents * num_exp_parents;
+                let layer_parents = if layer_index == 0 {
+                    num_drg_parents
+                } else {
+                    num_drg_parents + num_exp_parents
+                };
                 let (layer, prev_layer) = (layer_index + 1, layer_index);
 
                 let repeated_parent_labels = drg_col_proofs

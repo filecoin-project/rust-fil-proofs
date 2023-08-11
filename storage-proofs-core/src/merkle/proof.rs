@@ -500,57 +500,39 @@ impl<
         root: H::Domain,
         mut path: Vec<(Vec<H::Domain>, usize)>,
     ) -> Self {
-        let has_sub_path = SubTreeArity::to_usize() != 0;
-        let has_top_path = TopTreeArity::to_usize() != 0;
-        let base_path_len = path.len() - has_sub_path as usize - has_top_path as usize;
-
-        let mut path = path.drain(..);
-
-        let base_path = (&mut path)
-            .take(base_path_len)
-            .map(PathElement::from)
-            .collect::<Vec<_>>()
-            .into();
-
-        if !has_sub_path {
-            return MerkleProof {
+        if SubTreeArity::to_usize() == 0 {
+            let base_path = path.into_iter().map(PathElement::from).collect::<Vec<_>>();
+            MerkleProof {
                 data: ProofData::Single(SingleProof {
                     leaf,
                     root,
-                    path: base_path,
+                    path: base_path.into(),
                 }),
-            };
-        }
-
-        let sub_path = path
-            .next()
-            .map(|elem| InclusionPath::from(vec![PathElement::from(elem)]))
-            .expect("path should not be empty");
-
-        if !has_top_path {
-            return MerkleProof {
+            }
+        } else if TopTreeArity::to_usize() == 0 {
+            let sub_elem = path.pop().expect("path should not be empty");
+            let base_path = path.into_iter().map(PathElement::from).collect::<Vec<_>>();
+            MerkleProof {
                 data: ProofData::Sub(SubProof {
                     leaf,
                     root,
-                    base_proof: base_path,
-                    sub_proof: sub_path,
+                    base_proof: base_path.into(),
+                    sub_proof: vec![PathElement::from(sub_elem)].into(),
                 }),
-            };
-        }
-
-        let top_path = path
-            .next()
-            .map(|elem| InclusionPath::from(vec![PathElement::from(elem)]))
-            .expect("path should not be empty");
-
-        MerkleProof {
-            data: ProofData::Top(TopProof {
-                leaf,
-                root,
-                base_proof: base_path,
-                sub_proof: sub_path,
-                top_proof: top_path,
-            }),
+            }
+        } else {
+            let top_elem = path.pop().expect("path should not be empty");
+            let sub_elem = path.pop().expect("path should not be empty");
+            let base_path = path.into_iter().map(PathElement::from).collect::<Vec<_>>();
+            MerkleProof {
+                data: ProofData::Top(TopProof {
+                    leaf,
+                    root,
+                    base_proof: base_path.into(),
+                    sub_proof: vec![PathElement::from(sub_elem)].into(),
+                    top_proof: vec![PathElement::from(top_elem)].into(),
+                }),
+            }
         }
     }
 }
