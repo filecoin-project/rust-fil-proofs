@@ -26,6 +26,7 @@ use storage_proofs_core::{
     parameter_cache::SRS_MAX_PROOFS_TO_AGGREGATE,
     proof::ProofScheme,
     sector::SectorId,
+    settings::SETTINGS,
     util::{default_rows_to_discard, NODE_SIZE},
     Data,
 };
@@ -444,16 +445,35 @@ pub fn seal_commit_phase1_inner<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
         deserialize(&p_aux_bytes)
     }?;
 
+    let vanilla_params = setup_params(porep_config)?;
+
     let t_aux = {
         let t_aux_path = cache_path.as_ref().join(CacheKey::TAux.to_string());
-        let t_aux_bytes = fs::read(&t_aux_path)
-            .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
+        match fs::read(&t_aux_path) {
+            Ok(t_aux_bytes) => {
+                let mut res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
 
-        let mut res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
-
-        // Switch t_aux to the passed in cache_path
-        res.set_cache_path(cache_path);
-        res
+                // Switch t_aux to the passed in cache_path
+                res.set_cache_path(cache_path);
+                res
+            }
+            Err(error) => {
+                if SETTINGS.t_aux_implicit_fallback {
+                    info!(
+                        "Could not read file t_aux={:?}. Fallback to default values instead.",
+                        t_aux_path
+                    );
+                    TemporaryAux::new(
+                        vanilla_params.nodes,
+                        vanilla_params.layer_challenges.layers(),
+                        cache_path.as_ref().to_path_buf(),
+                    )
+                } else {
+                    return Err(error)
+                        .with_context(|| format!("could not read file t_aux={:?}", t_aux_path));
+                }
+            }
+        }
     };
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
@@ -489,7 +509,7 @@ pub fn seal_commit_phase1_inner<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(porep_config)?,
+        vanilla_params,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };

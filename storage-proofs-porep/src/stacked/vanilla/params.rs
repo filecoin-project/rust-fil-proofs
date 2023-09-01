@@ -11,13 +11,14 @@ use fr32::bytes_into_fr_repr_safe;
 use generic_array::typenum::{Unsigned, U2};
 use log::trace;
 use merkletree::{
-    merkle::get_merkle_tree_leafs,
+    merkle::{get_merkle_tree_leafs, get_merkle_tree_len},
     store::{DiskStore, Store, StoreConfig},
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     api_version::{ApiFeature, ApiVersion},
+    cache_key::CacheKey,
     drgraph::{Graph, BASE_DEGREE},
     error::Result,
     merkle::{
@@ -26,7 +27,7 @@ use storage_proofs_core::{
         MerkleProofTrait, MerkleTreeTrait,
     },
     parameter_cache::ParameterSetMetadata,
-    util::{data_at_node, NODE_SIZE},
+    util::{data_at_node, default_rows_to_discard, NODE_SIZE},
 };
 
 use crate::stacked::vanilla::{
@@ -838,6 +839,60 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for TemporaryAux<Tree, G> {
 }
 
 impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
+    pub fn new(sector_nodes: usize, num_layers: usize, cache_path: PathBuf) -> Self {
+        let labels = (1..=num_layers)
+            .map(|layer| StoreConfig {
+                path: cache_path.clone(),
+                id: CacheKey::label_layer(layer),
+                size: Some(sector_nodes),
+                // The TreeC doesn't discard any rows, hence it can be set to 0.
+                rows_to_discard: 0,
+            })
+            .collect();
+
+        let tree_d_size = get_merkle_tree_len(sector_nodes, BINARY_ARITY)
+            .expect("Tree must have enough leaves and have an arity of power of two");
+        let tree_d_config = StoreConfig {
+            path: cache_path.clone(),
+            id: CacheKey::CommDTree.to_string(),
+            size: Some(tree_d_size),
+            // The TreeD doesn't discard any rows, hence it can be set to 0.
+            rows_to_discard: 0,
+        };
+
+        let tree_size = get_merkle_tree_len(sector_nodes, Tree::Arity::to_usize())
+            .expect("Tree must have enough leaves and have an arity of power of two");
+
+        let tree_r_last_config = StoreConfig {
+            path: cache_path.clone(),
+            id: CacheKey::CommRLastTree.to_string(),
+            size: Some(tree_size),
+            // A default 'rows_to_discard' value will be chosen for tree_r_last, unless the user
+            // overrides this value via the environment setting (FIL_PROOFS_ROWS_TO_DISCARD). If
+            // this value is specified, no checking is done on it and it may result in a broken
+            // configuration. *Use with caution*. It must be noted that if/when this unchecked
+            // value is passed through merkle_light, merkle_light now does a check that does not
+            // allow us to discard more rows than is possible to discard.
+            rows_to_discard: default_rows_to_discard(sector_nodes, Tree::Arity::to_usize()),
+        };
+
+        let tree_c_config = StoreConfig {
+            path: cache_path,
+            id: CacheKey::CommCTree.to_string(),
+            size: Some(tree_size),
+            // The TreeC doesn't discard any rows, hence it can be set to 0.
+            rows_to_discard: 0,
+        };
+
+        Self {
+            labels: Labels::new(labels),
+            tree_d_config,
+            tree_r_last_config,
+            tree_c_config,
+            _g: PhantomData,
+        }
+    }
+
     pub fn set_cache_path<P: AsRef<Path>>(&mut self, cache_path: P) {
         let cp = cache_path.as_ref().to_path_buf();
         for label in self.labels.labels.iter_mut() {

@@ -210,6 +210,12 @@ FIL_PROOFS_VERIFY_PRODUCTION_PARAMS=1
 
 By default, this verification is disabled.
 
+```
+FIL_PROOFS_T_AUX_IMPLICIT_FALLBACK=1
+```
+
+By default, the `t_aux` file must exist after a successful Precommit Phase 2. With enabling this setting, the system will use a `t_aux` based on the default values and passed in parameters, if the `t_aux` file cannot be read.
+
 ## Optimizing for either speed or memory during replication
 
 While replicating and generating the Merkle Trees (MT) for the proof at the same time there will always be a time-memory trade-off to consider, we present here strategies to optimize one at the cost of the other.
