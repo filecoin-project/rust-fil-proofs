@@ -12,7 +12,11 @@ use filecoin_proofs::{
 };
 use log::info;
 use serde::Serialize;
-use storage_proofs_core::{api_version::ApiVersion, merkle::MerkleTreeTrait, sector::SectorId};
+use storage_proofs_core::{
+    api_version::{ApiFeature, ApiVersion},
+    merkle::MerkleTreeTrait,
+    sector::SectorId,
+};
 
 #[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -49,6 +53,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     fake_replica: bool,
     api_version: ApiVersion,
+    api_features: Vec<ApiFeature>,
 ) -> anyhow::Result<()> {
     let arbitrary_porep_id = [66; 32];
     let sector_count = *WINDOW_POST_SECTOR_COUNT
@@ -57,8 +62,13 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
         .get(&sector_size)
         .expect("unknown sector size");
 
-    let (sector_id, replica_output) =
-        create_replica::<Tree>(sector_size, arbitrary_porep_id, fake_replica, api_version);
+    let (sector_id, replica_output) = create_replica::<Tree>(
+        sector_size,
+        arbitrary_porep_id,
+        fake_replica,
+        api_version,
+        api_features,
+    );
 
     // Store the replica's private and publicly facing info for proving and verifying respectively.
     let mut pub_replica_info: BTreeMap<SectorId, PublicReplicaInfo> = BTreeMap::new();
@@ -119,11 +129,22 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     Ok(())
 }
 
-pub fn run(sector_size: usize, fake_replica: bool, api_version: ApiVersion) -> anyhow::Result<()> {
+pub fn run(
+    sector_size: usize,
+    fake_replica: bool,
+    api_version: ApiVersion,
+    use_synthetic_porep: bool,
+) -> anyhow::Result<()> {
     info!(
         "Benchy Window PoSt Fake: sector-size={}, fake_replica={}, api_version={}",
         sector_size, fake_replica, api_version
     );
+
+    let api_features = if use_synthetic_porep {
+        vec![ApiFeature::SyntheticPoRep]
+    } else {
+        Vec::new()
+    };
 
     with_shape!(
         sector_size as u64,
@@ -131,5 +152,6 @@ pub fn run(sector_size: usize, fake_replica: bool, api_version: ApiVersion) -> a
         sector_size as u64,
         fake_replica,
         api_version,
+        api_features,
     )
 }

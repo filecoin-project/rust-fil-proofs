@@ -208,6 +208,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         pub_params: &<StackedDrg<'_, Tree, G> as ProofScheme<'_>>::PublicParams,
         k: Option<usize>,
     ) -> Result<Vec<Fr>> {
+        ensure!(
+            pub_in.seed.is_some(),
+            "porep challenge seed must be set prior to circuit generation",
+        );
+
         let graph = &pub_params.graph;
 
         let mut inputs = Vec::new();

@@ -88,6 +88,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
         porep_id: arbitrary_porep_id,
         layer_challenges,
         api_version: ApiVersion::V1_1_0,
+        api_features: vec![],
     };
 
     let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("setup failed");
@@ -109,7 +110,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
     let pub_inputs =
         PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
             replica_id: replica_id.into(),
-            seed,
+            seed: Some(seed),
             tau: Some(tau),
             k: None,
         };
@@ -119,7 +120,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
-    let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path)
+    let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path, false)
         .expect("failed to restore contents of t_aux");
 
     let priv_inputs = PrivateInputs::<Tree, Sha256Hasher> { p_aux, t_aux };

@@ -13,6 +13,7 @@ use merkletree::store::{DiskStore, Store, StoreConfig};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
+    api_version::ApiFeature,
     cache_key::CacheKey,
     compound_proof::{self, CompoundProof},
     drgraph::Graph,
@@ -131,12 +132,7 @@ where
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -290,12 +286,7 @@ where
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -339,6 +330,41 @@ where
     Ok(out)
 }
 
+#[inline]
+#[allow(clippy::too_many_arguments)]
+pub fn generate_synth_proofs<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
+    porep_config: &PoRepConfig,
+    cache_path: T,
+    replica_path: T,
+    prover_id: ProverId,
+    sector_id: SectorId,
+    ticket: Ticket,
+    pre_commit: SealPreCommitOutput,
+    piece_infos: &[PieceInfo],
+) -> Result<()> {
+    ensure!(
+        porep_config.feature_enabled(ApiFeature::SyntheticPoRep),
+        "synth-porep must be enabled to generate synthetic proofs",
+    );
+    info!("seal_gen_synth_proofs:start: {:?}", sector_id);
+    // Ignore C1 output as it contains no vanilla proofs (they are stored on disk, rather than
+    // in memory) and a bogus porep challenge seed.
+    seal_commit_phase1_inner::<T, Tree>(
+        porep_config,
+        cache_path,
+        replica_path,
+        prover_id,
+        sector_id,
+        ticket,
+        None,
+        pre_commit,
+        piece_infos,
+        false, /* skip_labels */
+    )?;
+    info!("seal_gen_synth_proofs:finish: {:?}", sector_id);
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     porep_config: &PoRepConfig,
@@ -353,6 +379,39 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
 ) -> Result<SealCommitPhase1Output<Tree>> {
     info!("seal_commit_phase1:start: {:?}", sector_id);
 
+    let skip_labels = porep_config.feature_enabled(ApiFeature::SyntheticPoRep);
+    let out = seal_commit_phase1_inner::<T, Tree>(
+        porep_config,
+        cache_path,
+        replica_path,
+        prover_id,
+        sector_id,
+        ticket,
+        Some(seed),
+        pre_commit,
+        piece_infos,
+        skip_labels,
+    )?;
+    info!("seal_commit_phase1:finish: {:?}", sector_id);
+    Ok(out)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn seal_commit_phase1_inner<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
+    porep_config: &PoRepConfig,
+    cache_path: T,
+    replica_path: T,
+    prover_id: ProverId,
+    sector_id: SectorId,
+    ticket: Ticket,
+    // `None` indicates synthetic proving.
+    seed: Option<Ticket>,
+    pre_commit: SealPreCommitOutput,
+    piece_infos: &[PieceInfo],
+    skip_labels: bool,
+) -> Result<SealCommitPhase1Output<Tree>> {
+    trace!("seal_commit_phase1_inner:start: {:?}", sector_id);
+
     // Sanity check all input path types.
     ensure!(
         metadata(cache_path.as_ref())?.is_dir(),
@@ -361,6 +420,11 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     ensure!(
         metadata(replica_path.as_ref())?.is_file(),
         "replica_path must be a file"
+    );
+
+    ensure!(
+        seed.is_some() || porep_config.feature_enabled(ApiFeature::SyntheticPoRep),
+        "porep challenge seed must be set for non-synthetic proving",
     );
 
     let SealPreCommitOutput { comm_d, comm_r } = pre_commit;
@@ -395,7 +459,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
     let t_aux_cache: TemporaryAuxCache<Tree, DefaultPieceHasher> =
-        TemporaryAuxCache::new(&t_aux, replica_path.as_ref().to_path_buf())
+        TemporaryAuxCache::new(&t_aux, replica_path.as_ref().to_path_buf(), skip_labels)
             .context("failed to restore contents of t_aux")?;
 
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
@@ -425,12 +489,7 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -459,11 +518,13 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
         comm_r,
         comm_d,
         replica_id,
-        seed,
+        // Return an empty challenge seed after synthetic proof generation.
+        seed: seed.unwrap_or_default(),
         ticket,
     };
 
-    info!("seal_commit_phase1:finish: {:?}", sector_id);
+    trace!("seal_commit_phase1_inner:finish: {:?}", sector_id);
+
     Ok(out)
 }
 
@@ -487,6 +548,14 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
+    ensure!(seed != [0; 32], "Invalid porep challenge seed");
+    ensure!(
+        !vanilla_proofs.is_empty()
+            && vanilla_proofs
+                .iter()
+                .all(|partition_proofs| !partition_proofs.is_empty()),
+        "C1 output contains no vanilla proofs",
+    );
 
     let comm_r_safe = as_safe_commitment(&comm_r, "comm_r")?;
     let comm_d_safe = DefaultPieceDomain::try_from_bytes(&comm_d)?;
@@ -498,7 +567,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
             comm_r: comm_r_safe,
         }),
         k: None,
-        seed,
+        seed: Some(seed),
     };
 
     let groth_params = get_stacked_params::<Tree>(porep_config)?;
@@ -509,12 +578,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     );
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -609,16 +673,11 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
             comm_r: comm_r_safe,
         }),
         k: None,
-        seed,
+        seed: Some(seed),
     };
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -963,12 +1022,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
     );
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -982,7 +1036,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
         stacked::PublicInputs::<<Tree::Hasher as Hasher>::Domain, DefaultPieceDomain> {
             replica_id,
             tau: Some(Tau { comm_r, comm_d }),
-            seed,
+            seed: Some(seed),
             k: None,
         };
 
@@ -1075,12 +1129,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
     );
 
     let compound_setup_params = compound_proof::SetupParams {
-        vanilla_params: setup_params(
-            porep_config.padded_bytes_amount(),
-            usize::from(porep_config.partitions),
-            porep_config.porep_id,
-            porep_config.api_version,
-        )?,
+        vanilla_params: setup_params(porep_config)?,
         partitions: Some(usize::from(porep_config.partitions)),
         priority: false,
     };
@@ -1111,7 +1160,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
         > {
             replica_id,
             tau: Some(Tau { comm_r, comm_d }),
-            seed: seeds[i],
+            seed: Some(seeds[i]),
             k: None,
         });
         proofs.push(MultiProof::new_from_reader(
@@ -1260,12 +1309,7 @@ pub fn sdr<P, Tree: 'static + MerkleTreeTrait>(
 where
     P: AsRef<Path>,
 {
-    let setup_params = setup_params(
-        porep_config.padded_bytes_amount(),
-        usize::from(porep_config.partitions),
-        porep_config.porep_id,
-        porep_config.api_version,
-    )?;
+    let setup_params = setup_params(porep_config)?;
     let public_params = StackedDrg::<Tree, DefaultPieceHasher>::setup(&setup_params)?;
 
     StackedDrg::<Tree, DefaultPieceHasher>::replicate_phase1(

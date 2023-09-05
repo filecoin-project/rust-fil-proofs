@@ -72,6 +72,7 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
             porep_id: arbitrary_porep_id,
             layer_challenges,
             api_version: ApiVersion::V1_1_0,
+            api_features: vec![],
         },
         partitions: Some(partition_count),
         priority: false,
@@ -109,7 +110,7 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
     let public_inputs =
         PublicInputs::<<Tree::Hasher as Hasher>::Domain, <Sha256Hasher as Hasher>::Domain> {
             replica_id: replica_id.into(),
-            seed,
+            seed: Some(seed),
             tau: Some(tau),
             k: None,
         };
@@ -119,7 +120,7 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
-    let t_aux = TemporaryAuxCache::<Tree, _>::new(&t_aux, replica_path)
+    let t_aux = TemporaryAuxCache::<Tree, _>::new(&t_aux, replica_path, false)
         .expect("failed to restore contents of t_aux");
 
     let private_inputs = PrivateInputs::<Tree, Sha256Hasher> { p_aux, t_aux };

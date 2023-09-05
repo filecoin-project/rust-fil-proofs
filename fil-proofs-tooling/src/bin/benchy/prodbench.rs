@@ -187,6 +187,7 @@ pub fn run(
 
     assert!(inputs.num_sectors > 0, "Missing num_sectors");
 
+    let api_features = Vec::new();
     let (cfg, repls) = create_replicas::<DefaultOctLCTree>(
         sector_size,
         inputs.num_sectors as usize,
@@ -194,6 +195,7 @@ pub fn run(
         false, /* fake replica */
         arbitrary_porep_id,
         inputs.api_version(),
+        api_features,
     );
 
     if only_add_piece || only_replicate {
@@ -283,6 +285,7 @@ fn measure_porep_circuit(i: &ProdbenchInputs) -> usize {
         porep_id: arbitrary_porep_id,
         layer_challenges,
         api_version: i.api_version(),
+        api_features: vec![],
     };
 
     let pp = StackedDrg::<ProdbenchTree, Sha256Hasher>::setup(&sp).expect("failed to setup DRG");
@@ -320,13 +323,7 @@ fn generate_params(i: &ProdbenchInputs) {
 }
 
 fn cache_porep_params(porep_config: PoRepConfig) {
-    let public_params = public_params(
-        porep_config.padded_bytes_amount(),
-        usize::from(porep_config.partitions),
-        porep_config.porep_id,
-        porep_config.api_version,
-    )
-    .expect("failed to get public_params");
+    let public_params = public_params(&porep_config).expect("failed to get public_params");
 
     {
         let circuit = <StackedCompound<ProdbenchTree, _> as CompoundProof<

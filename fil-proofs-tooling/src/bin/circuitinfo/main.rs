@@ -38,13 +38,8 @@ fn circuit_info<C: Circuit<Fr>>(circuit: C) -> CircuitInfo {
 fn get_porep_info<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) -> CircuitInfo {
     info!("PoRep info");
 
-    let public_params = public_params(
-        porep_config.padded_bytes_amount(),
-        usize::from(porep_config.partitions),
-        porep_config.porep_id,
-        porep_config.api_version,
-    )
-    .expect("failed to get public params from config");
+    let public_params =
+        public_params(&porep_config).expect("failed to get public params from config");
 
     let circuit = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
         StackedDrg<Tree, DefaultPieceHasher>,

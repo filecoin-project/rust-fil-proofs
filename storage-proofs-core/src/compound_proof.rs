@@ -305,12 +305,12 @@ where
         aggregate_proof: &groth16::aggregate::AggregateProof<Bls12>,
         version: groth16::aggregate::AggregateVersion,
     ) -> Result<bool> {
-        let mut rng = OsRng;
+        let rng = OsRng;
 
         Ok(verify_aggregate_proof(
             ip_verifier_srs,
             pvk,
-            &mut rng,
+            rng,
             public_inputs,
             aggregate_proof,
             hashed_seeds_and_comm_rs,

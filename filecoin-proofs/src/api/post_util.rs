@@ -1,62 +1,21 @@
 use std::collections::BTreeMap;
-use std::fs;
-use std::path::Path;
 
 use anyhow::{anyhow, ensure, Context, Result};
-use bincode::deserialize;
-use filecoin_hashers::{sha256::Sha256Hasher, Hasher};
+use filecoin_hashers::Hasher;
 use log::{debug, info};
-use storage_proofs_core::{
-    cache_key::CacheKey, merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId,
-};
+use storage_proofs_core::{merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId};
 use storage_proofs_post::fallback::{
     self, generate_leaf_challenge, get_challenge_index, FallbackPoSt, SectorProof,
 };
 
 use crate::{
     api::as_safe_commitment,
-    constants::DefaultPieceHasher,
     types::{
         ChallengeSeed, FallbackPoStSectorProof, PoStConfig, PrivateReplicaInfo, ProverId,
-        TemporaryAux, VanillaProof,
+        VanillaProof,
     },
     PartitionSnarkProof, PoStType, SnarkProof, SINGLE_PARTITION_PROOF_LEN,
 };
-
-// Ensure that any associated cached data persisted is discarded.
-pub fn clear_cache<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
-    info!("clear_cache:start");
-
-    let mut t_aux: TemporaryAux<Tree, Sha256Hasher> = {
-        let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
-        let aux_bytes = fs::read(&f_aux_path)
-            .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
-
-        deserialize(&aux_bytes)
-    }?;
-
-    t_aux.set_cache_path(cache_dir);
-    let result = TemporaryAux::<Tree, DefaultPieceHasher>::clear_temp(t_aux);
-
-    info!("clear_cache:finish");
-
-    result
-}
-
-// Ensure that any associated cached data persisted is discarded.
-pub fn clear_caches<Tree: MerkleTreeTrait>(
-    replicas: &BTreeMap<SectorId, PrivateReplicaInfo<Tree>>,
-) -> Result<()> {
-    info!("clear_caches:start");
-
-    for replica in replicas.values() {
-        clear_cache::<Tree>(replica.cache_dir.as_path())?;
-    }
-
-    info!("clear_caches:finish");
-
-    Ok(())
-}
 
 /// Generates the challenges per SectorId required for either a Window
 /// proof-of-spacetime or a Winning proof-of-spacetime.

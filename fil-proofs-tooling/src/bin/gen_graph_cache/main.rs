@@ -45,6 +45,7 @@ fn gen_graph_cache<Tree: 'static + MerkleTreeTrait>(
         porep_id,
         layer_challenges,
         api_version,
+        api_features: vec![],
     };
 
     let pp = StackedDrg::<Tree, Sha256Hasher>::setup(&sp).expect("failed to setup DRG");

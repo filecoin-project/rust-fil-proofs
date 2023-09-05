@@ -226,8 +226,19 @@ pub struct PathElement<H: Hasher, Arity: PoseidonArity> {
     _arity: PhantomData<Arity>,
 }
 
+impl<H: Hasher, Arity: PoseidonArity> From<(Vec<H::Domain>, usize)> for PathElement<H, Arity> {
+    #[inline]
+    fn from((hashes, index): (Vec<H::Domain>, usize)) -> Self {
+        PathElement {
+            hashes,
+            index,
+            _arity: PhantomData,
+        }
+    }
+}
+
 /// Representation of a merkle proof.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct MerkleProof<
     H: Hasher,
     BaseArity: PoseidonArity,
@@ -317,6 +328,18 @@ enum ProofData<
         deserialize = "H::Domain: Deserialize<'de>"
     ))]
     Top(TopProof<H, BaseArity, SubTreeArity, TopTreeArity>),
+}
+
+impl<
+        H: Hasher,
+        Arity: 'static + PoseidonArity,
+        SubTreeArity: 'static + PoseidonArity,
+        TopTreeArity: 'static + PoseidonArity,
+    > Default for ProofData<H, Arity, SubTreeArity, TopTreeArity>
+{
+    fn default() -> Self {
+        ProofData::Single(SingleProof::default())
+    }
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -469,6 +492,47 @@ impl<
         let path = vec![path_elem; n];
         MerkleProof {
             data: ProofData::Single(SingleProof::new(path.into(), root, leaf)),
+        }
+    }
+
+    pub fn from_parts(
+        leaf: H::Domain,
+        root: H::Domain,
+        mut path: Vec<(Vec<H::Domain>, usize)>,
+    ) -> Self {
+        if SubTreeArity::to_usize() == 0 {
+            let base_path = path.into_iter().map(PathElement::from).collect::<Vec<_>>();
+            MerkleProof {
+                data: ProofData::Single(SingleProof {
+                    leaf,
+                    root,
+                    path: base_path.into(),
+                }),
+            }
+        } else if TopTreeArity::to_usize() == 0 {
+            let sub_elem = path.pop().expect("path should not be empty");
+            let base_path = path.into_iter().map(PathElement::from).collect::<Vec<_>>();
+            MerkleProof {
+                data: ProofData::Sub(SubProof {
+                    leaf,
+                    root,
+                    base_proof: base_path.into(),
+                    sub_proof: vec![PathElement::from(sub_elem)].into(),
+                }),
+            }
+        } else {
+            let top_elem = path.pop().expect("path should not be empty");
+            let sub_elem = path.pop().expect("path should not be empty");
+            let base_path = path.into_iter().map(PathElement::from).collect::<Vec<_>>();
+            MerkleProof {
+                data: ProofData::Top(TopProof {
+                    leaf,
+                    root,
+                    base_proof: base_path.into(),
+                    sub_proof: vec![PathElement::from(sub_elem)].into(),
+                    top_proof: vec![PathElement::from(top_elem)].into(),
+                }),
+            }
         }
     }
 }

@@ -14,6 +14,7 @@ use crate::prodbench::ProdbenchInputs;
 
 mod hash_fns;
 mod merkleproofs;
+mod porep;
 mod prodbench;
 mod window_post;
 mod window_post_fake;
@@ -90,10 +91,16 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
+            Arg::new("synthetic")
+                .long("synthetic")
+                .help("Use Synthetic PoRep (default: false)")
+                .takes_value(false),
+        )
+        .arg(
             Arg::new("api_version")
                 .long("api-version")
-                .help("The api_version to use (default: 1.1.0)")
-                .default_value("1.1.0")
+                .help("The api_version to use (default: 1.2.0)")
+                .default_value("1.2.0")
                 .takes_value(true),
         );
 
@@ -113,10 +120,16 @@ fn main() -> Result<()> {
                 .takes_value(false),
         )
         .arg(
+            Arg::new("synthetic")
+                .long("synthetic")
+                .help("Use Synthetic PoRep (default: false)")
+                .takes_value(false),
+        )
+        .arg(
             Arg::new("api_version")
                 .long("api-version")
-                .help("The api_version to use (default: 1.1.0)")
-                .default_value("1.1.0")
+                .help("The api_version to use (default: 1.2.0)")
+                .default_value("1.2.0")
                 .takes_value(true),
         );
 
@@ -136,10 +149,16 @@ fn main() -> Result<()> {
                 .takes_value(false),
         )
         .arg(
+            Arg::new("synthetic")
+                .long("synthetic")
+                .help("Use Synthetic PoRep (default: false)")
+                .takes_value(false),
+        )
+        .arg(
             Arg::new("api_version")
                 .long("api-version")
-                .help("The api_version to use (default: 1.1.0)")
-                .default_value("1.1.0")
+                .help("The api_version to use (default: 1.2.0)")
+                .default_value("1.2.0")
                 .takes_value(true),
         );
 
@@ -180,6 +199,87 @@ fn main() -> Result<()> {
                 .help("only run piece addition"),
         );
 
+    let porep_cmd = Command::new("porep")
+        .about("Benchmark PoRep")
+        .arg(
+            Arg::new("preserve-cache")
+                .long("preserve-cache")
+                .required(false)
+                .help("Preserve the directory where cached files are persisted")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::new("skip-precommit-phase1")
+                .long("skip-precommit-phase1")
+                .required(false)
+                .help("Skip precommit phase 1")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::new("skip-precommit-phase2")
+                .long("skip-precommit-phase2")
+                .required(false)
+                .help("Skip precommit phase 2")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::new("skip-commit-phase1")
+                .long("skip-commit-phase1")
+                .required(false)
+                .help("Skip commit phase 1")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::new("skip-commit-phase2")
+                .long("skip-commit-phase2")
+                .required(false)
+                .help("Skip commit phase 2")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::new("test-resume")
+                .long("test-resume")
+                .required(false)
+                .help("Test replication resume")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::new("cache")
+                .long("cache")
+                .required(false)
+                .help("The directory where cached files are persisted")
+                .default_value("")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new("size")
+                .long("size")
+                .required(true)
+                .help("The data size (e.g. 2KiB)")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new("task_numbers")
+                .long("task-numbers")
+                .required(false)
+                .help("The window-post parallels task numbers")
+                .default_value("1")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new("synthetic")
+                .long("synthetic")
+                .help("Use Synthetic PoRep (default: false)")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::new("api_version")
+                .long("api-version")
+                .help("The api_version to use (default: 1.2.0)")
+                .default_value("1.2.0")
+                .takes_value(true),
+        );
+
     let merkleproof_cmd = Command::new("merkleproofs")
         .about("Benchmark merkle proof generation")
         .arg(
@@ -214,6 +314,7 @@ fn main() -> Result<()> {
         .subcommand(winning_post_cmd)
         .subcommand(hash_cmd)
         .subcommand(prodbench_cmd)
+        .subcommand(porep_cmd)
         .subcommand(merkleproof_cmd)
         .get_matches();
 
@@ -229,6 +330,7 @@ fn main() -> Result<()> {
             let cache_dir = m.value_of_t::<String>("cache")?;
             let sector_size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;
             let api_version = ApiVersion::from_str(&m.value_of_t::<String>("api_version")?)?;
+            let use_synthetic = m.is_present("synthetic");
             let task_numbers = m.value_of_t::<usize>("task_numbers")?;
 
             if task_numbers == 1 {
@@ -242,6 +344,7 @@ fn main() -> Result<()> {
                     skip_commit_phase1,
                     skip_commit_phase2,
                     test_resume,
+                    use_synthetic,
                 )?;
             } else {
                 let cache_dir: Vec<&str> = cache_dir.split(',').collect();
@@ -262,6 +365,7 @@ fn main() -> Result<()> {
                             skip_commit_phase1,
                             skip_commit_phase2,
                             test_resume,
+                            use_synthetic,
                         )
                         .expect("window_post run error");
                     });
@@ -277,13 +381,15 @@ fn main() -> Result<()> {
             let sector_size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;
             let fake_replica = m.is_present("fake");
             let api_version = ApiVersion::from_str(&m.value_of_t::<String>("api_version")?)?;
-            winning_post::run(sector_size, fake_replica, api_version)?;
+            let use_synthetic = m.is_present("synthetic");
+            winning_post::run(sector_size, fake_replica, api_version, use_synthetic)?;
         }
         Some(("window-post-fake", m)) => {
             let sector_size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;
             let fake_replica = m.is_present("fake");
             let api_version = ApiVersion::from_str(&m.value_of_t::<String>("api_version")?)?;
-            window_post_fake::run(sector_size, fake_replica, api_version)?;
+            let use_synthetic = m.is_present("synthetic");
+            window_post_fake::run(sector_size, fake_replica, api_version, use_synthetic)?;
         }
         Some(("hash-constraints", _m)) => {
             hash_fns::run()?;
@@ -318,6 +424,32 @@ fn main() -> Result<()> {
 
             serde_json::to_writer(stdout(), &outputs)
                 .expect("failed to write ProdbenchOutput to stdout")
+        }
+        Some(("porep", m)) => {
+            let preserve_cache = m.is_present("preserve-cache");
+            // For now these options are combined.
+            let skip_precommit_phase1 = m.is_present("skip-precommit-phase1");
+            let skip_precommit_phase2 = m.is_present("skip-precommit-phase2");
+            let skip_commit_phase1 = m.is_present("skip-commit-phase1");
+            let skip_commit_phase2 = m.is_present("skip-commit-phase2");
+            let test_resume = m.is_present("test-resume");
+            let cache_dir = m.value_of_t::<String>("cache")?;
+            let sector_size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;
+            let api_version = ApiVersion::from_str(&m.value_of_t::<String>("api_version")?)?;
+            let use_synthetic = m.is_present("synthetic");
+
+            porep::run(
+                sector_size,
+                api_version,
+                cache_dir,
+                preserve_cache,
+                skip_precommit_phase1,
+                skip_precommit_phase2,
+                skip_commit_phase1,
+                skip_commit_phase2,
+                test_resume,
+                use_synthetic,
+            )?;
         }
         _ => unreachable!(),
     }

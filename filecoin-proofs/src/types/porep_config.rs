@@ -81,7 +81,14 @@ impl PoRepConfig {
 
     #[inline]
     pub fn enable_feature(&mut self, feat: ApiFeature) {
-        self.api_features.push(feat);
+        if !self.feature_enabled(feat) {
+            self.api_features.push(feat);
+        }
+    }
+
+    #[inline]
+    pub fn feature_enabled(&self, feat: ApiFeature) -> bool {
+        self.api_features.contains(&feat)
     }
 
     #[inline]
@@ -96,12 +103,7 @@ impl PoRepConfig {
 
     /// Returns the cache identifier as used by `storage-proofs::parameter_cache`.
     pub fn get_cache_identifier<Tree: 'static + MerkleTreeTrait>(&self) -> Result<String> {
-        let params = public_params::<Tree>(
-            self.sector_size.into(),
-            self.partitions.into(),
-            self.porep_id,
-            self.api_version,
-        )?;
+        let params = public_params::<Tree>(self)?;
 
         Ok(
             <StackedCompound<Tree, DefaultPieceHasher> as CacheableParameters<

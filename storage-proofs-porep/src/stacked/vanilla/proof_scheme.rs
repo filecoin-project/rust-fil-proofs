@@ -1,6 +1,6 @@
 use anyhow::ensure;
 use filecoin_hashers::{HashFunction, Hasher};
-use log::trace;
+use log::{error, trace};
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use storage_proofs_core::{
     drgraph::Graph, error::Result, merkle::MerkleTreeTrait, proof::ProofScheme,
@@ -89,12 +89,25 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
             return Ok(false);
         };
 
+        // If the caller attempts to verify the empty set of synthetic vanilla proofs, return early
+        // (without error) as the synthetic prover validated the synthetic proofs prior to writing
+        // them to disk.
+        let skip_synth_verification = pub_params.layer_challenges.use_synthetic
+            && pub_inputs.seed.is_none()
+            && partition_proofs.iter().all(Vec::is_empty);
+        if skip_synth_verification {
+            trace!("synthetic proofs already verified; skipping re-verification");
+            return Ok(true);
+        }
+
+        ensure!(
+            pub_inputs.seed.is_some(),
+            "porep challenge seed must be set to verify vanilla proofs",
+        );
+
+        let partitions = partition_proofs.len();
         let res = partition_proofs.par_iter().enumerate().all(|(k, proofs)| {
-            trace!(
-                "verifying partition proof {}/{}",
-                k + 1,
-                partition_proofs.len()
-            );
+            trace!("verifying partition proof {}/{}", k + 1, partitions);
 
             trace!("verify comm_r");
             let actual_comm_r: <Tree::Hasher as Hasher>::Domain = {
@@ -109,6 +122,16 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
 
             let challenges =
                 pub_inputs.challenges(&pub_params.layer_challenges, graph.size(), Some(k));
+
+            let (num_proofs, num_challenges) = (proofs.len(), challenges.len());
+            if num_proofs != num_challenges {
+                error!(
+                    "partition proof length does not equal number of partition challenges \
+                    (k = {}, num_challenge_proofs = {}, num_challenges = {})",
+                    k, num_proofs, num_challenges,
+                );
+                return false;
+            }
 
             proofs.par_iter().enumerate().all(|(i, proof)| {
                 trace!("verify challenge {}/{}", i + 1, challenges.len());
