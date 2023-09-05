@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [16.0.0] - 2023-09-05
+
+- Add optional support for SupraSeal C2 proving [#1709](https://github.com/filecoin-project/rust-fil-proofs/pull/1709)
+- Add support and API for SyntheticPoRep [#1701](https://github.com/filecoin-project/rust-fil-proofs/pull/1701)
+- Downgrade harmless warning to trace logging [#1714](https://github.com/filecoin-project/rust-fil-proofs/pull/1714)
+- Use more efficient MultiProof reader [#1713](https://github.com/filecoin-project/rust-fil-proofs/pull/1713)
+
 ## [15.0.0] - 2023-06-30
 
 - Add SyntheticPoRep audit results to repo [#1710](https://github.com/filecoin-project/rust-fil-proofs/pull/1710)
@@ -399,7 +406,8 @@ mainnet ready and will be replaced in a future version.  This release is intende
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v15.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v16.0.0...HEAD
+[16.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v16.0.0
 [15.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v15.0.0
 [14.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v14.0.0
 [13.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v13.0.0
