@@ -17,7 +17,7 @@ use storage_proofs_post::fallback::{
 use crate::{
     api::{
         as_safe_commitment, get_partitions_for_window_post, partition_vanilla_proofs,
-        single_partition_vanilla_proofs,
+        single_partition_vanilla_proofs, util,
     },
     caches::{get_post_params, get_post_verifying_key},
     parameters::window_post_setup_params,
@@ -84,7 +84,7 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         &vanilla_proofs,
     )?;
 
-    let proof = FallbackPoStCompound::prove_with_vanilla(
+    let proofs = FallbackPoStCompound::prove_with_vanilla(
         &pub_params,
         &pub_inputs,
         partitioned_proofs,
@@ -93,7 +93,7 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
 
     info!("generate_window_post_with_vanilla:finish");
 
-    proof.to_vec()
+    util::proofs_to_bytes(&proofs)
 }
 
 /// Generates a Window proof-of-spacetime.
@@ -169,11 +169,12 @@ pub fn generate_window_post<Tree: 'static + MerkleTreeTrait>(
         sectors: &priv_sectors,
     };
 
-    let proof = FallbackPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)?;
+    let proofs =
+        FallbackPoStCompound::prove(&pub_params, &pub_inputs, &priv_inputs, &groth_params)?;
 
     info!("generate_window_post:finish");
 
-    proof.to_vec()
+    util::proofs_to_bytes(&proofs)
 }
 
 /// Verifies a window proof-of-spacetime.
@@ -301,7 +302,7 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
         &vanilla_proofs,
     )?;
 
-    let proof = FallbackPoStCompound::prove_with_vanilla(
+    let proofs = FallbackPoStCompound::prove_with_vanilla(
         &pub_params,
         &pub_inputs,
         vec![partitioned_proofs],
@@ -310,5 +311,6 @@ pub fn generate_single_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>
 
     info!("generate_single_window_post_with_vanilla:finish");
 
-    proof.to_vec().map(PartitionSnarkProof)
+    let proofs_bytes = util::proofs_to_bytes(&proofs)?;
+    Ok(PartitionSnarkProof(proofs_bytes))
 }

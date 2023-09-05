@@ -1,7 +1,8 @@
 use std::mem::size_of;
 
 use anyhow::{Context, Result};
-use blstrs::Scalar as Fr;
+use bellperson::groth16::Proof;
+use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::{Domain, Hasher};
 use fr32::{bytes_into_fr, fr_into_bytes};
 use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};
@@ -37,4 +38,12 @@ pub fn get_base_tree_size<Tree: MerkleTreeTrait>(sector_size: SectorSize) -> Res
 
 pub fn get_base_tree_leafs<Tree: MerkleTreeTrait>(base_tree_size: usize) -> Result<usize> {
     get_merkle_tree_leafs(base_tree_size, Tree::Arity::to_usize())
+}
+
+pub(crate) fn proofs_to_bytes(proofs: &[Proof<Bls12>]) -> Result<Vec<u8>> {
+    let mut out = Vec::with_capacity(Proof::<Bls12>::size());
+    for proof in proofs {
+        proof.write(&mut out).context("known allocation target")?;
+    }
+    Ok(out)
 }

@@ -8,7 +8,7 @@ executors:
     resource_class: 2xlarge+
   gpu:
     machine:
-      image: ubuntu-2004-cuda-11.2:202103-01
+      image: linux-cuda-12:2023.05.1
     working_directory: ~/gpuci
     resource_class: gpu.nvidia.medium
   arm:
@@ -33,6 +33,7 @@ jobs:
 
   cargo_fetch:
     executor: default
+    resource_class: small
     environment: *setup-env
     steps:
       - checkout
@@ -183,6 +184,26 @@ jobs:
             FIL_PROOFS_USE_GPU_TREE_BUILDER: true
             BELLMAN_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
             NEPTUNE_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
+
+  test_release_supraseal:
+    executor: gpu
+    environment: *setup-env
+    steps:
+      - checkout
+      - attach_workspace:
+          at: "."
+      - restore_rustup_cache
+      - restore_parameter_cache
+      - run:
+          name: Set the PATH env variable
+          command: |
+            echo 'export PATH="~/.cargo/bin:$PATH"' | tee --append $BASH_ENV
+            source $BASH_ENV
+      - run:
+          name: SupraSeal filecoin-proofs tests in release profile
+          command: |
+              cargo test -p filecoin-proofs --release --no-default-features --features cuda-supraseal -- --nocapture --test-threads=1
+              cargo test -p filecoin-proofs --release --no-default-features --features cuda-supraseal -- --nocapture --test-threads=1 --ignored
 
   test_no_gpu:
     executor: default
@@ -565,6 +586,12 @@ workflows:
       - test:
           name: test_fil_store_proofs_update
           crate: "storage-proofs-update"
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
+      - test_release_supraseal:
+          name: Test with cuda-supraseal feature enabled
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux

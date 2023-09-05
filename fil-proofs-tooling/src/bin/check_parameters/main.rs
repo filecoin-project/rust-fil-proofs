@@ -1,13 +1,11 @@
 use std::path::Path;
 
 use anyhow::Result;
-use bellperson::groth16::MappedParameters;
-use blstrs::Bls12;
 use clap::{Arg, Command};
 
-use storage_proofs_core::parameter_cache::read_cached_params;
+use storage_proofs_core::parameter_cache::{read_cached_params, Bls12GrothParams};
 
-fn run_map(parameter_file: &Path) -> Result<MappedParameters<Bls12>> {
+fn run_map(parameter_file: &Path) -> Result<Bls12GrothParams> {
     read_cached_params(parameter_file)
 }
 

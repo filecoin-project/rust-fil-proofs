@@ -3,6 +3,11 @@
 #![warn(clippy::unnecessary_wraps)]
 #![allow(clippy::upper_case_acronyms)]
 
+#[cfg(all(feature = "cuda", feature = "cuda-supraseal"))]
+compile_error!(
+    "The `cuda` and `cuda-supraseal` cannot be enabled at the same time, choose one of them."
+);
+
 pub mod caches;
 pub mod chunk_iter;
 pub mod constants;

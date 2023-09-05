@@ -8,7 +8,9 @@ use lazy_static::lazy_static;
 use log::{info, trace};
 use once_cell::sync::OnceCell;
 use rand::rngs::OsRng;
-use storage_proofs_core::{compound_proof::CompoundProof, merkle::MerkleTreeTrait};
+use storage_proofs_core::{
+    compound_proof::CompoundProof, merkle::MerkleTreeTrait, parameter_cache::Bls12GrothParams,
+};
 use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 use storage_proofs_update::{
@@ -22,7 +24,6 @@ use crate::{
     types::{PoRepConfig, PoStConfig, PoStType},
 };
 
-type Bls12GrothParams = groth16::MappedParameters<Bls12>;
 pub type Bls12PreparedVerifyingKey = groth16::PreparedVerifyingKey<Bls12>;
 type Bls12ProverSRSKey = groth16::aggregate::ProverSRS<Bls12>;
 type Bls12VerifierSRSKey = groth16::aggregate::VerifierSRS<Bls12>;
@@ -217,7 +218,7 @@ pub fn get_stacked_params<Tree: 'static + MerkleTreeTrait>(
     )
 }
 
-pub fn get_post_params<Tree: 'static + MerkleTreeTrait>(
+pub(crate) fn get_post_params<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
 ) -> Result<Arc<Bls12GrothParams>> {
     match post_config.typ {
