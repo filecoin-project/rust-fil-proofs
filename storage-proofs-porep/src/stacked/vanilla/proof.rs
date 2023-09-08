@@ -1561,7 +1561,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher<Field = Tree::Fiel
             .expect("failed to create TreeBuilder");
 
             // Allocate zeros once and reuse.
-            let zero_leaves: Vec<Tree::Field> = vec![Tree::Field::zero(); max_gpu_tree_batch_size];
+            let zero_leaves: Vec<Tree::Field> = vec![Tree::Field::ZERO; max_gpu_tree_batch_size];
             for (i, config) in configs.iter().enumerate() {
                 let mut consumed = 0;
                 while consumed < nodes_count {
