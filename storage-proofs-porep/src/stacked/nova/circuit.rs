@@ -914,7 +914,7 @@ mod tests {
             SdrPorepCircuit::<F, U, V, W>::from_vanilla(sp, &sectors)
         };
 
-        let params = circ.gen_params();
+        let params = circ.load_params().expect("parameters can be loaded");
 
 
         use flate2::{write::ZlibEncoder, Compression};
