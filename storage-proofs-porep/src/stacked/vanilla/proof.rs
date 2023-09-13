@@ -1930,16 +1930,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let tree_count = get_base_tree_count::<Tree>();
         let nodes_count = leaf_count / tree_count;
 
-        let config = StoreConfig::new(
-            cache_path.as_ref(),
-            CacheKey::CommRLastTree.to_string(),
-            default_rows_to_discard(nodes_count, Tree::Arity::to_usize()),
-        );
-        let tree_r_last_config = StoreConfig::from_config(
-            &config,
-            CacheKey::CommRLastTree.to_string(),
-            Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
-        );
+        let tree_r_last_config = StoreConfig {
+            path: cache_path.as_ref().into(),
+            id: CacheKey::CommRLastTree.to_string(),
+            size: Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?),
+            rows_to_discard: default_rows_to_discard(nodes_count, Tree::Arity::to_usize()),
+        };
 
         // Encode original data into the last layer.
         info!("building tree_r_last");
