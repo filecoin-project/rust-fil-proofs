@@ -108,13 +108,12 @@ where
     let labels_d_new: Vec<TreeDDomain> = (0..sector_nodes)
         .map(|_| TreeDDomain::random(&mut rng))
         .collect();
-    let tree_d_rows_to_discard = default_rows_to_discard(sector_nodes, TreeDArity::to_usize());
     let tree_d_nodes = get_merkle_tree_len(sector_nodes, TreeDArity::to_usize()).unwrap();
     let tree_d_new_config = StoreConfig {
         path: tmp_path.into(),
         id: "tree-d-new".to_string(),
         size: Some(tree_d_nodes),
-        rows_to_discard: tree_d_rows_to_discard,
+        rows_to_discard: 0,
     };
     let tree_d_new = TreeD::try_from_iter_with_config(
         labels_d_new.iter().copied().map(Ok),

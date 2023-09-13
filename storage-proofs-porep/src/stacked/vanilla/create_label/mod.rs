@@ -8,10 +8,9 @@ use log::{info, warn};
 use merkletree::{merkle::Element, store::StoreConfig};
 use storage_proofs_core::{
     cache_key::CacheKey, drgraph::Graph, error::Result, merkle::MerkleTreeTrait,
-    util::default_rows_to_discard,
 };
 
-use crate::stacked::vanilla::{proof::LayerState, StackedBucketGraph, BINARY_ARITY};
+use crate::stacked::vanilla::{proof::LayerState, StackedBucketGraph};
 
 #[cfg(feature = "multicore-sdr")]
 pub mod multi;
@@ -31,7 +30,7 @@ where
         path: cache_path.as_ref().to_path_buf(),
         id: CacheKey::label_layer(layer),
         size: Some(graph.size()),
-        rows_to_discard: default_rows_to_discard(graph.size(), BINARY_ARITY),
+        rows_to_discard: 0,
     });
 
     let mut states = Vec::with_capacity(layers);

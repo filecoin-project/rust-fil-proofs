@@ -1515,10 +1515,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             path: cache_path.clone(),
             id: CacheKey::CommDTree.to_string(),
             size: Some(get_merkle_tree_len(total_nodes_count, BINARY_ARITY)?),
-            rows_to_discard: default_rows_to_discard(total_nodes_count, BINARY_ARITY),
+            rows_to_discard: 0,
         };
 
-        let rows_to_discard = default_rows_to_discard(nodes_count, Tree::Arity::to_usize());
         let size = Some(get_merkle_tree_len(nodes_count, Tree::Arity::to_usize())?);
 
         let tree_r_last_config = StoreConfig {
@@ -1531,7 +1530,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             // configuration. *Use with caution*. It must be noted that if/when this unchecked
             // value is passed through merkle_light, merkle_light now does a check that does not
             // allow us to discard more rows than is possible to discard.
-            rows_to_discard,
+            rows_to_discard: default_rows_to_discard(nodes_count, Tree::Arity::to_usize()),
         };
         trace!(
             "tree_r_last using rows_to_discard={}",
@@ -1542,7 +1541,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             path: cache_path,
             id: CacheKey::CommCTree.to_string(),
             size,
-            rows_to_discard,
+            rows_to_discard: 0,
         };
 
         let labels =
