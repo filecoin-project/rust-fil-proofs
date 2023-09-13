@@ -64,6 +64,8 @@ cuda = ["bellperson/cuda", "filecoin-hashers/cuda"]
 cuda-supraseal = ["bellperson/cuda-supraseal", "filecoin-hashers/cuda"]
 opencl = ["bellperson/opencl", "filecoin-hashers/opencl"]
 
+mock-circ = []
+
 [[bench]]
 name = "sha256"
 harness = false

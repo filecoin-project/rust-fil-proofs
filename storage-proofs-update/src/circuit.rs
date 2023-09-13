@@ -81,6 +81,25 @@ impl PublicInputs {
         }
     }
 
+    pub fn mock(sector_nodes: usize) -> Self {
+        use crate::constants::h_default;
+
+        let partition_count = partition_count(sector_nodes);
+        let partition_bit_len = partition_count.trailing_zeros() as usize;
+
+        let k = 0u64;
+        let h = h_default(sector_nodes);
+        let h_select = h_select(sector_nodes, h);
+        let k_and_h_select = k | (h_select << partition_bit_len);
+
+        PublicInputs {
+            k_and_h_select: Some(Fr::from(k_and_h_select)),
+            comm_r_old: Some(Fr::ZERO),
+            comm_d_new: Some(Fr::ZERO),
+            comm_r_new: Some(Fr::ZERO),
+        }
+    }
+
     // The ordered vector used to verify a Groth16 proof.
     pub fn to_vec(&self) -> Vec<Fr> {
         vec![
@@ -229,9 +248,28 @@ where
             _tree_r: PhantomData,
         }
     }
+
+    pub fn mock(sector_nodes: usize) -> Self {
+        use generic_array::typenum::U0;
+        use storage_proofs_core::gadgets::por::mock_merkle_path;
+
+        let path_d = mock_merkle_path::<TreeDArity, U0, U0>(sector_nodes);
+        let path_r = mock_merkle_path::<TreeR::Arity, TreeR::SubTreeArity, TreeR::TopTreeArity>(
+            sector_nodes,
+        );
+
+        ChallengeProof {
+            leaf_r_old: Some(Fr::ZERO),
+            path_r_old: path_r.clone(),
+            leaf_d_new: Some(Fr::ZERO),
+            path_d_new: path_d,
+            leaf_r_new: Some(Fr::ZERO),
+            path_r_new: path_r,
+            _tree_r: PhantomData,
+        }
+    }
 }
 
-#[derive(Clone)]
 pub struct PrivateInputs<TreeR>
 where
     TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
@@ -249,6 +287,21 @@ where
     // Generate three Merkle proofs (TreeROld, TreeDNew, TreeRNew) for each of this partition's
     // challenges.
     pub challenge_proofs: Vec<ChallengeProof<TreeR>>,
+}
+
+impl<TreeR> Clone for PrivateInputs<TreeR>
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
+    fn clone(&self) -> Self {
+        PrivateInputs {
+            comm_c: self.comm_c.clone(),
+            root_r_old: self.root_r_old.clone(),
+            root_r_new: self.root_r_new.clone(),
+            apex_leafs: self.apex_leafs.clone(),
+            challenge_proofs: self.challenge_proofs.clone(),
+        }
+    }
 }
 
 impl<TreeR> PrivateInputs<TreeR>
@@ -295,6 +348,18 @@ where
             challenge_proofs: vec![ChallengeProof::empty(sector_nodes); challenge_count],
         }
     }
+
+    pub fn mock(sector_nodes: usize) -> Self {
+        let challenge_count = challenge_count(sector_nodes);
+        let apex_leaf_count = apex_leaf_count(sector_nodes);
+        PrivateInputs {
+            comm_c: Some(Fr::ZERO),
+            root_r_old: Some(Fr::ZERO),
+            root_r_new: Some(Fr::ZERO),
+            apex_leafs: vec![Some(Fr::ZERO); apex_leaf_count],
+            challenge_proofs: vec![ChallengeProof::mock(sector_nodes); challenge_count],
+        }
+    }
 }
 
 pub struct EmptySectorUpdateCircuit<TreeR>
@@ -304,6 +369,19 @@ where
     pub pub_params: PublicParams,
     pub pub_inputs: PublicInputs,
     pub priv_inputs: PrivateInputs<TreeR>,
+}
+
+impl<TreeR> Clone for EmptySectorUpdateCircuit<TreeR>
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
+    fn clone(&self) -> Self {
+        EmptySectorUpdateCircuit {
+            pub_params: self.pub_params.clone(),
+            pub_inputs: self.pub_inputs.clone(),
+            priv_inputs: self.priv_inputs.clone(),
+        }
+    }
 }
 
 impl<TreeR> CircuitComponent for EmptySectorUpdateCircuit<TreeR>
@@ -326,6 +404,18 @@ where
         );
         let pub_inputs = PublicInputs::empty();
         let priv_inputs = PrivateInputs::<TreeR>::empty(pub_params.sector_nodes);
+        EmptySectorUpdateCircuit {
+            pub_params,
+            pub_inputs,
+            priv_inputs,
+        }
+    }
+
+    pub fn mock(sector_nodes: usize) -> Self {
+        let sector_bytes = (sector_nodes as u64) << 5;
+        let pub_params = PublicParams::from_sector_size(sector_bytes);
+        let pub_inputs = PublicInputs::mock(sector_nodes);
+        let priv_inputs = PrivateInputs::mock(sector_nodes);
         EmptySectorUpdateCircuit {
             pub_params,
             pub_inputs,
@@ -388,13 +478,16 @@ where
                 k < partition_count,
                 "partition-index exceeds partition count"
             );
-            // `h_select` should have exactly one bit set.
-            let h_select_bits = &bits[partition_bit_len..partition_bit_len + h_select_bit_len];
-            assert_eq!(
-                h_select_bits.iter().filter(|bit| **bit).count(),
-                1,
-                "h_select does not have exactly one bit set"
-            );
+            #[cfg(not(feature = "mock-circ"))]
+            {
+                // `h_select` should have exactly one bit set.
+                let h_select_bits = &bits[partition_bit_len..partition_bit_len + h_select_bit_len];
+                assert_eq!(
+                    h_select_bits.iter().filter(|bit| **bit).count(),
+                    1,
+                    "h_select does not have exactly one bit set"
+                );
+            }
             // The remanining bits should be zero.
             assert!(bits[partition_bit_len + h_select_bit_len..]
                 .iter()
@@ -538,6 +631,11 @@ where
             &comm_c,
             &root_r_old,
         )?;
+        let comm_r_old = if cfg!(feature = "mock-circ") {
+            &comm_r_old_calc
+        } else {
+            &comm_r_old
+        };
         cs.enforce(
             || "enforce comm_r_old_calc == comm_r_old",
             |lc| lc + comm_r_old_calc.get_variable(),
@@ -549,6 +647,11 @@ where
             &comm_c,
             &root_r_new,
         )?;
+        let comm_r_new = if cfg!(feature = "mock-circ") {
+            &comm_r_new_calc
+        } else {
+            &comm_r_new
+        };
         cs.enforce(
             || "enforce comm_r_new_calc == comm_r_new",
             |lc| lc + comm_r_new_calc.get_variable(),
@@ -628,6 +731,7 @@ where
             )?;
 
             // Sanity check that the calculated `leaf_r_new` agrees with the provided value.
+            #[cfg(not(feature = "mock-circ"))]
             if let Some(leaf_r_new) = leaf_r_new.get_value() {
                 assert_eq!(leaf_r_new, challenge_proof.leaf_r_new.unwrap());
             }

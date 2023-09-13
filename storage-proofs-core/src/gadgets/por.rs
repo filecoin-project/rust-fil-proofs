@@ -588,6 +588,12 @@ where
     // Assert equality between the computed root and the provided root.
     let computed_root = cur;
 
+    let root = if cfg!(feature = "mock-circ") {
+        &computed_root
+    } else {
+        &root
+    };
+
     cs.enforce(
         || "calculated root == provided root",
         |lc| lc + computed_root.get_variable(),
@@ -596,4 +602,34 @@ where
     );
 
     Ok(())
+}
+
+pub fn mock_merkle_path<U, V, W>(num_leafs: usize) -> Vec<Vec<Option<Fr>>>
+where
+    U: PoseidonArity,
+    V: PoseidonArity,
+    W: PoseidonArity,
+{
+    use ff::Field;
+
+    let (base_arity, sub_arity, top_arity) = (U::to_usize(), V::to_usize(), W::to_usize());
+    let (has_sub, has_top) = (sub_arity != 0, top_arity != 0);
+
+    let base_height = {
+        let mut base_bits = num_leafs.trailing_zeros() as usize;
+        if has_sub {
+            base_bits -= sub_arity.trailing_zeros() as usize;
+        }
+        if has_top {
+            base_bits -= top_arity.trailing_zeros() as usize;
+        }
+        base_bits / base_arity.trailing_zeros() as usize
+    };
+
+    std::iter::repeat(base_arity)
+        .take(base_height)
+        .chain(std::iter::once(sub_arity).take(has_sub as usize))
+        .chain(std::iter::once(top_arity).take(has_top as usize))
+        .map(|arity| vec![Some(Fr::ZERO); arity - 1])
+        .collect()
 }

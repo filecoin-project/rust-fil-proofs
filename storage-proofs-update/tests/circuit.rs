@@ -214,3 +214,105 @@ fn test_empty_sector_update_constraints_32gib() {
     circuit.synthesize(&mut cs).expect("failed to synthesize");
     assert_eq!(cs.num_constraints(), 81049499)
 }
+
+#[cfg(feature = "mock-circ")]
+pub fn pretty_print_sector_size(sector_nodes: usize) -> String {
+    match sector_nodes << 5 {
+        sector_bytes if sector_bytes >= 1 << 30 => format!("{}GiB", sector_bytes >> 30),
+        sector_bytes if sector_bytes >= 1 << 20 => format!("{}MiB", sector_bytes >> 20),
+        sector_bytes if sector_bytes >= 1 << 10 => format!("{}KiB", sector_bytes >> 10),
+        _ => unreachable!("`sector_nodes={}` is less than 1KiB", sector_nodes),
+    }
+}
+
+#[cfg(feature = "mock-circ")]
+fn mock_inner<TreeR>(sector_nodes: usize)
+where
+    TreeR: MerkleTreeTrait<Hasher = TreeRHasher>,
+{
+    fil_logger::maybe_init();
+
+    let num_snapdeals_agg = 1..2;
+
+    let circ = EmptySectorUpdateCircuit::<TreeR>::mock(sector_nodes);
+    let pub_inputs_vec = circ.pub_inputs.to_vec();
+    /*
+    let mut cs = TestConstraintSystem::<Fr>::new();
+    circ.synthesize(&mut cs).expect("failed to synthesize");
+    assert!(cs.is_satisfied());
+    assert!(cs.verify(&pub_inputs_vec));
+    dbg!(cs.num_constraints());
+    */
+
+    let mut rng = XorShiftRng::from_seed(TEST_SEED);
+    let groth_params =
+        bellperson::groth16::generate_random_parameters::<blstrs::Bls12, _, _>(circ.clone(), &mut rng).unwrap();
+    let pvk = bellperson::groth16::prepare_verifying_key(&groth_params.vk);
+    let proof = bellperson::groth16::create_random_proof(circ, &groth_params, &mut rng).unwrap();
+    let is_valid = bellperson::groth16::verify_proof(&pvk, &proof, &pub_inputs_vec).unwrap();
+    assert!(is_valid);
+
+    println!("Aggregating {} SnapDeals Proofs", pretty_print_sector_size(sector_nodes));
+
+    for num_snapdeals_agg in num_snapdeals_agg {
+        let num_proofs_agg = 16 * num_snapdeals_agg;
+
+        let proofs = vec![proof.clone(); num_proofs_agg];
+        let pub_inputs = vec![pub_inputs_vec.clone(); num_proofs_agg];
+
+        let gsrs = bellperson::groth16::aggregate::setup_fake_srs(&mut rng, num_proofs_agg);
+        let (psrs, vsrs) = gsrs.specialize(num_proofs_agg);
+
+        let transcript = [1u8; 32];
+
+        let agg_proof = bellperson::groth16::aggregate::aggregate_proofs::<blstrs::Bls12>(
+            &psrs,
+            &transcript,
+            &proofs,
+            bellperson::groth16::aggregate::AggregateVersion::V2,
+        )
+        .unwrap();
+
+        let start = std::time::Instant::now();
+        let is_valid = bellperson::groth16::aggregate::verify_aggregate_proof(
+            &vsrs,
+            &pvk,
+            &mut rng,
+            &pub_inputs,
+            &agg_proof,
+            &transcript,
+            bellperson::groth16::aggregate::AggregateVersion::V2,
+        )
+        .unwrap();
+        let dt = start.elapsed().as_secs_f32();
+        assert!(is_valid);
+
+        println!(
+            "\tnum_snapdeals={} (num_groth_proofs={}): agg_verify_time={}",
+            num_snapdeals_agg,
+            num_proofs_agg,
+            dt,
+        );
+    }
+}
+
+#[cfg(feature = "mock-circ")]
+#[test]
+fn mock_1kib() {
+    type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U4, U0>;
+    mock_inner::<TreeR>(SECTOR_SIZE_1_KIB);
+}
+
+#[cfg(feature = "mock-circ")]
+#[test]
+fn mock_32kib() {
+    type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U8, U2>;
+    mock_inner::<TreeR>(SECTOR_SIZE_32_KIB);
+}
+
+#[cfg(feature = "mock-circ")]
+#[test]
+fn mock_512mib() {
+    type TreeR = MerkleTreeWrapper<TreeRHasher, DiskStore<TreeRDomain>, U8, U0, U0>;
+    mock_inner::<TreeR>(storage_proofs_update::constants::SECTOR_SIZE_512_MIB);
+}
