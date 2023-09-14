@@ -8,7 +8,7 @@ use bellperson::{
 use ff::PrimeField;
 use merkletree::merkle::get_merkle_tree_row_count;
 
-use crate::{error::Error, settings::SETTINGS};
+use crate::{error::Error, settings};
 
 pub const NODE_SIZE: usize = 32;
 
@@ -163,9 +163,13 @@ pub fn default_rows_to_discard(leafs: usize, arity: usize) -> usize {
     // row_count - 2 discounts the base layer (1) and root (1)
     let max_rows_to_discard = row_count - 2;
 
-    // This configurable setting is for a default oct-tree
-    // rows_to_discard value, which defaults to 2.
-    let rows_to_discard = SETTINGS.rows_to_discard as usize;
+    // When `fixed-rows-to-discard` is set, then the number of rows to discard for the tree_r_last
+    // is hard-coded to 2. If the feature is not set it can be configured with the
+    // `ROWS_TO_DISCARD` setting.
+    #[cfg(feature = "fixed-rows-to-discard")]
+    let rows_to_discard = settings::DEFAULT_ROWS_TO_DISCARD as usize;
+    #[cfg(not(feature = "fixed-rows-to-discard"))]
+    let rows_to_discard = settings::SETTINGS.rows_to_discard as usize;
 
     // Discard at most 'constant value' rows (coded below,
     // differing by arity) while respecting the max number that

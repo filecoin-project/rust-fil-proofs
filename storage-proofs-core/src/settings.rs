@@ -10,6 +10,7 @@ lazy_static! {
 
 const SETTINGS_PATH: &str = "./rust-fil-proofs.config.toml";
 const PREFIX: &str = "FIL_PROOFS";
+pub const DEFAULT_ROWS_TO_DISCARD: u32 = 2;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -42,7 +43,7 @@ impl Default for Settings {
             column_write_batch_size: 262_144,
             use_gpu_tree_builder: false,
             max_gpu_tree_batch_size: 700_000,
-            rows_to_discard: 2,
+            rows_to_discard: DEFAULT_ROWS_TO_DISCARD,
             sdr_parents_cache_size: 2_048,
             window_post_synthesis_num_cpus: num_cpus::get() as u32,
             // `parameter_cache` does not use the cache() mechanism because it is now used

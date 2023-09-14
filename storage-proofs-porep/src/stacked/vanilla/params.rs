@@ -837,6 +837,58 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for TemporaryAux<Tree, G> {
 }
 
 impl<Tree: MerkleTreeTrait, G: Hasher> TemporaryAux<Tree, G> {
+    /// Create a new instance based on default values.
+    #[cfg(feature = "fixed-rows-to-discard")]
+    pub fn new(sector_nodes: usize, num_layers: usize, cache_path: PathBuf) -> Self {
+        use merkletree::merkle::get_merkle_tree_len;
+        use storage_proofs_core::{cache_key::CacheKey, util};
+
+        let labels = (1..=num_layers)
+            .map(|layer| StoreConfig {
+                path: cache_path.clone(),
+                id: CacheKey::label_layer(layer),
+                size: Some(sector_nodes),
+                rows_to_discard: 0,
+            })
+            .collect();
+
+        let tree_d_size = get_merkle_tree_len(sector_nodes, BINARY_ARITY)
+            .expect("Tree must have enough leaves and have an arity of power of two");
+        let tree_d_config = StoreConfig {
+            path: cache_path.clone(),
+            id: CacheKey::CommDTree.to_string(),
+            size: Some(tree_d_size),
+            rows_to_discard: 0,
+        };
+
+        let tree_count = get_base_tree_count::<Tree>();
+        let tree_nodes = sector_nodes / tree_count;
+        let tree_size = get_merkle_tree_len(tree_nodes, Tree::Arity::to_usize())
+            .expect("Tree must have enough leaves and have an arity of power of two");
+
+        let tree_r_last_config = StoreConfig {
+            path: cache_path.clone(),
+            id: CacheKey::CommRLastTree.to_string(),
+            size: Some(tree_size),
+            rows_to_discard: util::default_rows_to_discard(tree_nodes, Tree::Arity::to_usize()),
+        };
+
+        let tree_c_config = StoreConfig {
+            path: cache_path,
+            id: CacheKey::CommCTree.to_string(),
+            size: Some(tree_size),
+            rows_to_discard: 0,
+        };
+
+        Self {
+            labels: Labels::new(labels),
+            tree_d_config,
+            tree_r_last_config,
+            tree_c_config,
+            _g: PhantomData,
+        }
+    }
+
     pub fn set_cache_path<P: AsRef<Path>>(&mut self, cache_path: P) {
         let cp = cache_path.as_ref().to_path_buf();
         for label in self.labels.labels.iter_mut() {

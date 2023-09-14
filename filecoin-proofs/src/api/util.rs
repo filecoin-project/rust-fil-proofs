@@ -83,9 +83,7 @@ pub(crate) fn get_p_aux<Tree: MerkleTreeTrait>(
     Ok(p_aux)
 }
 
-/// Instantiates t_aux from the specified cache_dir for access to  labels and tree_d, tree_c,
-/// tree_r_last store configs.
-pub(crate) fn get_t_aux<Tree: MerkleTreeTrait>(
+fn read_t_aux_file<Tree: MerkleTreeTrait>(
     cache_path: &Path,
 ) -> Result<TemporaryAux<Tree, DefaultPieceHasher>> {
     let t_aux_path = cache_path.join(CacheKey::TAux.to_string());
@@ -100,7 +98,56 @@ pub(crate) fn get_t_aux<Tree: MerkleTreeTrait>(
     Ok(res)
 }
 
+/// Instantiates t_aux from default values for access to labels and tree_d, tree_c, tree_r_last
+/// store configs
+#[cfg(feature = "fixed-rows-to-discard")]
+// Silence Clippy warning in order to have the same return value as without this feature.
+#[allow(clippy::unnecessary_wraps)]
+pub(crate) fn get_t_aux<Tree: MerkleTreeTrait>(
+    cache_path: &Path,
+    sector_bytes: u64,
+) -> Result<TemporaryAux<Tree, DefaultPieceHasher>> {
+    trace!(
+        "Instantiating TemporaryAux from default values with cache_path at {:?}",
+        cache_path
+    );
+    let t_aux_path = cache_path.join(CacheKey::TAux.to_string());
+    if Path::new(&t_aux_path).exists() {
+        log::warn!(
+            "`t_aux` file exists, use that file instead of the default values. t_aux={:?}",
+            &t_aux_path
+        );
+        read_t_aux_file(cache_path)
+    } else {
+        let sector_nodes = sector_bytes as usize / storage_proofs_core::util::NODE_SIZE;
+        let layers = *crate::constants::LAYERS
+            .read()
+            .expect("LAYERS poisoned")
+            .get(&sector_bytes)
+            .expect("unknown sector size");
+
+        Ok(TemporaryAux::new(
+            sector_nodes,
+            layers,
+            cache_path.to_path_buf(),
+        ))
+    }
+}
+
+/// Instantiates t_aux from the specified cache_dir for access to labels and tree_d, tree_c,
+/// tree_r_last store configs.
+#[cfg(not(feature = "fixed-rows-to-discard"))]
+pub(crate) fn get_t_aux<Tree: MerkleTreeTrait>(
+    cache_path: &Path,
+    // `sector_bytes` is ignored, it's only there to have the same API as if the
+    // `fixed-rows-to-discard` feature was enabled.
+    _sector_bytes: u64,
+) -> Result<TemporaryAux<Tree, DefaultPieceHasher>> {
+    read_t_aux_file(cache_path)
+}
+
 /// Persist t_aux.
+#[cfg(any(test, not(feature = "fixed-rows-to-discard")))]
 pub(crate) fn persist_t_aux<Tree: MerkleTreeTrait>(
     t_aux: &TemporaryAux<Tree, DefaultPieceHasher>,
     cache_path: &Path,
@@ -112,4 +159,68 @@ pub(crate) fn persist_t_aux<Tree: MerkleTreeTrait>(
         .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))?;
 
     Ok(())
+}
+
+#[cfg(all(test, feature = "fixed-rows-to-discard"))]
+mod tests {
+    use super::*;
+
+    use storage_proofs_core::util::{self, NODE_SIZE};
+
+    use crate::SectorShape32GiB;
+
+    /// Testing whether the default values are set if there's no `t_aux` file.
+    #[test]
+    fn test_get_t_aux_defaults() {
+        let dir_does_not_exist = Path::new("/path/does/not/exist");
+        let sector_size: usize = 34359738368;
+        let t_aux = get_t_aux::<SectorShape32GiB>(dir_does_not_exist, sector_size as u64)
+            .expect("t_aux should have been read");
+        let expected_rows_to_discard = util::default_rows_to_discard(
+            sector_size / NODE_SIZE,
+            <SectorShape32GiB as MerkleTreeTrait>::Arity::to_usize(),
+        );
+        assert_eq!(
+            t_aux.tree_r_last_config.rows_to_discard,
+            expected_rows_to_discard
+        );
+    }
+
+    /// Testing whether the values from the `t_aux` file are used in case there is any.
+    #[test]
+    fn test_get_t_aux_file_exists() {
+        let sector_size = 34359738368;
+        let cache_dir = tempfile::tempdir()
+            .expect("tempdir should have been created")
+            .into_path();
+
+        // Check if getting t_aux if no such file exists returns the default values.
+        let default_t_aux = TemporaryAux::<SectorShape32GiB, DefaultPieceHasher>::new(
+            sector_size / NODE_SIZE,
+            11,
+            cache_dir.clone(),
+        );
+        let t_aux = get_t_aux::<SectorShape32GiB>(&cache_dir, sector_size as u64)
+            .expect("t_aux should have been read");
+        assert_eq!(
+            t_aux.tree_r_last_config.rows_to_discard,
+            default_t_aux.tree_r_last_config.rows_to_discard
+        );
+
+        // Check if a custom t_aux is used if such a file exists.
+        let mut custom_t_aux = default_t_aux.clone();
+        custom_t_aux.tree_r_last_config.rows_to_discard = 5;
+        persist_t_aux::<SectorShape32GiB>(&custom_t_aux, &cache_dir)
+            .expect("t_aux should have been persisted");
+        let read_t_aux = get_t_aux::<SectorShape32GiB>(&cache_dir, sector_size as u64)
+            .expect("t_aux should have been read");
+        assert_ne!(
+            read_t_aux.tree_r_last_config.rows_to_discard,
+            default_t_aux.tree_r_last_config.rows_to_discard
+        );
+        assert_eq!(
+            read_t_aux.tree_r_last_config.rows_to_discard,
+            custom_t_aux.tree_r_last_config.rows_to_discard
+        );
+    }
 }

@@ -1524,12 +1524,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             path: cache_path.clone(),
             id: CacheKey::CommRLastTree.to_string(),
             size,
-            // A default 'rows_to_discard' value will be chosen for tree_r_last, unless the user
-            // overrides this value via the environment setting (FIL_PROOFS_ROWS_TO_DISCARD). If
-            // this value is specified, no checking is done on it and it may result in a broken
-            // configuration. *Use with caution*. It must be noted that if/when this unchecked
-            // value is passed through merkle_light, merkle_light now does a check that does not
-            // allow us to discard more rows than is possible to discard.
+            // A default 'rows_to_discard' value will be chosen for tree_r_last, unless the
+            // `fixed-rows-to-discard` feature is not enabled and the user overrides this value
+            // via the environment setting (FIL_PROOFS_ROWS_TO_DISCARD). If this value is
+            // specified, no checking is done on it and it may result in a broken configuration.
+            // *Use with caution*. It must be noted that if/when this unchecked value is passed
+            // through merkle_light, merkle_light now does a check that does not allow us to
+            // discard more rows than is possible to discard.
             rows_to_discard: default_rows_to_discard(nodes_count, Tree::Arity::to_usize()),
         };
         trace!(

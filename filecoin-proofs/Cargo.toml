@@ -76,6 +76,14 @@ opencl = [
 ]
 multicore-sdr = ["storage-proofs-porep/multicore-sdr"]
 big-tests = []
+# This feature enables a fixed number of discarded rows for TreeR. The `FIL_PROOFS_ROWS_TO_DISCARD`
+# setting is ignored, no `TemporaryAux` file will be written.
+fixed-rows-to-discard = [
+    "storage-proofs-core/fixed-rows-to-discard",
+    "storage-proofs-porep/fixed-rows-to-discard",
+    "storage-proofs-post/fixed-rows-to-discard",
+    "storage-proofs-update/fixed-rows-to-discard",
+]
 
 [[bench]]
 name = "preprocessing"
