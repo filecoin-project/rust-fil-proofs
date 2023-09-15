@@ -179,7 +179,7 @@ pub trait NovaCircuit<G: Cycle>: StepCircuit<G::F> {
             info!("reading nova params from file: {}", params_path.display());
             let reader =
                 File::open(&params_path).map(|file| BufReader::with_capacity(BUF_SIZE, file))?;
-            let params = serde_json::from_reader(reader)?;
+            let params = bincode::deserialize_from(reader)?;
             info!("successfully read nova params from file: {}", params_path.display());
             Ok(params)
         } else {
@@ -188,7 +188,7 @@ pub trait NovaCircuit<G: Cycle>: StepCircuit<G::F> {
             info!("writing nova params to file: {}", params_path.display());
             let writer =
                 File::create(&params_path).map(|file| BufWriter::with_capacity(BUF_SIZE, file))?;
-            serde_json::to_writer(writer, &params)?;
+            bincode::serialize_into(writer, &params)?;
             info!("successfully wrote nova params to file: {}", params_path.display());
             Ok(params)
         }
