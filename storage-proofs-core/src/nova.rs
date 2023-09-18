@@ -9,6 +9,7 @@ use bellperson::{
 use ff::{Field, PrimeField};
 use log::info;
 use pasta_curves::{Ep, Eq, Fp, Fq};
+use serde::{Deserialize, Serialize};
 use nova_snark::{
     errors::NovaError,
     provider::{ipa_pc, pedersen},
@@ -177,18 +178,18 @@ pub trait NovaCircuit<G: Cycle>: StepCircuit<G::F> {
 
         if params_path.exists() {
             info!("reading nova params from file: {}", params_path.display());
-            let reader =
-                File::open(&params_path).map(|file| BufReader::with_capacity(BUF_SIZE, file))?;
-            let params = bincode::deserialize_from(reader)?;
+            let data = fs::read(&params_path)?;
+            let flexbuffers_reader = flexbuffers::Reader::get_root(&data[..])?;
+            let params = Params::deserialize(flexbuffers_reader)?;
             info!("successfully read nova params from file: {}", params_path.display());
             Ok(params)
         } else {
             info!("nova params file not found: {}", params_path.display());
             let params = self.gen_params();
             info!("writing nova params to file: {}", params_path.display());
-            let writer =
-                File::create(&params_path).map(|file| BufWriter::with_capacity(BUF_SIZE, file))?;
-            bincode::serialize_into(writer, &params)?;
+            let mut serializer = flexbuffers::FlexbufferSerializer::new();
+            let _ = &params.serialize(&mut serializer)?;
+            fs::write(&params_path, serializer.view())?;
             info!("successfully wrote nova params to file: {}", params_path.display());
             Ok(params)
         }
