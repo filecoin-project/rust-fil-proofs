@@ -10,13 +10,12 @@ use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
-    add_piece, aggregate_seal_commit_proofs, clear_cache, clear_layer_data, clear_synthetic_proofs,
-    compute_comm_d, decode_from, decode_from_range, encode_into, fauxrep_aux,
-    generate_empty_sector_update_proof, generate_empty_sector_update_proof_with_vanilla,
-    generate_fallback_sector_challenges, generate_partition_proofs, generate_piece_commitment,
-    generate_single_partition_proof, generate_single_vanilla_proof,
-    generate_single_window_post_with_vanilla, generate_synth_proofs, generate_tree_c,
-    generate_tree_r_last, generate_window_post, generate_window_post_with_vanilla,
+    add_piece, aggregate_seal_commit_proofs, clear_cache, clear_synthetic_proofs, compute_comm_d,
+    decode_from, decode_from_range, encode_into, fauxrep_aux, generate_empty_sector_update_proof,
+    generate_empty_sector_update_proof_with_vanilla, generate_fallback_sector_challenges,
+    generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
+    generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_synth_proofs,
+    generate_tree_c, generate_tree_r_last, generate_window_post, generate_window_post_with_vanilla,
     generate_winning_post, generate_winning_post_sector_challenge,
     generate_winning_post_with_vanilla, get_num_partition_for_fallback_post, get_seal_inputs,
     merge_window_post_partition_proofs, remove_encoded_data, seal_commit_phase1,
@@ -1612,7 +1611,7 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
             pre_commit_output.clone(),
             piece_infos,
         )?;
-        clear_layer_data::<Tree>(cache_dir_path)?;
+        clear_cache::<Tree>(cache_dir_path)?;
     } else {
         info!("SyntheticPoRep is NOT enabled");
         validate_cache_for_commit::<_, _, Tree>(cache_dir_path, sealed_sector_file.path())?;
@@ -2050,7 +2049,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
             pre_commit_output,
             &piece_infos,
         )?;
-        clear_layer_data::<Tree>(cache_dir.path())?;
+        clear_cache::<Tree>(cache_dir.path())?;
     } else {
         info!("SyntheticPoRep is NOT enabled");
         validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;

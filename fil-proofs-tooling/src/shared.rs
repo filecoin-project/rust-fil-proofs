@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufWriter, Seek, Write};
 
 use filecoin_proofs::{
-    add_piece, clear_layer_data, fauxrep_aux, generate_synth_proofs, seal_pre_commit_phase1,
+    add_piece, clear_cache, fauxrep_aux, generate_synth_proofs, seal_pre_commit_phase1,
     seal_pre_commit_phase2, validate_cache_for_commit, validate_cache_for_precommit_phase2,
     MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PrivateReplicaInfo,
     PublicReplicaInfo, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize,
@@ -284,7 +284,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
                             piece_infos[i].as_slice(),
                         )
                         .expect("failed to generate synthetic proofs");
-                        clear_layer_data::<Tree>(cache_dirs[i].path())
+                        clear_cache::<Tree>(cache_dirs[i].path())
                             .expect("failed to clear synthetic porep layer data");
                     } else {
                         info!("SyntheticPoRep is NOT enabled");

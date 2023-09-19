@@ -19,8 +19,8 @@ use storage_proofs_core::{
     TEST_SEED,
 };
 use storage_proofs_porep::stacked::{
-    LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedCompound, StackedDrg,
-    TemporaryAux, TemporaryAuxCache, EXP_DEGREE,
+    self, LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedCompound, StackedDrg,
+    TemporaryAuxCache, EXP_DEGREE,
 };
 use tempfile::tempdir;
 
@@ -104,9 +104,6 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
             k: None,
         };
 
-    // Store copy of original t_aux for later resource deletion.
-    let t_aux_orig = t_aux.clone();
-
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
     let t_aux = TemporaryAuxCache::<Tree, Sha256Hasher>::new(&t_aux, replica_path, false)
@@ -125,7 +122,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
     assert!(proofs_are_valid);
 
     // Discard cached MTs that are no longer needed.
-    TemporaryAux::<Tree, Sha256Hasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
+    stacked::clear_cache_dir(cache_dir.path()).expect("cached files delete failed");
 
     {
         // Verify that MetricCS returns the same metrics as TestConstraintSystem.

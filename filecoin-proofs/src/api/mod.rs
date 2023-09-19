@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
-use filecoin_hashers::{sha256::Sha256Hasher, Hasher};
+use filecoin_hashers::Hasher;
 use fr32::{write_unpadded, Fr32Reader};
 use log::{info, trace};
 use memmap2::MmapOptions;
@@ -18,7 +18,7 @@ use storage_proofs_core::{
     sector::SectorId,
 };
 use storage_proofs_porep::stacked::{
-    generate_replica_id, PersistentAux, PublicParams, StackedDrg, TemporaryAux,
+    self, generate_replica_id, PersistentAux, PublicParams, StackedDrg, TemporaryAux,
 };
 pub use storage_proofs_update::constants::TreeRHasher;
 use typenum::Unsigned;
@@ -55,26 +55,21 @@ pub use winning_post::*;
 
 pub use storage_proofs_update::constants::partition_count;
 
+// TODO vmx 2023-09-26: The `Tree` generic is not needed, it's only there in order to not breaking
+// the public API. Once we break the API, remove that generic.
 // Ensure that any associated cached data persisted is discarded.
-pub fn clear_cache<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
+pub fn clear_cache<Tree>(cache_dir: &Path) -> Result<()> {
     info!("clear_cache:start");
 
-    let mut t_aux: TemporaryAux<Tree, Sha256Hasher> = {
-        let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
-        let aux_bytes = fs::read(&f_aux_path)
-            .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
-
-        deserialize(&aux_bytes)
-    }?;
-
-    t_aux.set_cache_path(cache_dir);
-    let result = TemporaryAux::<Tree, DefaultPieceHasher>::clear_temp(t_aux);
+    let result = stacked::clear_cache_dir(cache_dir);
 
     info!("clear_cache:finish");
 
     result
 }
 
+// TODO vmx 2023-09-26: The `Tree` generic is not needed, it's only there in order to not breaking
+// the public API. Once we break the API, remove that generic.
 // Ensure that any associated cached data persisted is discarded.
 pub fn clear_caches<Tree: MerkleTreeTrait>(
     replicas: &BTreeMap<SectorId, PrivateReplicaInfo<Tree>>,
@@ -90,40 +85,26 @@ pub fn clear_caches<Tree: MerkleTreeTrait>(
     Ok(())
 }
 
+// TODO vmx 2023-09-26: The `Tree` generic is not needed, it's only there in order to not breaking
+// the public API. Once we break the API, remove that generic.
 // Ensure that any persisted layer data generated from porep are discarded.
-pub fn clear_layer_data<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
+pub fn clear_layer_data<Tree>(cache_dir: &Path) -> Result<()> {
     info!("clear_layer_data:start");
 
-    let mut t_aux: TemporaryAux<Tree, Sha256Hasher> = {
-        let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
-        let aux_bytes = fs::read(&f_aux_path)
-            .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
-
-        deserialize(&aux_bytes)
-    }?;
-
-    t_aux.set_cache_path(cache_dir);
-    let result = TemporaryAux::<Tree, DefaultPieceHasher>::clear_layer_data(&t_aux);
+    let result = stacked::clear_cache_dir(cache_dir);
 
     info!("clear_layer_data:finish");
 
     result
 }
 
+// TODO vmx 2023-09-26: The `Tree` generic is not needed, it's only there in order to not breaking
+// the public API. Once we break the API, remove that generic.
 // Ensure that any persisted vanilla proofs generated from synthetic porep are discarded.
-pub fn clear_synthetic_proofs<Tree: MerkleTreeTrait>(cache_dir: &Path) -> Result<()> {
+pub fn clear_synthetic_proofs<Tree>(cache_dir: &Path) -> Result<()> {
     info!("clear_synthetic_proofs:start");
 
-    let mut t_aux: TemporaryAux<Tree, Sha256Hasher> = {
-        let f_aux_path = cache_dir.to_path_buf().join(CacheKey::TAux.to_string());
-        let aux_bytes = fs::read(&f_aux_path)
-            .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
-
-        deserialize(&aux_bytes)
-    }?;
-
-    t_aux.set_cache_path(cache_dir);
-    let result = TemporaryAux::<Tree, DefaultPieceHasher>::clear_synthetic_proofs(&t_aux);
+    let result = stacked::clear_synthetic_proofs(cache_dir);
 
     info!("clear_synthetic_proofs:finish");
 
