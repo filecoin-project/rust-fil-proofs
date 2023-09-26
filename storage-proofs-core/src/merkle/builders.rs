@@ -284,46 +284,16 @@ pub fn split_config(config: StoreConfig, count: usize) -> Result<Vec<StoreConfig
         return Ok(vec![config]);
     }
 
-    let mut configs = Vec::with_capacity(count);
-    for i in 0..count {
-        configs.push(StoreConfig::from_config(
-            &config,
-            format!("{}-{}", config.id, i),
-            None,
-        ));
-        configs[i].rows_to_discard = config.rows_to_discard;
-    }
+    let configs = (0..count)
+        .map(|i| StoreConfig {
+            path: config.path.clone(),
+            id: format!("{}-{}", config.id, i),
+            size: config.size,
+            rows_to_discard: config.rows_to_discard,
+        })
+        .collect();
 
     Ok(configs)
-}
-
-// Given a StoreConfig, generate additional ones with appended numbers
-// to uniquely identify them and return the results.  If count is 1,
-// the original config is not modified.
-//
-// Useful for testing, where there the config may be None.
-pub fn split_config_wrapped(
-    config: Option<StoreConfig>,
-    count: usize,
-) -> Result<Vec<Option<StoreConfig>>> {
-    if count == 1 {
-        return Ok(vec![config]);
-    }
-
-    match config {
-        Some(c) => {
-            let mut configs = Vec::with_capacity(count);
-            for i in 0..count {
-                configs.push(Some(StoreConfig::from_config(
-                    &c,
-                    format!("{}-{}", c.id, i),
-                    None,
-                )));
-            }
-            Ok(configs)
-        }
-        None => Ok(vec![None]),
-    }
 }
 
 // Given a StoreConfig, replica path and tree_width (leaf nodes),
@@ -348,19 +318,19 @@ pub fn split_config_and_replica(
         ));
     }
 
-    let mut configs = Vec::with_capacity(count);
-    let mut replica_offsets = Vec::with_capacity(count);
-
-    for i in 0..count {
-        configs.push(StoreConfig::from_config(
-            &config,
-            format!("{}-{}", config.id, i),
-            None,
-        ));
-        configs[i].rows_to_discard = config.rows_to_discard;
-
-        replica_offsets.push(i * sub_tree_width * NODE_SIZE);
-    }
+    let (configs, replica_offsets) = (0..count)
+        .map(|i| {
+            (
+                StoreConfig {
+                    path: config.path.clone(),
+                    id: format!("{}-{}", config.id, i),
+                    size: config.size,
+                    rows_to_discard: config.rows_to_discard,
+                },
+                i * sub_tree_width * NODE_SIZE,
+            )
+        })
+        .unzip();
 
     Ok((
         configs,

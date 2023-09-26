@@ -18,9 +18,8 @@ use storage_proofs_core::{
     sector::SectorId,
     util::default_rows_to_discard,
 };
-use storage_proofs_porep::{
-    stacked::{generate_replica_id, PersistentAux, StackedDrg, TemporaryAux},
-    PoRep,
+use storage_proofs_porep::stacked::{
+    generate_replica_id, PersistentAux, PublicParams, StackedDrg, TemporaryAux,
 };
 pub use storage_proofs_update::constants::TreeRHasher;
 use typenum::Unsigned;
@@ -367,12 +366,18 @@ where
             <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
         ),
     );
-    let pp = public_params(porep_config)?;
+    let pp: PublicParams<Tree> = public_params(porep_config)?;
 
     let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();
     let num_bytes_padded: PaddedBytesAmount = num_bytes.into();
 
-    StackedDrg::<Tree, DefaultPieceHasher>::extract_all(&pp, &replica_id, data, Some(config))?;
+    StackedDrg::<Tree, DefaultPieceHasher>::extract_and_invert_transform_layers(
+        &pp.graph,
+        &pp.layer_challenges,
+        &replica_id,
+        data,
+        config,
+    )?;
     let start: usize = offset_padded.into();
     let end = start + usize::from(num_bytes_padded);
     let unsealed = &data[start..end];

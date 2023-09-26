@@ -8,28 +8,24 @@ use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
 use fr32::fr_into_bytes;
 use generic_array::typenum::{U0, U2, U4, U8};
-use merkletree::store::StoreConfig;
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
     api_version::ApiVersion,
-    cache_key::CacheKey,
     compound_proof::{self, CompoundProof},
     drgraph::BASE_DEGREE,
     merkle::{get_base_tree_count, DiskTree, MerkleTreeTrait},
     multi_proof::MultiProof,
     test_helper::setup_replica,
-    util::default_rows_to_discard,
     TEST_SEED,
 };
-use storage_proofs_porep::{
-    stacked::{
-        ChallengeRequirements, LayerChallenges, PrivateInputs, PublicInputs, SetupParams,
-        StackedCompound, StackedDrg, TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
-    },
-    PoRep,
+use storage_proofs_porep::stacked::{
+    ChallengeRequirements, LayerChallenges, PrivateInputs, PublicInputs, SetupParams,
+    StackedCompound, StackedDrg, TemporaryAux, TemporaryAuxCache, EXP_DEGREE,
 };
 use tempfile::tempdir;
+
+mod common;
 
 #[test]
 #[ignore]
@@ -83,26 +79,19 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
     let cache_dir = tempdir().unwrap();
-    let config = StoreConfig::new(
-        cache_dir.path(),
-        CacheKey::CommDTree.to_string(),
-        default_rows_to_discard(nodes, BINARY_ARITY),
-    );
 
     // Generate a replica path.
     let replica_path = cache_dir.path().join("replica-path");
     let mut mmapped_data = setup_replica(&data, &replica_path);
 
     let public_params = StackedCompound::setup(&setup_params).expect("setup failed");
-    let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, _>::replicate(
+    let (tau, (p_aux, t_aux)) = common::transform_and_replicate_layers::<Tree, _>(
         &public_params.vanilla_params,
         &replica_id.into(),
         (mmapped_data.as_mut()).into(),
-        None,
-        config,
+        cache_dir.path().to_path_buf(),
         replica_path.clone(),
-    )
-    .expect("replication failed");
+    );
 
     let mut copied = vec![0; data.len()];
     copied.copy_from_slice(&mmapped_data);

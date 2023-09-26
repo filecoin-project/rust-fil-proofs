@@ -1,7 +1,6 @@
 //requires nightly, or later stable version
 //#![warn(clippy::unwrap_used)]
 
-use std::io::{stdin, stdout};
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -10,12 +9,9 @@ use clap::{Arg, Command};
 
 use storage_proofs_core::api_version::ApiVersion;
 
-use crate::prodbench::ProdbenchInputs;
-
 mod hash_fns;
 mod merkleproofs;
 mod porep;
-mod prodbench;
 mod window_post;
 mod window_post_fake;
 mod winning_post;
@@ -165,40 +161,6 @@ fn main() -> Result<()> {
     let hash_cmd =
         Command::new("hash-constraints").about("Benchmark hash function inside of a circuit");
 
-    let prodbench_cmd = Command::new("prodbench")
-        .about("Benchmark prodbench")
-        .arg(
-            Arg::new("config")
-                .long("config")
-                .takes_value(true)
-                .required(false)
-                .help("path to config.json"),
-        )
-        .arg(
-            Arg::new("skip-seal-proof")
-                .long("skip-seal-proof")
-                .takes_value(false)
-                .help("skip generation (and verification) of seal proof"),
-        )
-        .arg(
-            Arg::new("skip-post-proof")
-                .long("skip-post-proof")
-                .takes_value(false)
-                .help("skip generation (and verification) of PoSt proof"),
-        )
-        .arg(
-            Arg::new("only-replicate")
-                .long("only-replicate")
-                .takes_value(false)
-                .help("only run replication"),
-        )
-        .arg(
-            Arg::new("only-add-piece")
-                .long("only-add-piece")
-                .takes_value(false)
-                .help("only run piece addition"),
-        );
-
     let porep_cmd = Command::new("porep")
         .about("Benchmark PoRep")
         .arg(
@@ -313,7 +275,6 @@ fn main() -> Result<()> {
         .subcommand(window_post_fake_cmd)
         .subcommand(winning_post_cmd)
         .subcommand(hash_cmd)
-        .subcommand(prodbench_cmd)
         .subcommand(porep_cmd)
         .subcommand(merkleproof_cmd)
         .get_matches();
@@ -399,31 +360,6 @@ fn main() -> Result<()> {
 
             let proofs = m.value_of_t::<usize>("proofs")?;
             merkleproofs::run(size, proofs, m.is_present("validate"))?;
-        }
-        Some(("prodbench", m)) => {
-            let inputs: ProdbenchInputs = if m.is_present("config") {
-                let file = m
-                    .value_of_t::<String>("config")
-                    .expect("failed to get config");
-                serde_json::from_reader(
-                    std::fs::File::open(&file)
-                        .unwrap_or_else(|_| panic!("invalid file {:?}", file)),
-                )
-            } else {
-                serde_json::from_reader(stdin())
-            }
-            .expect("failed to deserialize stdin to ProdbenchInputs");
-
-            let outputs = prodbench::run(
-                inputs,
-                m.is_present("skip-seal-proof"),
-                m.is_present("skip-post-proof"),
-                m.is_present("only-replicate"),
-                m.is_present("only-add-piece"),
-            );
-
-            serde_json::to_writer(stdout(), &outputs)
-                .expect("failed to write ProdbenchOutput to stdout")
         }
         Some(("porep", m)) => {
             let preserve_cache = m.is_present("preserve-cache");
