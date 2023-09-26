@@ -1,7 +1,7 @@
 use std::{fs, mem::size_of, path::Path};
 
-use anyhow::{Context, Result};
-use bellperson::groth16::Proof;
+use anyhow::{ensure, Context, Result};
+use bellperson::groth16::{self, Proof};
 use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::{Domain, Hasher};
 use fr32::{bytes_into_fr, fr_into_bytes};
@@ -12,6 +12,8 @@ use storage_proofs_core::{
     merkle::{get_base_tree_count, MerkleTreeTrait},
 };
 use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
+    parameter_cache::SRS_MAX_PROOFS_TO_AGGREGATE,
+};
 use typenum::Unsigned;
 
 use crate::{
@@ -157,6 +159,54 @@ pub(crate) fn persist_t_aux<Tree: MerkleTreeTrait>(
 
     fs::write(&t_aux_path, t_aux_bytes)
         .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))?;
+
+/// Given a value, get one suitable for aggregation.
+#[inline]
+pub(crate) fn get_aggregate_target_len(len: usize) -> usize {
+    if len == 1 {
+        2
+    } else {
+        len.next_power_of_two()
+    }
+}
+
+/// Given a list of proofs and a target_len, make sure that the proofs list is padded to the target_len size.
+pub(crate) fn pad_proofs_to_target(
+    proofs: &mut Vec<groth16::Proof<Bls12>>,
+    target_len: usize,
+) -> Result<()> {
+    trace!(
+        "pad_proofs_to_target target_len {}, proofs len {}",
+        target_len,
+        proofs.len()
+    );
+    ensure!(
+        target_len >= proofs.len(),
+        "target len must be greater than actual num proofs"
+    );
+    ensure!(
+        proofs.last().is_some(),
+        "invalid last proof for duplication"
+    );
+
+    let last = proofs
+        .last()
+        .expect("invalid last proof for duplication")
+        .clone();
+    let mut padding: Vec<groth16::Proof<Bls12>> = (0..target_len - proofs.len())
+        .map(|_| last.clone())
+        .collect();
+    proofs.append(&mut padding);
+
+    ensure!(
+        proofs.len().next_power_of_two() == proofs.len(),
+        "proof count must be a power of 2 for aggregation"
+    );
+    ensure!(
+        proofs.len() <= SRS_MAX_PROOFS_TO_AGGREGATE,
+        "proof count for aggregation is larger than the max supported value"
+    );
+>>>>>>> 893404b4 (feat: remove dead and duplicated code and improve existing tests)
 
     Ok(())
 }

@@ -68,7 +68,6 @@ fn bench_sector_update_inputs(c: &mut Criterion) {
     porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id));
 
-    //let config = PoRepConfig::new_groth16(SECTOR_SIZE_2_KIB, porep_id, ApiVersion::V1_2_0);
     let config = PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id, ApiVersion::V1_2_0);
 
     let comm_r_old = [5u8; 32];
@@ -164,9 +163,9 @@ fn bench_stacked_srs_verifier_key(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    //    bench_seal_inputs,
+    bench_seal_inputs,
     bench_sector_update_inputs,
-    //    bench_stacked_srs_key,
-    //    bench_stacked_srs_verifier_key,
+    bench_stacked_srs_key,
+    bench_stacked_srs_verifier_key,
 );
 criterion_main!(benches);

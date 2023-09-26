@@ -5,7 +5,7 @@ use std::path::Path;
 use anyhow::{ensure, Context, Result};
 use bellperson::groth16;
 use bincode::{deserialize, serialize};
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use ff::PrimeField;
 use filecoin_hashers::{Domain, Hasher};
 use fr32::bytes_into_fr;
@@ -21,7 +21,6 @@ use storage_proofs_core::{
     compound_proof::{self, CompoundProof},
     merkle::{get_base_tree_count, MerkleTreeTrait},
     multi_proof::MultiProof,
-    parameter_cache::SRS_MAX_PROOFS_TO_AGGREGATE,
     proof::ProofScheme,
     util::NODE_SIZE,
 };
@@ -35,7 +34,7 @@ use storage_proofs_update::{
 };
 
 use crate::{
-    api::util,
+    api::util::{self, get_aggregate_target_len, pad_proofs_to_target},
     caches::{
         get_empty_sector_update_params, get_empty_sector_update_verifying_key, get_stacked_srs_key,
         get_stacked_srs_verifier_key,
@@ -63,55 +62,6 @@ impl SectorUpdateProofInputs {
         dest[33..64].copy_from_slice(&self.comm_r_new[..]);
         dest[65..96].copy_from_slice(&self.comm_d_new[..]);
     }
-}
-
-/// FIXME: DUPLICATED??
-/// Given a value, get one suitable for aggregation.
-#[inline]
-fn get_aggregate_target_len(len: usize) -> usize {
-    if len == 1 {
-        2
-    } else {
-        len.next_power_of_two()
-    }
-}
-
-/// FIXME: DUPLICATED??
-/// Given a list of proofs and a target_len, make sure that the proofs list is padded to the target_len size.
-fn pad_proofs_to_target(proofs: &mut Vec<groth16::Proof<Bls12>>, target_len: usize) -> Result<()> {
-    trace!(
-        "pad_proofs_to_target target_len {}, proofs len {}",
-        target_len,
-        proofs.len()
-    );
-    ensure!(
-        target_len >= proofs.len(),
-        "target len must be greater than actual num proofs"
-    );
-    ensure!(
-        proofs.last().is_some(),
-        "invalid last proof for duplication"
-    );
-
-    let last = proofs
-        .last()
-        .expect("invalid last proof for duplication")
-        .clone();
-    let mut padding: Vec<groth16::Proof<Bls12>> = (0..target_len - proofs.len())
-        .map(|_| last.clone())
-        .collect();
-    proofs.append(&mut padding);
-
-    ensure!(
-        proofs.len().next_power_of_two() == proofs.len(),
-        "proof count must be a power of 2 for aggregation"
-    );
-    ensure!(
-        proofs.len() <= SRS_MAX_PROOFS_TO_AGGREGATE,
-        "proof count for aggregation is larger than the max supported value"
-    );
-
-    Ok(())
 }
 
 /// Given a list of public inputs and a target_len, make sure that the inputs list is padded to the target_len size.
@@ -983,7 +933,7 @@ pub fn aggregate_empty_sector_update_proofs<
     let aggregate_proof = EmptySectorUpdateCompound::<Tree>::aggregate_proofs(
         &srs_prover_key,
         &hashed_commitments,
-        &proofs.as_slice(),
+        proofs.as_slice(),
         aggregate_version,
     )?;
     let mut aggregate_proof_bytes = Vec::new();

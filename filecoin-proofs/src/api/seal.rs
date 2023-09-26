@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bellperson::groth16;
+use bincode::{deserialize, serialize};
 use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::{Domain, Hasher};
 use log::{info, trace};
@@ -21,7 +22,6 @@ use storage_proofs_core::{
         MerkleTreeTrait,
     },
     multi_proof::MultiProof,
-    parameter_cache::SRS_MAX_PROOFS_TO_AGGREGATE,
     proof::ProofScheme,
     sector::SectorId,
     util::{default_rows_to_discard, NODE_SIZE},
@@ -37,6 +37,8 @@ use typenum::{Unsigned, U11, U2};
 use crate::POREP_MINIMUM_CHALLENGES;
 use crate::{
     api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size, util},
+    api::util::{get_aggregate_target_len, pad_proofs_to_target},
+    api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size},
     caches::{
         get_stacked_params, get_stacked_srs_key, get_stacked_srs_verifier_key,
         get_stacked_verifying_key,
@@ -670,52 +672,6 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
     trace!("get_seal_inputs:finish");
 
     Ok(inputs)
-}
-
-/// Given a value, get one suitable for aggregation.
-fn get_aggregate_target_len(len: usize) -> usize {
-    if len == 1 {
-        2
-    } else {
-        len.next_power_of_two()
-    }
-}
-
-/// Given a list of proofs and a target_len, make sure that the proofs list is padded to the target_len size.
-fn pad_proofs_to_target(proofs: &mut Vec<groth16::Proof<Bls12>>, target_len: usize) -> Result<()> {
-    trace!(
-        "pad_proofs_to_target target_len {}, proofs len {}",
-        target_len,
-        proofs.len()
-    );
-    ensure!(
-        target_len >= proofs.len(),
-        "target len must be greater than actual num proofs"
-    );
-    ensure!(
-        proofs.last().is_some(),
-        "invalid last proof for duplication"
-    );
-
-    let last = proofs
-        .last()
-        .expect("invalid last proof for duplication")
-        .clone();
-    let mut padding: Vec<groth16::Proof<Bls12>> = (0..target_len - proofs.len())
-        .map(|_| last.clone())
-        .collect();
-    proofs.append(&mut padding);
-
-    ensure!(
-        proofs.len().next_power_of_two() == proofs.len(),
-        "proof count must be a power of 2 for aggregation"
-    );
-    ensure!(
-        proofs.len() <= SRS_MAX_PROOFS_TO_AGGREGATE,
-        "proof count for aggregation is larger than the max supported value"
-    );
-
-    Ok(())
 }
 
 /// Given a list of public inputs and a target_len, make sure that the inputs list is padded to the target_len size.

@@ -27,11 +27,11 @@ use filecoin_proofs::{
     DefaultTreeDomain, EmptySectorUpdateProof, MerkleTreeTrait, PaddedBytesAmount, PieceInfo,
     PoRepConfig, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
     SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
-    SectorShape2KiB, SectorShape32GiB, SectorShape32KiB, SectorShape4KiB, SectorShape8MiB,
-    SectorUpdateConfig, SectorUpdateProofInputs, UnpaddedByteIndex, UnpaddedBytesAmount,
-    SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
-    SECTOR_SIZE_4_KIB, SECTOR_SIZE_8_MIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
-    WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+    SectorShape2KiB, SectorShape32GiB, SectorShape32KiB, SectorShape4KiB, SectorUpdateConfig,
+    SectorUpdateProofInputs, UnpaddedByteIndex, UnpaddedBytesAmount, SECTOR_SIZE_16_KIB,
+    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
+    WINNING_POST_SECTOR_COUNT,
 };
 use fr32::bytes_into_fr;
 use log::{info, trace};
@@ -98,29 +98,44 @@ fn test_get_sector_update_inputs() -> Result<()> {
     porep_id_32g[..8].copy_from_slice(&porep_id_v1_1_32g.to_le_bytes());
     assert!(!is_legacy_porep_id(porep_id_32g));
 
-    let config_2k = PoRepConfig::new_groth16(SECTOR_SIZE_2_KIB, porep_id_2k, ApiVersion::V1_2_0);
-    let config_32g = PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id_32g, ApiVersion::V1_2_0);
+    let porep_config_2k =
+        PoRepConfig::new_groth16(SECTOR_SIZE_2_KIB, porep_id_2k, ApiVersion::V1_2_0);
+    let sector_config_2k = SectorUpdateConfig::from_porep_config(&porep_config_2k);
+
+    let porep_config_32g =
+        PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id_32g, ApiVersion::V1_2_0);
+    let sector_config_32g = SectorUpdateConfig::from_porep_config(&porep_config_32g);
 
     let comm_r_old = [5u8; 32];
     let comm_r_new = [6u8; 32];
     let comm_d_new = [7u8; 32];
 
     let inputs_2k = get_sector_update_inputs::<SectorShape2KiB>(
-        &config_2k, comm_r_old, comm_r_new, comm_d_new,
-    )?;
-    info!("NUM INPUTS IS {}", inputs_2k.len());
-    ensure!(inputs_2k.len() == 1, "sector_update_inputs length mismatch");
-
-    let inputs_32g = get_sector_update_inputs::<SectorShape32GiB>(
-        &config_32g,
+        &porep_config_2k,
         comm_r_old,
         comm_r_new,
         comm_d_new,
     )?;
-    info!("NUM INPUTS IS {}", inputs_32g.len());
+
+    // Ensure the num inputs is equal to the number of partitions
+    info!("2k sector inputs count is {}", inputs_2k.len());
     ensure!(
-        inputs_32g.len() == 16,
-        "sector_update_inputs length mismatch"
+        inputs_2k.len() == usize::from(sector_config_2k.update_partitions),
+        "2k sector_update_inputs length mismatch"
+    );
+
+    let inputs_32g = get_sector_update_inputs::<SectorShape32GiB>(
+        &porep_config_32g,
+        comm_r_old,
+        comm_r_new,
+        comm_d_new,
+    )?;
+
+    // Ensure the num inputs is equal to the number of partitions
+    info!("32g sector inputs count is {}", inputs_32g.len());
+    ensure!(
+        inputs_32g.len() == usize::from(sector_config_32g.update_partitions),
+        "32g sector_update_inputs length mismatch"
     );
 
     Ok(())
@@ -636,6 +651,97 @@ fn test_seal_proof_aggregation_818_32kib_porep_id_v1_1_base_8() -> Result<()> {
 //    Ok(())
 //}
 
+#[test]
+#[ignore]
+fn test_sector_update_proof_aggregation_1011_2kib() -> Result<()> {
+    let proofs_to_aggregate = 1011; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_2_KIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape2KiB>(&porep_config, proofs_to_aggregate)
+}
+
+#[test]
+#[ignore]
+fn test_sector_update_proof_aggregation_33_4kib() -> Result<()> {
+    let proofs_to_aggregate = 33; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_4_KIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape4KiB>(&porep_config, proofs_to_aggregate)
+}
+
+#[test]
+#[ignore]
+fn test_sector_update_proof_aggregation_508_16kib() -> Result<()> {
+    let proofs_to_aggregate = 508; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_16_KIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape16KiB>(&porep_config, proofs_to_aggregate)
+}
+
+#[test]
+#[ignore]
+fn test_sector_update_proof_aggregation_818_32kib() -> Result<()> {
+    let proofs_to_aggregate = 818; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_32_KIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape32KiB>(&porep_config, proofs_to_aggregate)
+}
+
+#[test]
+#[cfg(feature = "big-tests")]
+fn test_sector_update_proof_aggregation_11_512mib() -> Result<()> {
+    let proofs_to_aggregate = 11; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_512_MIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape512MiB>(&porep_config, proofs_to_aggregate)
+}
+
+#[test]
+#[cfg(feature = "big-tests")]
+fn test_sector_update_proof_aggregation_455_32gib() -> Result<()> {
+    let proofs_to_aggregate = 455; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_32_GIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape32GiB>(&porep_config, proofs_to_aggregate)
+}
+
+#[test]
+#[cfg(feature = "big-tests")]
+fn test_sector_update_proof_aggregation_3_64gib() -> Result<()> {
+    let proofs_to_aggregate = 3; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_64_GIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape64GiB>(&porep_config, proofs_to_aggregate)
+}
+
 fn aggregate_seal_proofs<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     porep_id: &[u8; 32],
@@ -738,7 +844,7 @@ fn aggregate_sector_update_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeR
         ensure!(sector_update_inputs.len() == num_proofs_to_aggregate);
 
         let agg_update_proof = aggregate_empty_sector_update_proofs::<Tree>(
-            &porep_config,
+            porep_config,
             &sector_update_proofs,
             &sector_update_inputs,
             aggregate_version,
@@ -748,7 +854,7 @@ fn aggregate_sector_update_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeR
             .iter()
             .flat_map(|input| {
                 get_sector_update_inputs::<Tree>(
-                    &porep_config,
+                    porep_config,
                     input.comm_r_old,
                     input.comm_r_new,
                     input.comm_d_new,
@@ -764,7 +870,7 @@ fn aggregate_sector_update_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeR
         );
 
         let valid = verify_aggregate_sector_update_proofs::<Tree>(
-            &porep_config,
+            porep_config,
             agg_update_proof,
             &sector_update_inputs,
             combined_sector_update_inputs,
