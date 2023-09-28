@@ -288,8 +288,8 @@ jobs:
   test_darwin:
     macos:
       xcode: "13.4.1"
+    resource_class: macos.x86.medium.gen2
     working_directory: ~/crate
-    resource_class: large
     environment: *setup-env
     steps:
       - run:
@@ -421,28 +421,28 @@ workflows:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-            
+
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_post
           crate: "storage-proofs-post"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-            
+
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_core
           crate: "storage-proofs-core"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-            
+
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_porep
           crate: "storage-proofs-porep"
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-            
+
       - test_ignored_release:
           name: test_ignored_release_filecoin_proofs
           crate: "filecoin-proofs"
