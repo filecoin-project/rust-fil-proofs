@@ -112,24 +112,27 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             // If there are no synthetic vanilla proofs stored on disk yet, generate them.
             if pub_inputs.seed.is_none() {
                 info!("generating synthetic vanilla proofs in a single partition");
+                assert_eq!(partition_count, 1);
 
-                let vanilla_proofs = Self::prove_layers_generate(
+                let comm_r = pub_inputs.tau.as_ref().expect("tau is set").comm_r;
+                // Derive the set of challenges we are proving over.
+                let challenges = layer_challenges.derive_synthetic(
+                    graph.size(),
+                    &pub_inputs.replica_id,
+                    &comm_r,
+                );
+
+                let synth_proofs = Self::prove_layers_generate(
                     graph,
                     pub_inputs,
                     p_aux.comm_c,
                     t_aux,
-                    layer_challenges,
+                    challenges,
                     layers,
-                    partition_count,
                 )?;
 
-                assert!(
-                    vanilla_proofs.iter().skip(1).all(Vec::is_empty),
-                    "synthetic proofs should be generated in a single partition",
-                );
-                let synth_proofs = &vanilla_proofs[0];
                 Self::write_synth_proofs(
-                    synth_proofs,
+                    &synth_proofs,
                     pub_inputs,
                     graph,
                     layer_challenges,
@@ -156,36 +159,53 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 })
             }
         } else {
-            assert_eq!(t_aux.labels.len(), layers);
-            assert_eq!(
-                pub_inputs.tau.as_ref().expect("as_ref failure").comm_d,
-                t_aux.tree_d.as_ref().expect("failed to get tree_d").root()
-            );
-
             info!("generating non-synthetic vanilla proofs");
 
-            Self::prove_layers_generate(
-                graph,
-                pub_inputs,
-                p_aux.comm_c,
-                t_aux,
-                layer_challenges,
-                layers,
-                partition_count,
-            )
+            let comm_r = pub_inputs.tau.as_ref().expect("tau is set").comm_r;
+            let seed = pub_inputs
+                .seed
+                .expect("seed must be set for non-synthetic vanilla proofs");
+
+            (0..partition_count)
+                .map(|k| {
+                    trace!("proving partition {}/{}", k + 1, partition_count);
+
+                    // Derive the set of challenges we are proving over.
+                    let challenges = layer_challenges.derive(
+                        graph.size(),
+                        &pub_inputs.replica_id,
+                        &comm_r,
+                        &seed,
+                        k as u8,
+                    );
+
+                    Self::prove_layers_generate(
+                        graph,
+                        pub_inputs,
+                        p_aux.comm_c,
+                        t_aux,
+                        challenges,
+                        layers,
+                    )
+                })
+                .collect::<Result<Vec<Vec<Proof<Tree, G>>>>>()
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn prove_layers_generate(
         graph: &StackedBucketGraph<Tree::Hasher>,
         pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
         comm_c: <Tree::Hasher as Hasher>::Domain,
         t_aux: &TemporaryAuxCache<Tree, G>,
-        layer_challenges: &LayerChallenges,
+        challenges: Vec<usize>,
         layers: usize,
-        partition_count: usize,
-    ) -> Result<Vec<Vec<Proof<Tree, G>>>> {
+    ) -> Result<Vec<Proof<Tree, G>>> {
+        assert_eq!(t_aux.labels.len(), layers);
+        assert_eq!(
+            pub_inputs.tau.as_ref().expect("as_ref failure").comm_d,
+            t_aux.tree_d.as_ref().expect("failed to get tree_d").root()
+        );
+
         let get_drg_parents_columns = |x: usize| -> Result<Vec<Column<Tree::Hasher>>> {
             let base_degree = graph.base_graph().degree();
 
@@ -216,167 +236,156 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 .collect()
         };
 
-        (0..partition_count)
-            .map(|k| {
-                trace!("proving partition {}/{}", k + 1, partition_count);
+        THREAD_POOL.scoped(|scope| {
+            // Stacked commitment specifics
+            challenges
+                .into_par_iter()
+                .enumerate()
+                .map(|(challenge_index, challenge)| {
+                    trace!(" challenge {} ({})", challenge, challenge_index);
+                    assert!(challenge < graph.size(), "Invalid challenge");
+                    assert!(challenge > 0, "Invalid challenge");
 
-                // Derive the set of challenges we are proving over.
-                let challenges = pub_inputs.challenges(layer_challenges, graph.size(), Some(k));
+                    let comm_d_proof = t_aux
+                        .tree_d
+                        .as_ref()
+                        .expect("failed to get tree_d")
+                        .gen_proof(challenge)?;
 
-                THREAD_POOL.scoped(|scope| {
-                    // Stacked commitment specifics
-                    challenges
-                        .into_par_iter()
-                        .enumerate()
-                        .map(|(challenge_index, challenge)| {
-                            trace!(" challenge {} ({})", challenge, challenge_index);
-                            assert!(challenge < graph.size(), "Invalid challenge");
-                            assert!(challenge > 0, "Invalid challenge");
+                    let comm_d_proof_inner = comm_d_proof.clone();
+                    let challenge_inner = challenge;
+                    scope.execute(move || {
+                        assert!(comm_d_proof_inner.validate(challenge_inner));
+                    });
 
-                            let comm_d_proof = t_aux
-                                .tree_d
-                                .as_ref()
-                                .expect("failed to get tree_d")
-                                .gen_proof(challenge)?;
+                    // Stacked replica column openings
+                    let rcp = {
+                        let (c_x, drg_parents, exp_parents) = {
+                            assert!(t_aux.tree_c.is_some());
+                            let tree_c = t_aux.tree_c.as_ref().expect("failed to get tree_c");
+                            assert_eq!(comm_c, tree_c.root());
 
-                            let comm_d_proof_inner = comm_d_proof.clone();
-                            let challenge_inner = challenge;
-                            scope.execute(move || {
-                                assert!(comm_d_proof_inner.validate(challenge_inner));
-                            });
+                            // All labels in C_X
+                            trace!("  c_x");
+                            let c_x = t_aux.column(challenge as u32)?.into_proof(tree_c)?;
 
-                            // Stacked replica column openings
-                            let rcp = {
-                                let (c_x, drg_parents, exp_parents) = {
-                                    assert!(t_aux.tree_c.is_some());
-                                    let tree_c =
-                                        t_aux.tree_c.as_ref().expect("failed to get tree_c");
-                                    assert_eq!(comm_c, tree_c.root());
+                            // All labels in the DRG parents.
+                            trace!("  drg_parents");
+                            let drg_parents = get_drg_parents_columns(challenge)?
+                                .into_iter()
+                                .map(|column| column.into_proof(tree_c))
+                                .collect::<Result<_>>()?;
 
-                                    // All labels in C_X
-                                    trace!("  c_x");
-                                    let c_x = t_aux.column(challenge as u32)?.into_proof(tree_c)?;
+                            // Labels for the expander parents
+                            trace!("  exp_parents");
+                            let exp_parents = get_exp_parents_columns(challenge)?
+                                .into_iter()
+                                .map(|column| column.into_proof(tree_c))
+                                .collect::<Result<_>>()?;
 
-                                    // All labels in the DRG parents.
-                                    trace!("  drg_parents");
-                                    let drg_parents = get_drg_parents_columns(challenge)?
-                                        .into_iter()
-                                        .map(|column| column.into_proof(tree_c))
-                                        .collect::<Result<_>>()?;
+                            (c_x, drg_parents, exp_parents)
+                        };
 
-                                    // Labels for the expander parents
-                                    trace!("  exp_parents");
-                                    let exp_parents = get_exp_parents_columns(challenge)?
-                                        .into_iter()
-                                        .map(|column| column.into_proof(tree_c))
-                                        .collect::<Result<_>>()?;
+                        ReplicaColumnProof {
+                            c_x,
+                            drg_parents,
+                            exp_parents,
+                        }
+                    };
 
-                                    (c_x, drg_parents, exp_parents)
-                                };
+                    // Final replica layer openings
+                    trace!("final replica layer openings");
+                    let comm_r_last_proof = t_aux.tree_r_last.gen_cached_proof(
+                        challenge,
+                        Some(t_aux.tree_r_last_config_rows_to_discard),
+                    )?;
 
-                                ReplicaColumnProof {
-                                    c_x,
-                                    drg_parents,
-                                    exp_parents,
-                                }
-                            };
+                    let comm_r_last_proof_inner = comm_r_last_proof.clone();
+                    scope.execute(move || {
+                        debug_assert!(comm_r_last_proof_inner.validate(challenge));
+                    });
 
-                            // Final replica layer openings
-                            trace!("final replica layer openings");
-                            let comm_r_last_proof = t_aux.tree_r_last.gen_cached_proof(
-                                challenge,
-                                Some(t_aux.tree_r_last_config_rows_to_discard),
-                            )?;
+                    // Labeling Proofs Layer 1..l
+                    let mut labeling_proofs = Vec::with_capacity(layers);
+                    let mut encoding_proof = None;
 
-                            let comm_r_last_proof_inner = comm_r_last_proof.clone();
-                            scope.execute(move || {
-                                debug_assert!(comm_r_last_proof_inner.validate(challenge));
-                            });
+                    for layer in 1..=layers {
+                        trace!("  encoding proof layer {}", layer,);
+                        let parents_data: Vec<<Tree::Hasher as Hasher>::Domain> = if layer == 1 {
+                            let mut parents = vec![0; graph.base_graph().degree()];
+                            graph.base_parents(challenge, &mut parents)?;
 
-                            // Labeling Proofs Layer 1..l
-                            let mut labeling_proofs = Vec::with_capacity(layers);
-                            let mut encoding_proof = None;
+                            parents
+                                .into_par_iter()
+                                .map(|parent| t_aux.domain_node_at_layer(layer, parent))
+                                .collect::<Result<_>>()?
+                        } else {
+                            let mut parents = vec![0; graph.degree()];
+                            graph.parents(challenge, &mut parents)?;
+                            let base_parents_count = graph.base_graph().degree();
 
-                            for layer in 1..=layers {
-                                trace!("  encoding proof layer {}", layer,);
-                                let parents_data: Vec<<Tree::Hasher as Hasher>::Domain> =
-                                    if layer == 1 {
-                                        let mut parents = vec![0; graph.base_graph().degree()];
-                                        graph.base_parents(challenge, &mut parents)?;
-
-                                        parents
-                                            .into_par_iter()
-                                            .map(|parent| t_aux.domain_node_at_layer(layer, parent))
-                                            .collect::<Result<_>>()?
+                            parents
+                                .into_par_iter()
+                                .enumerate()
+                                .map(|(i, parent)| {
+                                    if i < base_parents_count {
+                                        // parents data for base parents is from the current layer
+                                        t_aux.domain_node_at_layer(layer, parent)
                                     } else {
-                                        let mut parents = vec![0; graph.degree()];
-                                        graph.parents(challenge, &mut parents)?;
-                                        let base_parents_count = graph.base_graph().degree();
+                                        // parents data for exp parents is from the previous layer
+                                        t_aux.domain_node_at_layer(layer - 1, parent)
+                                    }
+                                })
+                                .collect::<Result<_>>()?
+                        };
 
-                                        parents
-                                            .into_par_iter()
-                                            .enumerate()
-                                            .map(|(i, parent)| {
-                                                if i < base_parents_count {
-                                                    // parents data for base parents is from the current layer
-                                                    t_aux.domain_node_at_layer(layer, parent)
-                                                } else {
-                                                    // parents data for exp parents is from the previous layer
-                                                    t_aux.domain_node_at_layer(layer - 1, parent)
-                                                }
-                                            })
-                                            .collect::<Result<_>>()?
-                                    };
+                        // repeat parents
+                        let mut parents_data_full = vec![Default::default(); TOTAL_PARENTS];
+                        for chunk in parents_data_full.chunks_mut(parents_data.len()) {
+                            chunk.copy_from_slice(&parents_data[..chunk.len()]);
+                        }
 
-                                // repeat parents
-                                let mut parents_data_full = vec![Default::default(); TOTAL_PARENTS];
-                                for chunk in parents_data_full.chunks_mut(parents_data.len()) {
-                                    chunk.copy_from_slice(&parents_data[..chunk.len()]);
-                                }
+                        let proof = LabelingProof::<Tree::Hasher>::new(
+                            layer as u32,
+                            challenge as u64,
+                            parents_data_full.clone(),
+                        );
 
-                                let proof = LabelingProof::<Tree::Hasher>::new(
-                                    layer as u32,
-                                    challenge as u64,
-                                    parents_data_full.clone(),
+                        {
+                            let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
+                            let replica_id = &pub_inputs.replica_id;
+                            let proof_inner = proof.clone();
+                            scope.execute(move || {
+                                assert!(
+                                    proof_inner.verify(replica_id, &labeled_node),
+                                    "Invalid encoding proof generated at layer {}",
+                                    layer,
                                 );
+                                trace!("Valid encoding proof generated at layer {}", layer);
+                            });
+                        }
 
-                                {
-                                    let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
-                                    let replica_id = &pub_inputs.replica_id;
-                                    let proof_inner = proof.clone();
-                                    scope.execute(move || {
-                                        assert!(
-                                            proof_inner.verify(replica_id, &labeled_node),
-                                            "Invalid encoding proof generated at layer {}",
-                                            layer,
-                                        );
-                                        trace!("Valid encoding proof generated at layer {}", layer);
-                                    });
-                                }
+                        labeling_proofs.push(proof);
 
-                                labeling_proofs.push(proof);
+                        if layer == layers {
+                            encoding_proof = Some(EncodingProof::new(
+                                layer as u32,
+                                challenge as u64,
+                                parents_data_full,
+                            ));
+                        }
+                    }
 
-                                if layer == layers {
-                                    encoding_proof = Some(EncodingProof::new(
-                                        layer as u32,
-                                        challenge as u64,
-                                        parents_data_full,
-                                    ));
-                                }
-                            }
-
-                            Ok(Proof {
-                                comm_d_proofs: comm_d_proof,
-                                replica_column_proofs: rcp,
-                                comm_r_last_proof,
-                                labeling_proofs,
-                                encoding_proof: encoding_proof.expect("invalid tapering"),
-                            })
-                        })
-                        .collect()
+                    Ok(Proof {
+                        comm_d_proofs: comm_d_proof,
+                        replica_column_proofs: rcp,
+                        comm_r_last_proof,
+                        labeling_proofs,
+                        encoding_proof: encoding_proof.expect("invalid tapering"),
+                    })
                 })
-            })
-            .collect::<Result<Vec<Vec<Proof<Tree, G>>>>>()
+                .collect()
+        })
     }
 
     fn write_synth_proofs(
