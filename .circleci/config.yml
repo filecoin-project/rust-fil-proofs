@@ -3,8 +3,7 @@ version: 2.1
 executors:
   default:
     docker:
-      - image: filecoin/rust:latest
-    working_directory: /mnt/crate
+      - image: cimg/rust:1.67
     resource_class: 2xlarge+
   gpu:
     machine:
@@ -65,6 +64,7 @@ jobs:
           at: "."
       - restore_rustup_cache
       - restore_parameter_cache
+      - install_libs
       - run:
           name: Test (<< parameters.crate >>)
           command: cargo test --verbose --package << parameters.crate >>
@@ -79,6 +79,7 @@ jobs:
           at: "."
       - restore_rustup_cache
       - restore_parameter_cache
+      - install_libs
       - run:
           name: Test in release profile
           command: |
@@ -103,6 +104,7 @@ jobs:
           at: "."
       - restore_rustup_cache
       - restore_parameter_cache
+      - install_libs
       - run:
           name: Test ignored in release profile
           command: |
@@ -127,6 +129,7 @@ jobs:
           at: "."
       - restore_rustup_cache
       - restore_parameter_cache
+      - install_libs
       - run:
           name: Test with use_multicore_sdr
           command: |
@@ -166,11 +169,7 @@ jobs:
           command: |
             echo 'export PATH="~/.cargo/bin:/usr/local/cuda-11.2/bin:$PATH"' | tee --append $BASH_ENV
             source $BASH_ENV
-      - run:
-          name: Install required libraries for GPU support
-          command: |
-            sudo apt update
-            sudo apt install -y ocl-icd-opencl-dev libhwloc-dev
+      - install_libs
       - run:
           name: Test with GPU column and tree builders.
           command: |
@@ -194,6 +193,7 @@ jobs:
           at: "."
       - restore_rustup_cache
       - restore_parameter_cache
+      - install_libs
       - run:
           name: Set the PATH env variable
           command: |
@@ -237,11 +237,7 @@ jobs:
       - run: rustup default $(cat rust-toolchain)
       - run: cargo update
       - run: cargo fetch
-      - run:
-          name: Install required libraries
-          command: |
-            sudo apt-get update -y
-            sudo apt install -y libhwloc-dev
+      - install_libs
       - run:
           name: Test arm with no gpu
           command: |
@@ -257,6 +253,7 @@ jobs:
           at: "."
       - restore_rustup_cache
       - restore_parameter_cache
+      - install_libs
       - run:
           name: Benchmarks
           command: cargo build --benches --verbose --workspace
@@ -282,6 +279,7 @@ jobs:
       - attach_workspace:
           at: "."
       - restore_rustup_cache
+      - install_libs
       - run:
           name: Run cargo clippy
           command: cargo clippy --all-targets --workspace -- -D warnings
@@ -289,7 +287,7 @@ jobs:
     macos:
       xcode: "13.4.1"
     working_directory: ~/crate
-    resource_class: large
+    resource_class: macos.m1.medium.gen1
     environment: *setup-env
     steps:
       - run:
@@ -352,7 +350,7 @@ commands:
           name: Build paramcache if it doesn't already exist
           command: |
             set -x; test -f /tmp/paramcache.awesome \
-            || (cargo build --release --bin paramcache && find . -type f -name paramcache | xargs -I {} mv {} /tmp/paramcache.awesome)
+            || (cargo build --release --no-default-features --bin paramcache && find . -type f -name paramcache | xargs -I {} mv {} /tmp/paramcache.awesome)
       - run:
           name: Obtain filecoin groth parameters
           command: /tmp/paramcache.awesome --sector-sizes='2048,4096,16384,32768'
@@ -370,6 +368,11 @@ commands:
           command: chmod -R 755 ${FIL_PROOFS_PARAMETER_CACHE}
   save_rustup_cache:
     steps:
+      - run:
+          name: Reduce registry size a bit
+          command: |
+            cd ~/.cargo/registry/index/github.com-1ecc6299db9ec823/
+            git gc
       # Move things from the home directory to `/tmp` first, so that it can be
       # restored on executors that have a different home directory.
       - run: cp -R ~/.cargo ~/.rustup /tmp/
@@ -392,7 +395,7 @@ commands:
       - run: uname > os.txt
       - save_cache:
           name: "Save parameter cache"
-          key: proof-params-v28-l-{{ checksum "os.txt" }}-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: proof-params-v28-n-{{ checksum "os.txt" }}-{{ checksum "filecoin-proofs/parameters.json" }}
           paths:
             - "/tmp/paramcache.awesome"
             - "/tmp/filecoin-proof-parameters/"
@@ -402,7 +405,14 @@ commands:
       - run: uname > os.txt
       - restore_cache:
           name: "Restore parameter cache"
-          key: proof-params-v28-l-{{ checksum "os.txt" }}-{{ checksum "filecoin-proofs/parameters.json" }}
+          key: proof-params-v28-n-{{ checksum "os.txt" }}-{{ checksum "filecoin-proofs/parameters.json" }}
+  install_libs:
+    steps:
+      - run:
+          name: Install required libraries
+          command: |
+            sudo apt update
+            sudo apt install --yes ocl-icd-opencl-dev libhwloc-dev
 
 workflows:
   version: 2.1
