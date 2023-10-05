@@ -11,7 +11,6 @@ use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
     merkle::{MerkleTreeTrait, MerkleTreeWrapper},
-    util::default_rows_to_discard,
     TEST_SEED,
 };
 use storage_proofs_update::{

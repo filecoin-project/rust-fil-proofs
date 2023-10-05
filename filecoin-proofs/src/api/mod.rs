@@ -16,7 +16,6 @@ use storage_proofs_core::{
     merkle::get_base_tree_count,
     pieces::generate_piece_commitment_bytes_from_source,
     sector::SectorId,
-    util::default_rows_to_discard,
 };
 use storage_proofs_porep::stacked::{
     generate_replica_id, PersistentAux, PublicParams, StackedDrg, TemporaryAux,
@@ -356,16 +355,7 @@ where
 {
     trace!("unseal_range_inner:start");
 
-    let base_tree_size = get_base_tree_size::<DefaultBinaryTree>(porep_config.sector_size)?;
-    let base_tree_leafs = get_base_tree_leafs::<DefaultBinaryTree>(base_tree_size)?;
-    let config = StoreConfig::new(
-        cache_path.as_ref(),
-        CacheKey::CommDTree.to_string(),
-        default_rows_to_discard(
-            base_tree_leafs,
-            <DefaultBinaryTree as MerkleTreeTrait>::Arity::to_usize(),
-        ),
-    );
+    let config = StoreConfig::new(cache_path.as_ref(), CacheKey::CommDTree.to_string(), 0);
     let pp: PublicParams<Tree> = public_params(porep_config)?;
 
     let offset_padded: PaddedBytesAmount = UnpaddedBytesAmount::from(offset).into();

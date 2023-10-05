@@ -9,7 +9,6 @@ use filecoin_proofs::{
     PublicReplicaInfo, SealPreCommitOutput, SealPreCommitPhase1Output, SectorSize,
     UnpaddedBytesAmount,
 };
-use generic_array::typenum::Unsigned;
 use log::info;
 use merkletree::store::StoreConfig;
 use rand::{random, thread_rng, RngCore};
@@ -19,7 +18,7 @@ use rayon::prelude::{
 use storage_proofs_core::{
     api_version::{ApiFeature, ApiVersion},
     sector::SectorId,
-    util::{default_rows_to_discard, NODE_SIZE},
+    util::NODE_SIZE,
 };
 use storage_proofs_porep::stacked::Labels;
 use tempfile::{tempdir, NamedTempFile};
@@ -193,12 +192,8 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
                 .par_iter()
                 .zip(sector_ids.par_iter())
                 .map(|(cache_dir, sector_id)| {
-                    let nodes = sector_size.0 as usize / NODE_SIZE;
-                    let mut tmp_store_config = StoreConfig::new(
-                        cache_dir.path(),
-                        format!("tmp-config-{}", sector_id),
-                        default_rows_to_discard(nodes, Tree::Arity::to_usize()),
-                    );
+                    let mut tmp_store_config =
+                        StoreConfig::new(cache_dir.path(), format!("tmp-config-{}", sector_id), 0);
                     tmp_store_config.size = Some(u64::from(sector_size) as usize / NODE_SIZE);
                     let f = File::create(StoreConfig::data_path(
                         &tmp_store_config.path,

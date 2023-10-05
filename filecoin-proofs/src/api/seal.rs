@@ -158,11 +158,7 @@ where
             base_tree_leafs,
         );
 
-        let mut config = StoreConfig::new(
-            cache_path.as_ref(),
-            CacheKey::CommDTree.to_string(),
-            default_rows_to_discard(base_tree_leafs, BINARY_ARITY),
-        );
+        let mut config = StoreConfig::new(cache_path.as_ref(), CacheKey::CommDTree.to_string(), 0);
 
         let data_tree = create_base_merkle_tree::<BinaryMerkleTree<DefaultPieceHasher>>(
             Some(config.clone()),
@@ -273,11 +269,7 @@ where
             "seal phase 2: base tree size {}, base tree leafs {}, rows to discard {}",
             base_tree_size,
             base_tree_leafs,
-            default_rows_to_discard(base_tree_leafs, BINARY_ARITY)
-        );
-        ensure!(
-            config.rows_to_discard == default_rows_to_discard(base_tree_leafs, BINARY_ARITY),
-            "Invalid cache size specified"
+            0
         );
 
         let store: DiskStore<DefaultPieceDomain> =
@@ -1202,7 +1194,6 @@ where
     let base_tree_count = get_base_tree_count::<TreeR>();
     let base_tree_leafs = leaf_count / base_tree_count;
 
-    let rows_to_discard = default_rows_to_discard(base_tree_leafs, TreeR::Arity::to_usize());
     let size = get_base_tree_size::<TreeR>(SectorSize(sector_size))?;
     let tree_r_last_config = StoreConfig {
         path: PathBuf::from(output_dir.as_ref()),
@@ -1214,7 +1205,7 @@ where
         // configuration. *Use with caution*. It must be noted that if/when this unchecked
         // value is passed through merkle_light, merkle_light now does a check that does not
         // allow us to discard more rows than is possible to discard.
-        rows_to_discard,
+        rows_to_discard: default_rows_to_discard(base_tree_leafs, TreeR::Arity::to_usize()),
     };
 
     let replica_base_tree_size = get_base_tree_size::<DefaultBinaryTree>(sector_size.into())?;
@@ -1257,13 +1248,12 @@ where
     let base_tree_count = get_base_tree_count::<Tree>();
     let base_tree_leafs = leaf_count / base_tree_count;
 
-    let rows_to_discard = default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize());
     let size = get_base_tree_size::<Tree>(SectorSize(sector_size))?;
     let tree_c_config = StoreConfig {
         path: PathBuf::from(output_dir.as_ref()),
         id: CacheKey::CommCTree.to_string(),
         size: Some(size),
-        rows_to_discard,
+        rows_to_discard: 0,
     };
     let configs = split_config(tree_c_config, base_tree_count)?;
 
@@ -1275,7 +1265,7 @@ where
                 path: PathBuf::from(input_dir.as_ref()),
                 id: CacheKey::label_layer(layer),
                 size: Some(label_base_tree_leafs),
-                rows_to_discard: default_rows_to_discard(label_base_tree_leafs, BINARY_ARITY),
+                rows_to_discard: 0,
             })
             .collect();
         let labels = Labels::new(label_configs);

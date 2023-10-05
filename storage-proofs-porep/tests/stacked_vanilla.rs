@@ -19,12 +19,12 @@ use storage_proofs_core::{
     proof::ProofScheme,
     table_tests,
     test_helper::setup_replica,
-    util::{default_rows_to_discard, NODE_SIZE},
+    util::NODE_SIZE,
     TEST_SEED,
 };
 use storage_proofs_porep::stacked::{
     LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedBucketGraph, StackedDrg,
-    TemporaryAux, TemporaryAuxCache, BINARY_ARITY, EXP_DEGREE,
+    TemporaryAux, TemporaryAuxCache, EXP_DEGREE,
 };
 use tempfile::tempdir;
 
@@ -95,11 +95,7 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
     let cache_dir = tempdir().expect("tempdir failure");
-    let config = StoreConfig::new(
-        cache_dir.path(),
-        CacheKey::CommDTree.to_string(),
-        default_rows_to_discard(nodes, BINARY_ARITY),
-    );
+    let config = StoreConfig::new(cache_dir.path(), CacheKey::CommDTree.to_string(), 0);
 
     // Generate a replica path.
     let replica_path = cache_dir.path().join("replica-path");
@@ -190,11 +186,7 @@ fn test_stacked_porep_resume_seal() {
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
     let cache_dir = tempdir().expect("tempdir failure");
-    let config = StoreConfig::new(
-        cache_dir.path(),
-        CacheKey::CommDTree.to_string(),
-        default_rows_to_discard(nodes, BINARY_ARITY),
-    );
+    let config = StoreConfig::new(cache_dir.path(), CacheKey::CommDTree.to_string(), 0);
 
     // Generate a replica path.
     let replica_path1 = cache_dir.path().join("replica-path-1");
@@ -344,11 +336,7 @@ fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Laye
     // MT for original data is always named tree-d, and it will be
     // referenced later in the process as such.
     let cache_dir = tempdir().expect("tempdir failure");
-    let config = StoreConfig::new(
-        cache_dir.path(),
-        CacheKey::CommDTree.to_string(),
-        default_rows_to_discard(nodes, BINARY_ARITY),
-    );
+    let config = StoreConfig::new(cache_dir.path(), CacheKey::CommDTree.to_string(), 0);
 
     // Generate a replica path.
     let replica_path = cache_dir.path().join("replica-path");
