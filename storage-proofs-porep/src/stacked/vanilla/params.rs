@@ -132,9 +132,9 @@ pub struct PublicInputs<T: Domain, S: Domain> {
 
 impl<T: Domain, S: Domain> PublicInputs<T, S> {
     /// If the porep challenge randomness `self.seed` is set, this method returns the porep
-    /// challenges for partition `k`; otherwise if `self.seed` is `None`, returns the entire
-    /// synthetic challenge set. Note synthetic challenges are generated in a single partition
-    /// `k = 0`.
+    /// challenges for partition `k` (for syth and non-syth poreps); otherwise if `self.seed` is
+    /// `None`, returns the entire synthetic challenge set. Note synthetic challenges are generated
+    /// in a single partition `k = 0`.
     pub fn challenges(
         &self,
         layer_challenges: &LayerChallenges,
