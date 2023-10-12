@@ -1,10 +1,8 @@
-use std::fs::{self, metadata, File, OpenOptions};
-use std::io::Write;
+use std::fs::{self, metadata, OpenOptions};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bellperson::groth16;
-use bincode::{deserialize, serialize};
 use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::{Domain, Hasher};
 use log::{info, trace};
@@ -31,14 +29,14 @@ use storage_proofs_core::{
 };
 use storage_proofs_porep::stacked::{
     self, generate_replica_id, ChallengeRequirements, Labels, LabelsCache, StackedCompound,
-    StackedDrg, Tau, TemporaryAux, TemporaryAuxCache,
+    StackedDrg, Tau, TemporaryAuxCache,
 };
 use storage_proofs_update::vanilla::prepare_tree_r_data;
 use typenum::{Unsigned, U11, U2};
 
 use crate::POREP_MINIMUM_CHALLENGES;
 use crate::{
-    api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size},
+    api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size, util},
     caches::{
         get_stacked_params, get_stacked_srs_key, get_stacked_srs_verifier_key,
         get_stacked_verifying_key,
@@ -300,21 +298,8 @@ where
     let comm_r = commitment_from_fr(tau.comm_r.into());
 
     // Persist p_aux and t_aux here
-    let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
-    let mut f_p_aux = File::create(&p_aux_path)
-        .with_context(|| format!("could not create file p_aux={:?}", p_aux_path))?;
-    let p_aux_bytes = serialize(&p_aux)?;
-    f_p_aux
-        .write_all(&p_aux_bytes)
-        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
-
-    let t_aux_path = cache_path.as_ref().join(CacheKey::TAux.to_string());
-    let mut f_t_aux = File::create(&t_aux_path)
-        .with_context(|| format!("could not create file t_aux={:?}", t_aux_path))?;
-    let t_aux_bytes = serialize(&t_aux)?;
-    f_t_aux
-        .write_all(&t_aux_bytes)
-        .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))?;
+    util::persist_p_aux::<Tree>(&p_aux, cache_path.as_ref())?;
+    util::persist_t_aux::<Tree>(&t_aux, cache_path.as_ref())?;
 
     let out = SealPreCommitOutput { comm_r, comm_d };
 
@@ -428,25 +413,8 @@ pub fn seal_commit_phase1_inner<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
         "pieces and comm_d do not match"
     );
 
-    let p_aux = {
-        let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
-        let p_aux_bytes = fs::read(&p_aux_path)
-            .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
-
-        deserialize(&p_aux_bytes)
-    }?;
-
-    let t_aux = {
-        let t_aux_path = cache_path.as_ref().join(CacheKey::TAux.to_string());
-        let t_aux_bytes = fs::read(&t_aux_path)
-            .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
-
-        let mut res: TemporaryAux<_, _> = deserialize(&t_aux_bytes)?;
-
-        // Switch t_aux to the passed in cache_path
-        res.set_cache_path(cache_path);
-        res
-    };
+    let p_aux = util::get_p_aux::<Tree>(cache_path.as_ref())?;
+    let t_aux = util::get_t_aux::<Tree>(cache_path.as_ref())?;
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.

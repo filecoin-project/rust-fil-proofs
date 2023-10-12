@@ -1,15 +1,23 @@
-use std::mem::size_of;
+use std::{fs, mem::size_of, path::Path};
 
 use anyhow::{Context, Result};
 use bellperson::groth16::Proof;
 use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::{Domain, Hasher};
 use fr32::{bytes_into_fr, fr_into_bytes};
+use log::trace;
 use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};
-use storage_proofs_core::merkle::{get_base_tree_count, MerkleTreeTrait};
+use storage_proofs_core::{
+    cache_key::CacheKey,
+    merkle::{get_base_tree_count, MerkleTreeTrait},
+};
+use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
 use typenum::Unsigned;
 
-use crate::types::{Commitment, SectorSize};
+use crate::{
+    constants::DefaultPieceHasher,
+    types::{Commitment, SectorSize},
+};
 
 pub fn as_safe_commitment<H: Domain, T: AsRef<str>>(
     comm: &[u8; 32],
@@ -46,4 +54,62 @@ pub(crate) fn proofs_to_bytes(proofs: &[Proof<Bls12>]) -> Result<Vec<u8>> {
         proof.write(&mut out).context("known allocation target")?;
     }
     Ok(out)
+}
+
+/// Persist p_aux.
+pub(crate) fn persist_p_aux<Tree: MerkleTreeTrait>(
+    p_aux: &PersistentAux<<Tree::Hasher as Hasher>::Domain>,
+    cache_path: &Path,
+) -> Result<()> {
+    let p_aux_path = cache_path.join(CacheKey::PAux.to_string());
+    let p_aux_bytes = bincode::serialize(&p_aux)?;
+
+    fs::write(&p_aux_path, p_aux_bytes)
+        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
+
+    Ok(())
+}
+
+/// Instantiates p_aux from the specified cache_dir for access to comm_c and comm_r_last.
+pub(crate) fn get_p_aux<Tree: MerkleTreeTrait>(
+    cache_path: &Path,
+) -> Result<PersistentAux<<Tree::Hasher as Hasher>::Domain>> {
+    let p_aux_path = cache_path.join(CacheKey::PAux.to_string());
+    let p_aux_bytes = fs::read(&p_aux_path)
+        .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
+
+    let p_aux = bincode::deserialize(&p_aux_bytes)?;
+
+    Ok(p_aux)
+}
+
+/// Instantiates t_aux from the specified cache_dir for access to  labels and tree_d, tree_c,
+/// tree_r_last store configs.
+pub(crate) fn get_t_aux<Tree: MerkleTreeTrait>(
+    cache_path: &Path,
+) -> Result<TemporaryAux<Tree, DefaultPieceHasher>> {
+    let t_aux_path = cache_path.join(CacheKey::TAux.to_string());
+    trace!("Instantiating TemporaryAux from {:?}", cache_path);
+    let t_aux_bytes = fs::read(&t_aux_path)
+        .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
+
+    let mut res: TemporaryAux<Tree, DefaultPieceHasher> = bincode::deserialize(&t_aux_bytes)?;
+    res.set_cache_path(cache_path);
+    trace!("Set TemporaryAux cache_path to {:?}", cache_path);
+
+    Ok(res)
+}
+
+/// Persist t_aux.
+pub(crate) fn persist_t_aux<Tree: MerkleTreeTrait>(
+    t_aux: &TemporaryAux<Tree, DefaultPieceHasher>,
+    cache_path: &Path,
+) -> Result<()> {
+    let t_aux_path = cache_path.join(CacheKey::TAux.to_string());
+    let t_aux_bytes = bincode::serialize(&t_aux)?;
+
+    fs::write(&t_aux_path, t_aux_bytes)
+        .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))?;
+
+    Ok(())
 }
