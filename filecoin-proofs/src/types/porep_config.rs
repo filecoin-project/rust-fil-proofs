@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use storage_proofs_core::{
     api_version::{ApiFeature, ApiVersion},
     merkle::MerkleTreeTrait,
@@ -12,7 +12,7 @@ use storage_proofs_core::{
 use storage_proofs_porep::stacked::{StackedCircuit, StackedCompound};
 
 use crate::{
-    constants::DefaultPieceHasher,
+    constants::{self, DefaultPieceHasher},
     parameters::public_params,
     types::{PaddedBytesAmount, PoRepProofPartitions, SectorSize, UnpaddedBytesAmount},
     POREP_PARTITIONS,
@@ -78,8 +78,8 @@ impl PoRepConfig {
         porep_id: [u8; 32],
         api_version: ApiVersion,
         api_features: Vec<ApiFeature>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        let mut config = Self {
             sector_size: SectorSize(sector_size),
             partitions: PoRepProofPartitions(
                 *POREP_PARTITIONS
@@ -90,15 +90,48 @@ impl PoRepConfig {
             ),
             porep_id,
             api_version,
-            api_features,
+            api_features: vec![],
+        };
+        for feature in api_features {
+            config.enable_feature(feature)?;
         }
+        Ok(config)
     }
 
     #[inline]
-    pub fn enable_feature(&mut self, feat: ApiFeature) {
+    pub fn enable_feature(&mut self, feat: ApiFeature) -> Result<()> {
+        match feat {
+            ApiFeature::SyntheticPoRep => {
+                if self.feature_enabled(ApiFeature::NonInteractivePoRep) {
+                    return Err(anyhow!(
+                            "Cannot enable Synthetic PoRep when Non-interactive PoRep is already enabled"));
+                }
+
+                self.partitions = PoRepProofPartitions(
+                    *POREP_PARTITIONS
+                        .read()
+                        .expect("POREP_PARTITIONS poisoned")
+                        .get(&self.sector_size.into())
+                        .expect("unknown sector size"),
+                );
+            }
+            ApiFeature::NonInteractivePoRep => {
+                if self.feature_enabled(ApiFeature::SyntheticPoRep) {
+                    return Err(anyhow!(
+                            "Cannot enable Non-interactive PoRep when Synthetic PoRep is already enabled"));
+                }
+
+                self.partitions = PoRepProofPartitions(
+                    constants::get_porep_non_interactive_partitions(self.sector_size.into()),
+                );
+            }
+        }
+
         if !self.feature_enabled(feat) {
             self.api_features.push(feat);
         }
+
+        Ok(())
     }
 
     #[inline]
@@ -114,6 +147,14 @@ impl PoRepConfig {
     #[inline]
     pub fn unpadded_bytes_amount(&self) -> UnpaddedBytesAmount {
         self.padded_bytes_amount().into()
+    }
+
+    pub fn minimum_challenges(&self) -> usize {
+        if self.feature_enabled(ApiFeature::NonInteractivePoRep) {
+            constants::get_porep_non_interactive_minimum_challenges(u64::from(self.sector_size))
+        } else {
+            constants::get_porep_interactive_minimum_challenges(u64::from(self.sector_size))
+        }
     }
 
     /// Returns the cache identifier as used by `storage-proofs::parameter_cache`.

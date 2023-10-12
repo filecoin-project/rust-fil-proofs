@@ -11,8 +11,8 @@ use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     add_piece, aggregate_empty_sector_update_proofs, aggregate_seal_commit_proofs, clear_cache,
-    clear_layer_data, clear_synthetic_proofs, compute_comm_d, decode_from, decode_from_range,
-    encode_into, fauxrep_aux, generate_empty_sector_update_proof,
+    clear_synthetic_proofs, compute_comm_d, decode_from, decode_from_range, encode_into,
+    fauxrep_aux, generate_empty_sector_update_proof,
     generate_empty_sector_update_proof_with_vanilla, generate_fallback_sector_challenges,
     generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
     generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_synth_proofs,
@@ -174,7 +174,7 @@ fn test_seal_lifecycle_2kib_base_8() -> Result<()> {
             porep_id,
             api_version,
             features,
-        );
+        )?;
 
         seal_lifecycle::<SectorShape2KiB>(&porep_config)?;
     }
@@ -204,6 +204,11 @@ fn test_seal_lifecycle_upgrade_2kib_base_8() -> Result<()> {
             ApiVersion::V1_2_0,
             vec![ApiFeature::SyntheticPoRep],
         ),
+        (
+            MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::NonInteractivePoRep],
+        ),
     ];
 
     for (porep_id_num, api_version, features) in test_inputs {
@@ -213,7 +218,7 @@ fn test_seal_lifecycle_upgrade_2kib_base_8() -> Result<()> {
             porep_id,
             api_version,
             features,
-        );
+        )?;
 
         seal_lifecycle_upgrade::<SectorShape2KiB>(&porep_config)?;
     }
@@ -233,6 +238,11 @@ fn test_seal_lifecycle_4kib_base_8() -> Result<()> {
             ApiVersion::V1_2_0,
             vec![ApiFeature::SyntheticPoRep],
         ),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::NonInteractivePoRep],
+        ),
     ];
 
     for (porep_id, api_version, features) in test_inputs {
@@ -241,7 +251,7 @@ fn test_seal_lifecycle_4kib_base_8() -> Result<()> {
             porep_id,
             api_version,
             features,
-        );
+        )?;
 
         seal_lifecycle::<SectorShape4KiB>(&porep_config)?;
     }
@@ -261,6 +271,11 @@ fn test_seal_lifecycle_upgrade_4kib_base_8() -> Result<()> {
             ApiVersion::V1_2_0,
             vec![ApiFeature::SyntheticPoRep],
         ),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::NonInteractivePoRep],
+        ),
     ];
 
     for (porep_id, api_version, features) in test_inputs {
@@ -269,7 +284,7 @@ fn test_seal_lifecycle_upgrade_4kib_base_8() -> Result<()> {
             porep_id,
             api_version,
             features,
-        );
+        )?;
 
         seal_lifecycle_upgrade::<SectorShape4KiB>(&porep_config)?;
     }
@@ -289,6 +304,11 @@ fn test_seal_lifecycle_16kib_base_8() -> Result<()> {
             ApiVersion::V1_2_0,
             vec![ApiFeature::SyntheticPoRep],
         ),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::NonInteractivePoRep],
+        ),
     ];
 
     for (porep_id, api_version, features) in test_inputs {
@@ -297,7 +317,7 @@ fn test_seal_lifecycle_16kib_base_8() -> Result<()> {
             porep_id,
             api_version,
             features,
-        );
+        )?;
 
         seal_lifecycle::<SectorShape16KiB>(&porep_config)?;
     }
@@ -317,6 +337,11 @@ fn test_seal_lifecycle_upgrade_16kib_base_8() -> Result<()> {
             ApiVersion::V1_2_0,
             vec![ApiFeature::SyntheticPoRep],
         ),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::NonInteractivePoRep],
+        ),
     ];
 
     for (porep_id, api_version, features) in test_inputs {
@@ -325,7 +350,7 @@ fn test_seal_lifecycle_upgrade_16kib_base_8() -> Result<()> {
             porep_id,
             api_version,
             features,
-        );
+        )?;
 
         seal_lifecycle_upgrade::<SectorShape16KiB>(&porep_config)?;
     }
@@ -345,6 +370,11 @@ fn test_seal_lifecycle_32kib_base_8() -> Result<()> {
             ApiVersion::V1_2_0,
             vec![ApiFeature::SyntheticPoRep],
         ),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::NonInteractivePoRep],
+        ),
     ];
 
     for (porep_id, api_version, features) in test_inputs {
@@ -353,7 +383,7 @@ fn test_seal_lifecycle_32kib_base_8() -> Result<()> {
             porep_id,
             api_version,
             features,
-        );
+        )?;
 
         seal_lifecycle::<SectorShape32KiB>(&porep_config)?;
     }
@@ -436,9 +466,30 @@ fn test_seal_lifecycle_32gib_porep_id_v1_2_top_8_8_0_api_v1_2() -> Result<()> {
     let porep_id = to_porep_id_verified(porep_id_v1_2, ApiVersion::V1_2_0);
     assert!(!is_legacy_porep_id(porep_id));
 
-    let mut porep_config =
-        PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id, ApiVersion::V1_2_0);
-    porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+    let porep_config = PoRepConfig::new_groth16_with_features(
+        SECTOR_SIZE_32_GIB,
+        porep_id,
+        ApiVersion::V1_2_0,
+        vec![ApiFeature::SyntheticPoRep],
+    )?;
+
+    seal_lifecycle::<SectorShape32GiB>(&porep_config)
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_32gib_porep_id_v1_2_ni_top_8_8_0_api_v1_2() -> Result<()> {
+    let porep_id_v1_2: u64 = 8; // This is a RegisteredSealProof value
+
+    let porep_id = to_porep_id_verified(porep_id_v1_2, ApiVersion::V1_2_0);
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = PoRepConfig::new_groth16_with_features(
+        SECTOR_SIZE_32_GIB,
+        porep_id,
+        ApiVersion::V1_2_0,
+        vec![ApiFeature::NonInteractivePoRep],
+    )?;
 
     seal_lifecycle::<SectorShape32GiB>(&porep_config)
 }
@@ -493,7 +544,25 @@ fn test_seal_lifecycle_64gib_porep_id_v1_2_top_8_8_2_api_v1_2() -> Result<()> {
         porep_id,
         ApiVersion::V1_2_0,
         vec![ApiFeature::SyntheticPoRep],
-    );
+    )?;
+
+    seal_lifecycle::<SectorShape64GiB>(&porep_config)
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
+fn test_seal_lifecycle_64gib_porep_id_v1_2_ni_top_8_8_2_api_v1_2() -> Result<()> {
+    let porep_id_v1_2: u64 = 9; // This is a RegisteredSealProof value
+
+    let porep_id = to_porep_id_verified(porep_id_v1_2, ApiVersion::V1_2_0);
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = PoRepConfig::new_groth16_with_features(
+        SECTOR_SIZE_64_GIB,
+        porep_id,
+        ApiVersion::V1_2_0,
+        vec![ApiFeature::NonInteractivePoRep],
+    )?;
 
     seal_lifecycle::<SectorShape64GiB>(&porep_config)
 }
@@ -2570,7 +2639,7 @@ fn create_seal_for_upgrade_aggregation<
             pre_commit_output,
             &piece_infos,
         )?;
-        clear_layer_data::<Tree>(cache_dir.path())?;
+        clear_cache::<Tree>(cache_dir.path())?;
     } else {
         info!("SyntheticPoRep is NOT enabled");
         validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;

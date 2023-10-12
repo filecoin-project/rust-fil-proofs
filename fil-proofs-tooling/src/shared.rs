@@ -339,4 +339,5 @@ pub fn get_porep_config(
 ) -> PoRepConfig {
     let arbitrary_porep_id = [99; 32];
     PoRepConfig::new_groth16_with_features(sector_size, arbitrary_porep_id, api_version, features)
+        .expect("cannot set PoRep config")
 }

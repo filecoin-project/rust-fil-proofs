@@ -1,3 +1,5 @@
+use std::cmp;
+
 use anyhow::{ensure, Context};
 use bellperson::{
     groth16::{
@@ -24,6 +26,12 @@ use crate::{
     partitions::partition_count,
     proof::ProofScheme,
 };
+
+/// The maximum number of Groth16 proofs that will be processed in parallel. This limit is set as
+/// synthesis takes a lot of memory. The current value is based on the number of proofs that are
+/// run in parallel in the interactive PoRep (the number of partitions). This way there's just a
+/// single batch for the interactive PoRep, but the non-interactive PoRep is split into batches.
+const MAX_GROTH16_BATCH_SIZE: usize = 10;
 
 #[derive(Clone)]
 pub struct SetupParams<'a, S: ProofScheme<'a>> {
@@ -242,7 +250,7 @@ where
             "cannot create a circuit proof over missing vanilla proofs"
         );
 
-        let circuits = vanilla_proofs
+        let mut circuits = vanilla_proofs
             .into_par_iter()
             .enumerate()
             .map(|(k, vanilla_proof)| {
@@ -256,14 +264,26 @@ where
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let groth_proofs = if priority {
-            create_random_proof_batch_in_priority(circuits, groth_params, &mut rng)?
+        // The same function is used within the while loop below, decide on the function once and
+        // not on every iteration.
+        let create_random_proof_batch_fun = if priority {
+            create_random_proof_batch_in_priority
         } else {
-            create_random_proof_batch(circuits, groth_params, &mut rng)?
+            create_random_proof_batch
         };
 
+        let mut groth_proofs = Vec::with_capacity(circuits.len());
+        // Bellperson expects a vector of proofs, hence drain it from the list of proofs, so that
+        // we don't need to keep an extra copy around.
+        while !circuits.is_empty() {
+            let size = cmp::min(MAX_GROTH16_BATCH_SIZE, circuits.len());
+            let batch = circuits.drain(0..size).collect();
+            let proofs = create_random_proof_batch_fun(batch, groth_params, &mut rng)?;
+            groth_proofs.extend_from_slice(&proofs);
+        }
+
         groth_proofs
-            .into_iter()
+            .iter()
             .map(|groth_proof| {
                 let mut proof_vec = Vec::new();
                 groth_proof.write(&mut proof_vec)?;
