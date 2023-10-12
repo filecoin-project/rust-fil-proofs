@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use storage_proofs_core::{
     api_version::{ApiFeature, ApiVersion},
     merkle::MerkleTreeTrait,
@@ -12,7 +12,7 @@ use storage_proofs_core::{
 use storage_proofs_porep::stacked::{StackedCircuit, StackedCompound};
 
 use crate::{
-    constants::DefaultPieceHasher,
+    constants::{self, DefaultPieceHasher},
     parameters::public_params,
     types::{PaddedBytesAmount, PoRepProofPartitions, SectorSize, UnpaddedBytesAmount},
     POREP_PARTITIONS,
@@ -75,15 +75,44 @@ impl PoRepConfig {
 
     #[inline]
     pub fn with_feature(mut self, feat: ApiFeature) -> Self {
-        self.enable_feature(feat);
+        self.enable_feature(feat)
+            .expect("NOTE vmx 2023-10-31: `with_feature` will be removed in another commit anyway");
         self
     }
 
-    #[inline]
-    pub fn enable_feature(&mut self, feat: ApiFeature) {
+    pub fn enable_feature(&mut self, feat: ApiFeature) -> Result<()> {
+        match feat {
+            ApiFeature::SyntheticPoRep => {
+                if self.feature_enabled(ApiFeature::NonInteractivePoRep) {
+                    return Err(anyhow!(
+                            "Cannot enable Synthetic PoRep when Non-interactive PoRep is already enabled"));
+                }
+
+                self.partitions = PoRepProofPartitions(
+                    *POREP_PARTITIONS
+                        .read()
+                        .expect("POREP_PARTITIONS poisoned")
+                        .get(&self.sector_size.into())
+                        .expect("unknown sector size"),
+                );
+            }
+            ApiFeature::NonInteractivePoRep => {
+                if self.feature_enabled(ApiFeature::SyntheticPoRep) {
+                    return Err(anyhow!(
+                            "Cannot enable Non-interactive PoRep when Synthetic PoRep is already enabled"));
+                }
+
+                self.partitions = PoRepProofPartitions(
+                    constants::get_porep_non_interactive_partitions(self.sector_size.into()),
+                );
+            }
+        }
+
         if !self.feature_enabled(feat) {
             self.api_features.push(feat);
         }
+
+        Ok(())
     }
 
     #[inline]

@@ -85,7 +85,9 @@ fn get_porep_config(sector_size: u64, api_version: ApiVersion, use_synthetic: bo
     // Replicate the staged sector, write the replica file to `sealed_path`.
     let mut config = PoRepConfig::new_groth16(sector_size, arbitrary_porep_id, api_version);
     if use_synthetic {
-        config.enable_feature(ApiFeature::SyntheticPoRep);
+        config
+            .enable_feature(ApiFeature::SyntheticPoRep)
+            .expect("cannot enable feature");
     }
 
     config

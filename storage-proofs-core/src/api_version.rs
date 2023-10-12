@@ -95,20 +95,21 @@ impl FromStr for ApiVersion {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ApiFeature {
     SyntheticPoRep,
+    NonInteractivePoRep,
 }
 
 impl ApiFeature {
     #[inline]
     pub fn first_supported_version(&self) -> ApiVersion {
         match self {
-            ApiFeature::SyntheticPoRep => ApiVersion::V1_2_0,
+            ApiFeature::SyntheticPoRep | ApiFeature::NonInteractivePoRep => ApiVersion::V1_2_0,
         }
     }
 
     #[inline]
     pub fn last_supported_version(&self) -> Option<ApiVersion> {
         match self {
-            ApiFeature::SyntheticPoRep => None,
+            ApiFeature::SyntheticPoRep | ApiFeature::NonInteractivePoRep => None,
         }
     }
 }
@@ -142,6 +143,13 @@ fn test_api_version_order() {
 #[test]
 fn test_api_feature_synthetic_porep() {
     let feature = ApiFeature::SyntheticPoRep;
+    assert!(feature.first_supported_version() == ApiVersion::V1_2_0);
+    assert!(feature.last_supported_version().is_none());
+}
+
+#[test]
+fn test_api_feature_non_interactive_porep() {
+    let feature = ApiFeature::NonInteractivePoRep;
     assert!(feature.first_supported_version() == ApiVersion::V1_2_0);
     assert!(feature.last_supported_version().is_none());
 }

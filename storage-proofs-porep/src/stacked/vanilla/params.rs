@@ -188,6 +188,14 @@ impl<T: Domain, S: Domain> PublicInputs<T, S> {
                     }
                 }
             }
+            Challenges::Ni(ni_challenges) => {
+                let comm_r = self
+                    .tau
+                    .as_ref()
+                    .expect("comm_r must be set prior to generating ni porep challenges")
+                    .comm_r;
+                ni_challenges.derive(sector_nodes, &self.replica_id, &comm_r, k as u8)
+            }
         }
     }
 }

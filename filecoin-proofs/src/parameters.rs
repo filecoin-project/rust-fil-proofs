@@ -68,12 +68,11 @@ pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupPara
 }
 
 pub fn setup_params(porep_config: &PoRepConfig) -> Result<stacked::SetupParams> {
-    let use_synthetic = porep_config.feature_enabled(ApiFeature::SyntheticPoRep);
     let sector_bytes = porep_config.padded_bytes_amount();
     let challenges = select_challenges(
         usize::from(porep_config.partitions),
         POREP_MINIMUM_CHALLENGES.from_sector_size(u64::from(sector_bytes)),
-        use_synthetic,
+        &porep_config.api_features,
     );
     let num_layers = *LAYERS
         .read()
@@ -113,11 +112,13 @@ const fn div_ceil(x: usize, y: usize) -> usize {
 fn select_challenges(
     partitions: usize,
     minimum_total_challenges: usize,
-    use_synthetic: bool,
+    features: &[ApiFeature],
 ) -> Challenges {
     let challenges = div_ceil(minimum_total_challenges, partitions);
-    if use_synthetic {
+    if features.contains(&ApiFeature::SyntheticPoRep) {
         Challenges::new_synthetic(challenges)
+    } else if features.contains(&ApiFeature::NonInteractivePoRep) {
+        Challenges::new_non_interactive(challenges)
     } else {
         Challenges::new_interactive(challenges)
     }
@@ -131,8 +132,7 @@ mod tests {
 
     #[test]
     fn partition_layer_challenges_test() {
-        let f =
-            |partitions| select_challenges(partitions, 12, false).num_challenges_per_partition();
+        let f = |partitions| select_challenges(partitions, 12, &[]).num_challenges_per_partition();
         // Update to ensure all supported PoRepProofPartitions options are represented here.
         assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
 

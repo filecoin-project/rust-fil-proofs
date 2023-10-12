@@ -144,6 +144,18 @@ lazy_static! {
     );
 }
 
+/// Returns the number of partitions for non-interactive PoRep for a certain sector size.
+pub const fn get_porep_non_interactive_partitions(sector_size: u64) -> u8 {
+    match sector_size {
+        // A single PoRep is used for the test sized sectors, so that the verifying key from the
+        // non-interacive PoRep can be used.
+        SECTOR_SIZE_2_KIB | SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB
+        | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 1,
+        SECTOR_SIZE_32_GIB | SECTOR_SIZE_64_GIB => 126,
+        _ => panic!("invalid sector size"),
+    }
+}
+
 /// The size of a single snark proof.
 pub const SINGLE_PARTITION_PROOF_LEN: usize = 192;
 
