@@ -1,5 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 
+pub const LABEL_LAYER_KEY: &str = "layer";
+
 #[derive(Debug, Copy, Clone)]
 pub enum CacheKey {
     PAux,
@@ -23,6 +25,6 @@ impl Display for CacheKey {
 
 impl CacheKey {
     pub fn label_layer(layer: usize) -> String {
-        format!("layer-{}", layer)
+        format!("{}-{}", LABEL_LAYER_KEY, layer)
     }
 }

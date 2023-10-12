@@ -23,8 +23,8 @@ use storage_proofs_core::{
     TEST_SEED,
 };
 use storage_proofs_porep::stacked::{
-    LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedBucketGraph, StackedDrg,
-    TemporaryAux, TemporaryAuxCache, EXP_DEGREE,
+    self, LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedBucketGraph,
+    StackedDrg, TemporaryAuxCache, EXP_DEGREE,
 };
 use tempfile::tempdir;
 
@@ -377,9 +377,6 @@ fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Laye
             k: None,
         };
 
-    // Store a copy of the t_aux for later resource deletion.
-    let t_aux_orig = t_aux.clone();
-
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
     let t_aux = TemporaryAuxCache::<Tree, Blake2sHasher>::new(&t_aux, replica_path, false)
@@ -403,7 +400,7 @@ fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Laye
     .expect("failed to verify partition proofs");
 
     // Discard cached MTs that are no longer needed.
-    TemporaryAux::<Tree, Blake2sHasher>::clear_temp(t_aux_orig).expect("t_aux delete failed");
+    stacked::clear_cache_dir(cache_dir.path()).expect("cached files delete failed");
 
     assert!(proofs_are_valid);
 
