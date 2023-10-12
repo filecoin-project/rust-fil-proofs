@@ -375,7 +375,7 @@ commands:
             git gc
       # Move things from the home directory to `/tmp` first, so that it can be
       # restored on executors that have a different home directory.
-      - run: cp -R ~/.cargo ~/.rustup /tmp/
+      - run: cp -fR ~/.cargo ~/.rustup /tmp/
       - save_cache:
           name: "Save rustup cache"
           key: cargo-v28-e-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}
