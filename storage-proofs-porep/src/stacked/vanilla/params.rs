@@ -1195,3 +1195,51 @@ pub fn generate_replica_id<H: Hasher, T: AsRef<[u8]>>(
 
     bytes_into_fr_repr_safe(hash.as_ref()).into()
 }
+
+#[cfg(test)]
+mod tests {
+    use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher};
+    use generic_array::typenum::{U0, U2, U8};
+    use storage_proofs_core::{
+        api_version::ApiVersion, drgraph::BASE_DEGREE, merkle::DiskTree,
+        parameter_cache::ParameterSetMetadata, proof::ProofScheme, util::NODE_SIZE,
+    };
+
+    use crate::stacked::{LayerChallenges, SetupParams, StackedDrg, EXP_DEGREE};
+
+    // The identifier is used for the parameter file filenames. It must not change, as the
+    // filenames are fixed for the official parameter files. Hence staticly assert certain
+    // identifiers.
+    #[test]
+    fn test_public_params_identifier() {
+        type OctTree32Gib = DiskTree<PoseidonHasher, U8, U8, U0>;
+        let setup_params_32gib = SetupParams {
+            nodes: 32 * 1024 * 1024 * 1024 / NODE_SIZE,
+            degree: BASE_DEGREE,
+            expansion_degree: EXP_DEGREE,
+            porep_id: [1u8; 32],
+            layer_challenges: LayerChallenges::new(11, 18),
+            api_version: ApiVersion::V1_1_0,
+            api_features: vec![],
+        };
+        let public_params_32gib =
+            StackedDrg::<OctTree32Gib, Sha256Hasher>::setup(&setup_params_32gib)
+                .expect("setup failed");
+        assert_eq!(public_params_32gib.identifier(), "layered_drgporep::PublicParams{ graph: stacked_graph::StackedGraph{expansion_degree: 8 base_graph: drgraph::BucketGraph{size: 1073741824; degree: 6; hasher: poseidon_hasher} }, challenges: LayerChallenges { layers: 11, max_count: 18 }, tree: merkletree-poseidon_hasher-8-8-0 }");
+
+        type OctTree64Gib = DiskTree<PoseidonHasher, U8, U8, U2>;
+        let setup_params_64gib = SetupParams {
+            nodes: 64 * 1024 * 1024 * 1024 / NODE_SIZE,
+            degree: BASE_DEGREE,
+            expansion_degree: EXP_DEGREE,
+            porep_id: [1u8; 32],
+            layer_challenges: LayerChallenges::new(11, 18),
+            api_version: ApiVersion::V1_1_0,
+            api_features: vec![],
+        };
+        let public_params_64gib =
+            StackedDrg::<OctTree64Gib, Sha256Hasher>::setup(&setup_params_64gib)
+                .expect("setup failed");
+        assert_eq!(public_params_64gib.identifier(), "layered_drgporep::PublicParams{ graph: stacked_graph::StackedGraph{expansion_degree: 8 base_graph: drgraph::BucketGraph{size: 2147483648; degree: 6; hasher: poseidon_hasher} }, challenges: LayerChallenges { layers: 11, max_count: 18 }, tree: merkletree-poseidon_hasher-8-8-2 }");
+    }
+}
