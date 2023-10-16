@@ -41,7 +41,7 @@ use yastl::Pool;
 use crate::{
     encode::{decode, encode, encode_fr},
     stacked::vanilla::{
-        challenges::LayerChallenges,
+        challenges::{Challenges, SynthChallenges},
         column::Column,
         create_label,
         graph::StackedBucketGraph,
@@ -100,7 +100,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
         p_aux: &PersistentAux<<Tree::Hasher as Hasher>::Domain>,
         t_aux: &TemporaryAuxCache<Tree, G>,
-        challenges: &LayerChallenges,
+        challenges: &Challenges,
         num_layers: usize,
         partition_count: usize,
     ) -> Result<Vec<Vec<Proof<Tree, G>>>> {
@@ -108,85 +108,90 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         // Sanity checks on restored trees.
         assert!(pub_inputs.tau.is_some());
 
-        if challenges.use_synthetic {
-            // If there are no synthetic vanilla proofs stored on disk yet, generate them.
-            if pub_inputs.seed.is_none() {
-                info!("generating synthetic vanilla proofs in a single partition");
-                assert_eq!(partition_count, 1);
+        match challenges {
+            Challenges::Interactive(interactive_challenges) => {
+                info!("generating non-synthetic vanilla proofs");
 
-                let comm_r = pub_inputs.tau.as_ref().expect("tau is set").comm_r;
-                // Derive the set of challenges we are proving over.
-                let challenge_nodes =
-                    challenges.derive_synthetic(graph.size(), &pub_inputs.replica_id, &comm_r);
+                let seed = pub_inputs
+                    .seed
+                    .expect("seed must be set for non-synthetic vanilla proofs");
 
-                let synth_proofs = Self::prove_layers_generate(
-                    graph,
-                    pub_inputs,
-                    p_aux.comm_c,
-                    t_aux,
-                    challenge_nodes,
-                    num_layers,
-                )?;
+                (0..partition_count)
+                    .map(|k| {
+                        trace!("proving partition {}/{}", k + 1, partition_count);
 
-                Self::write_synth_proofs(
-                    &synth_proofs,
-                    pub_inputs,
-                    graph,
-                    challenges,
-                    num_layers,
-                    t_aux.synth_proofs_path(),
-                )?;
-                Ok(vec![vec![]; partition_count])
+                        // Derive the set of challenges we are proving over.
+                        let challenge_positions = interactive_challenges.derive(
+                            graph.size(),
+                            &pub_inputs.replica_id,
+                            &seed,
+                            k as u8,
+                        );
+
+                        Self::prove_layers_generate(
+                            graph,
+                            pub_inputs,
+                            p_aux.comm_c,
+                            t_aux,
+                            challenge_positions,
+                            num_layers,
+                        )
+                    })
+                    .collect::<Result<Vec<Vec<Proof<Tree, G>>>>>()
             }
-            // Else the synthetic vanilla proofs are stored on disk, read and return the proofs
-            // corresponding to the porep challlenge set.
-            else {
-                Self::read_porep_proofs_from_synth(
-                    graph.size(),
-                    pub_inputs,
-                    challenges,
-                    num_layers,
-                    t_aux.synth_proofs_path(),
-                    partition_count,
-                )
-                .map_err(|error| {
-                    info!(
-                        "failed to read porep proofs from synthetic proofs file: {:?}",
-                        t_aux.synth_proofs_path(),
-                    );
-                    error
-                })
-            }
-        } else {
-            info!("generating non-synthetic vanilla proofs");
+            Challenges::Synth(synth_challenges) => {
+                // If there are no synthetic vanilla proofs stored on disk yet, generate them.
+                if pub_inputs.seed.is_none() {
+                    info!("generating synthetic vanilla proofs in a single partition");
+                    assert_eq!(partition_count, 1);
 
-            let comm_r = pub_inputs.tau.as_ref().expect("tau is set").comm_r;
-            let seed = pub_inputs
-                .seed
-                .expect("seed must be set for non-synthetic vanilla proofs");
-
-            (0..partition_count)
-                .map(|k| {
-                    trace!("proving partition {}/{}", k + 1, partition_count);
+                    let comm_r = pub_inputs.tau.as_ref().expect("tau is set").comm_r;
                     // Derive the set of challenges we are proving over.
-                    let challenge_nodes = challenges.derive(
+                    let challenge_positions = SynthChallenges::derive_synthetic(
                         graph.size(),
                         &pub_inputs.replica_id,
                         &comm_r,
-                        &seed,
-                        k as u8,
                     );
 
-                    Self::prove_layers_generate(
+                    let synth_proofs = Self::prove_layers_generate(
                         graph,
                         pub_inputs,
                         p_aux.comm_c,
                         t_aux,
-                        challenge_nodes,
+                        challenge_positions,
                         num_layers,
+                    )?;
+
+                    Self::write_synth_proofs(
+                        &synth_proofs,
+                        pub_inputs,
+                        graph,
+                        synth_challenges,
+                        num_layers,
+                        t_aux.synth_proofs_path(),
+                    )?;
+                    Ok(vec![vec![]; partition_count])
+                }
+                // Else the synthetic vanilla proofs are stored on disk, read and return the proofs
+                // corresponding to the porep challlenge set.
+                else {
+                    Self::read_porep_proofs_from_synth(
+                        graph.size(),
+                        pub_inputs,
+                        synth_challenges,
+                        num_layers,
+                        t_aux.synth_proofs_path(),
+                        partition_count,
                     )
-                })
-                .collect::<Result<Vec<Vec<Proof<Tree, G>>>>>()
+                    .map_err(|error| {
+                        info!(
+                            "failed to read porep proofs from synthetic proofs file: {:?}",
+                            t_aux.synth_proofs_path(),
+                        );
+                        error
+                    })
+                }
+            }
         }
     }
 
@@ -390,7 +395,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         synth_proofs: &[Proof<Tree, G>],
         pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
         graph: &StackedBucketGraph<Tree::Hasher>,
-        challenges: &LayerChallenges,
+        challenges: &SynthChallenges,
         num_layers: usize,
         path: PathBuf,
     ) -> Result<()> {
@@ -405,8 +410,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             // Verify synth proofs prior to writing because `ProofScheme`'s verification API is not
             // amenable to prover-only verification (i.e. the API uses public values, whereas synthetic
             // proofs are known only to the prover).
-            let pub_params =
-                PublicParams::<Tree>::new(graph.clone(), challenges.clone(), num_layers);
+            let pub_params = PublicParams::<Tree>::new(
+                graph.clone(),
+                Challenges::Synth(challenges.clone()),
+                num_layers,
+            );
             let replica_id: Fr = pub_inputs.replica_id.into();
             let comm_r: Fr = pub_inputs
                 .tau
@@ -455,7 +463,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     fn read_porep_proofs_from_synth(
         sector_nodes: usize,
         pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
-        challenges: &LayerChallenges,
+        challenges: &SynthChallenges,
         num_layers: usize,
         path: PathBuf,
         partition_count: usize,
@@ -486,7 +494,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         let porep_proofs = (0..partition_count as u8)
             .map(|k| {
-                let synth_indexes = challenges.derive_synth_indexes(
+                let synth_indexes = challenges.derive_indexes(
                     sector_nodes,
                     &pub_inputs.replica_id,
                     comm_r,

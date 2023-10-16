@@ -23,8 +23,8 @@ use storage_proofs_core::{
     TEST_SEED,
 };
 use storage_proofs_porep::stacked::{
-    self, LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedBucketGraph,
-    StackedDrg, TemporaryAuxCache, EXP_DEGREE,
+    self, Challenges, PrivateInputs, PublicInputs, SetupParams, StackedBucketGraph, StackedDrg,
+    TemporaryAuxCache, EXP_DEGREE,
 };
 use tempfile::tempdir;
 
@@ -101,7 +101,7 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
     let replica_path = cache_dir.path().join("replica-path");
     let mut mmapped_data = setup_replica(&data, &replica_path);
 
-    let challenges = LayerChallenges::new(5);
+    let challenges = Challenges::new_interactive(5);
 
     let sp = SetupParams {
         nodes,
@@ -197,7 +197,7 @@ fn test_stacked_porep_resume_seal() {
     let mut mmapped_data2 = setup_replica(&data, &replica_path2);
     let mut mmapped_data3 = setup_replica(&data, &replica_path3);
 
-    let challenges = LayerChallenges::new(5);
+    let challenges = Challenges::new_interactive(5);
 
     let sp = SetupParams {
         nodes,
@@ -291,7 +291,7 @@ table_tests! {
 }
 
 fn test_prove_verify_fixed(n: usize) {
-    let challenges = LayerChallenges::new(5);
+    let challenges = Challenges::new_interactive(5);
 
     test_prove_verify::<DiskTree<Sha256Hasher, U8, U0, U0>>(n, challenges.clone());
     test_prove_verify::<DiskTree<Sha256Hasher, U8, U2, U0>>(n, challenges.clone());
@@ -318,7 +318,7 @@ fn test_prove_verify_fixed(n: usize) {
     test_prove_verify::<DiskTree<PoseidonHasher, U8, U8, U2>>(n, challenges);
 }
 
-fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: LayerChallenges) {
+fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Challenges) {
     // This will be called multiple times, only the first one succeeds, and that is ok.
     // femme::pretty::Logger::new()
     //     .start(log::LevelFilter::Trace)
@@ -417,7 +417,7 @@ fn test_stacked_porep_setup_terminates() {
     let degree = BASE_DEGREE;
     let expansion_degree = EXP_DEGREE;
     let nodes = 1024 * 1024 * 32 * 8; // This corresponds to 8GiB sectors (32-byte nodes)
-    let challenges = LayerChallenges::new(333);
+    let challenges = Challenges::new_interactive(333);
     let num_layers = 10;
     let sp = SetupParams {
         nodes,
