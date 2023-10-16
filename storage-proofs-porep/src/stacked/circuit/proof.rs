@@ -335,7 +335,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             comm_r_last: None,
             comm_c: None,
             num_layers: public_params.num_layers,
-            proofs: (0..public_params.challenges.challenges_count_all())
+            proofs: (0..public_params.challenges.num_challenges_per_partition())
                 .map(|_challenge_index| Proof::empty(public_params))
                 .collect(),
         }

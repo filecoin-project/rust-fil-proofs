@@ -7,7 +7,7 @@ use storage_proofs_core::{
 };
 
 use crate::stacked::vanilla::{
-    challenges::ChallengeRequirements,
+    challenges::{ChallengeRequirements, Challenges},
     graph::StackedBucketGraph,
     params::{PrivateInputs, Proof, PublicInputs, PublicParams, SetupParams},
     proof::StackedDrg,
@@ -93,12 +93,11 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
             return Ok(false);
         };
 
-        // If the caller attempts to verify the empty set of synthetic vanilla proofs, return early
+        // If the caller attempts to verify generated synthetic vanilla proofs, return early
         // (without error) as the synthetic prover validated the synthetic proofs prior to writing
         // them to disk.
-        let skip_synth_verification = pub_params.challenges.use_synthetic
-            && pub_inputs.seed.is_none()
-            && partition_proofs.iter().all(Vec::is_empty);
+        let skip_synth_verification =
+            matches!(pub_params.challenges, Challenges::Synth(_)) && pub_inputs.seed.is_none();
         if skip_synth_verification {
             trace!("synthetic proofs already verified; skipping re-verification");
             return Ok(true);
@@ -172,7 +171,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
         requirements: &ChallengeRequirements,
         partitions: usize,
     ) -> bool {
-        let partition_challenges = public_params.challenges.challenges_count_all();
+        let partition_challenges = public_params.challenges.num_challenges_per_partition();
 
         assert_eq!(
             partition_challenges.checked_mul(partitions),

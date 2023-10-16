@@ -29,9 +29,9 @@ use storage_proofs_core::{
 };
 
 use crate::stacked::vanilla::{
-    Column, ColumnProof, EncodingProof, LabelingProof, LayerChallenges, StackedBucketGraph,
-    EXP_DEGREE, SYNTHETIC_POREP_VANILLA_PROOFS_EXT, SYNTHETIC_POREP_VANILLA_PROOFS_KEY,
-    TOTAL_PARENTS,
+    challenges::SynthChallenges, Challenges, Column, ColumnProof, EncodingProof, LabelingProof,
+    StackedBucketGraph, EXP_DEGREE, SYNTHETIC_POREP_VANILLA_PROOFS_EXT,
+    SYNTHETIC_POREP_VANILLA_PROOFS_KEY, TOTAL_PARENTS,
 };
 
 pub const BINARY_ARITY: usize = 2;
@@ -49,7 +49,7 @@ pub struct SetupParams {
     pub expansion_degree: usize,
 
     pub porep_id: [u8; 32],
-    pub challenges: LayerChallenges,
+    pub challenges: Challenges,
     pub num_layers: usize,
     pub api_version: ApiVersion,
     pub api_features: Vec<ApiFeature>,
@@ -61,7 +61,7 @@ where
     Tree: 'static + MerkleTreeTrait,
 {
     pub graph: StackedBucketGraph<Tree::Hasher>,
-    pub challenges: LayerChallenges,
+    pub challenges: Challenges,
     pub num_layers: usize,
     _t: PhantomData<Tree>,
 }
@@ -86,7 +86,7 @@ where
 {
     pub fn new(
         graph: StackedBucketGraph<Tree::Hasher>,
-        challenges: LayerChallenges,
+        challenges: Challenges,
         num_layers: usize,
     ) -> Self {
         PublicParams {
@@ -109,7 +109,7 @@ where
             "layered_drgporep::PublicParams{{ graph: {}, challenges: LayerChallenges {{ layers: {}, max_count: {} }}, tree: {} }}",
             self.graph.identifier(),
             self.num_layers,
-            self.challenges.challenges_count_all(),
+            self.challenges.num_challenges_per_partition(),
             Tree::display()
         )
     }
@@ -152,32 +152,42 @@ impl<T: Domain, S: Domain> PublicInputs<T, S> {
     /// in a single partition `k = 0`.
     pub fn challenges(
         &self,
-        challenges: &LayerChallenges,
+        challenges: &Challenges,
         sector_nodes: usize,
         k: Option<usize>,
     ) -> Vec<usize> {
         let k = k.unwrap_or(0);
+        match challenges {
+            Challenges::Interactive(interactive_challenges) => {
+                let seed = self
+                    .seed
+                    .expect("challenge seed must be set for interactive porep");
+                interactive_challenges.derive(sector_nodes, &self.replica_id, &seed, k as u8)
+            }
+            Challenges::Synth(synth_challenges) => {
+                let comm_r = self
+                    .tau
+                    .as_ref()
+                    .expect("comm_r must be set prior to deriving synth porep challenges")
+                    .comm_r;
 
-        assert!(
-            challenges.use_synthetic || self.seed.is_some(),
-            "challenge seed must be set when synth porep is disabled",
-        );
-        assert!(
-            !challenges.use_synthetic || self.tau.is_some(),
-            "comm_r must be set prior to generating synth porep challenges",
-        );
-        let comm_r = self
-            .tau
-            .as_ref()
-            .map(|tau| tau.comm_r)
-            .unwrap_or(T::default());
-
-        if let Some(seed) = self.seed.as_ref() {
-            challenges.derive(sector_nodes, &self.replica_id, &comm_r, seed, k as u8)
-        } else if k == 0 {
-            challenges.derive_synthetic(sector_nodes, &self.replica_id, &comm_r)
-        } else {
-            vec![]
+                match self.seed.as_ref() {
+                    Some(seed) => synth_challenges.derive(
+                        sector_nodes,
+                        &self.replica_id,
+                        &comm_r,
+                        seed,
+                        k as u8,
+                    ),
+                    None => {
+                        assert_eq!(
+                            k, 0,
+                            "synth challenge generation is always using a single partition",
+                        );
+                        SynthChallenges::derive_synthetic(sector_nodes, &self.replica_id, &comm_r)
+                    }
+                }
+            }
         }
     }
 }
@@ -1272,7 +1282,7 @@ mod tests {
         parameter_cache::ParameterSetMetadata, proof::ProofScheme, util::NODE_SIZE,
     };
 
-    use crate::stacked::{LayerChallenges, SetupParams, StackedDrg, EXP_DEGREE};
+    use crate::stacked::{Challenges, SetupParams, StackedDrg, EXP_DEGREE};
 
     // The identifier is used for the parameter file filenames. It must not change, as the
     // filenames are fixed for the official parameter files. Hence staticly assert certain
@@ -1285,7 +1295,7 @@ mod tests {
             degree: BASE_DEGREE,
             expansion_degree: EXP_DEGREE,
             porep_id: [1u8; 32],
-            challenges: LayerChallenges::new(18),
+            challenges: Challenges::new_interactive(18),
             num_layers: 11,
             api_version: ApiVersion::V1_1_0,
             api_features: vec![],
@@ -1301,7 +1311,7 @@ mod tests {
             degree: BASE_DEGREE,
             expansion_degree: EXP_DEGREE,
             porep_id: [1u8; 32],
-            challenges: LayerChallenges::new(18),
+            challenges: Challenges::new_interactive(18),
             num_layers: 11,
             api_version: ApiVersion::V1_1_0,
             api_features: vec![],
