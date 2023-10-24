@@ -4,27 +4,25 @@ use std::path::Path;
 
 use anyhow::{ensure, Context, Result};
 use bellperson::groth16;
-use bincode::{deserialize, serialize};
 use blstrs::Scalar as Fr;
 use ff::PrimeField;
 use filecoin_hashers::{Domain, Hasher};
 use fr32::bytes_into_fr;
 use generic_array::typenum::Unsigned;
-use log::info;
+use log::{info, trace};
 use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::StoreConfig;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     api_version::ApiVersion,
-    cache_key::CacheKey,
     compound_proof::{self, CompoundProof},
     merkle::{get_base_tree_count, MerkleTreeTrait},
     multi_proof::MultiProof,
     proof::ProofScheme,
     util::NODE_SIZE,
 };
-use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
+use storage_proofs_porep::stacked::TemporaryAux;
 use storage_proofs_update::{
     constants::{h_default, TreeDArity, TreeDDomain, TreeRDomain, TreeRHasher},
     phi,

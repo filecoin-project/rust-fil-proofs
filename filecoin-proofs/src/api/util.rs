@@ -10,10 +10,9 @@ use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};
 use storage_proofs_core::{
     cache_key::CacheKey,
     merkle::{get_base_tree_count, MerkleTreeTrait},
-};
-use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
     parameter_cache::SRS_MAX_PROOFS_TO_AGGREGATE,
 };
+use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
 use typenum::Unsigned;
 
 use crate::{
@@ -67,9 +66,7 @@ pub(crate) fn persist_p_aux<Tree: MerkleTreeTrait>(
     let p_aux_bytes = bincode::serialize(&p_aux)?;
 
     fs::write(&p_aux_path, p_aux_bytes)
-        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
-
-    Ok(())
+        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))
 }
 
 /// Instantiates p_aux from the specified cache_dir for access to comm_c and comm_r_last.
@@ -158,7 +155,8 @@ pub(crate) fn persist_t_aux<Tree: MerkleTreeTrait>(
     let t_aux_bytes = bincode::serialize(&t_aux)?;
 
     fs::write(&t_aux_path, t_aux_bytes)
-        .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))?;
+        .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))
+}
 
 /// Given a value, get one suitable for aggregation.
 #[inline]
@@ -206,7 +204,6 @@ pub(crate) fn pad_proofs_to_target(
         proofs.len() <= SRS_MAX_PROOFS_TO_AGGREGATE,
         "proof count for aggregation is larger than the max supported value"
     );
->>>>>>> 893404b4 (feat: remove dead and duplicated code and improve existing tests)
 
     Ok(())
 }

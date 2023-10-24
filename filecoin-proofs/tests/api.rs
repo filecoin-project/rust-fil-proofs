@@ -10,8 +10,9 @@ use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
-    add_piece, aggregate_empty_sector_update_proofs, aggregate_seal_commit_proofs, clear_cache, clear_synthetic_proofs, compute_comm_d,
-    decode_from, decode_from_range, encode_into, fauxrep_aux, generate_empty_sector_update_proof,
+    add_piece, aggregate_empty_sector_update_proofs, aggregate_seal_commit_proofs, clear_cache,
+    clear_layer_data, clear_synthetic_proofs, compute_comm_d, decode_from, decode_from_range,
+    encode_into, fauxrep_aux, generate_empty_sector_update_proof,
     generate_empty_sector_update_proof_with_vanilla, generate_fallback_sector_challenges,
     generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
     generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_synth_proofs,

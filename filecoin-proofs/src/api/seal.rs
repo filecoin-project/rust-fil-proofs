@@ -3,8 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bellperson::groth16;
-use bincode::{deserialize, serialize};
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, Hasher};
 use log::{info, trace};
 use memmap2::MmapOptions;
@@ -36,9 +35,8 @@ use typenum::{Unsigned, U11, U2};
 
 use crate::POREP_MINIMUM_CHALLENGES;
 use crate::{
-    api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size, util},
     api::util::{get_aggregate_target_len, pad_proofs_to_target},
-    api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size},
+    api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size, util},
     caches::{
         get_stacked_params, get_stacked_srs_key, get_stacked_srs_verifier_key,
         get_stacked_verifying_key,
