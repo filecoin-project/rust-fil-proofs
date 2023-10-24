@@ -1,10 +1,9 @@
 use std::collections::BTreeMap;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
-use bincode::deserialize;
 use filecoin_hashers::Hasher;
 use fr32::{write_unpadded, Fr32Reader};
 use log::{info, trace};
@@ -17,9 +16,7 @@ use storage_proofs_core::{
     pieces::generate_piece_commitment_bytes_from_source,
     sector::SectorId,
 };
-use storage_proofs_porep::stacked::{
-    self, generate_replica_id, PersistentAux, PublicParams, StackedDrg, TemporaryAux,
-};
+use storage_proofs_porep::stacked::{self, generate_replica_id, PublicParams, StackedDrg};
 pub use storage_proofs_update::constants::TreeRHasher;
 use typenum::Unsigned;
 
@@ -740,25 +737,10 @@ where
     let cache = &cache_path.as_ref();
 
     // Make sure p_aux exists and is valid.
-    let p_aux_path = cache.join(CacheKey::PAux.to_string());
-    let p_aux_bytes = fs::read(&p_aux_path)
-        .with_context(|| format!("could not read file p_aux={:?}", p_aux_path))?;
-
-    let _: PersistentAux<<Tree::Hasher as Hasher>::Domain> = deserialize(&p_aux_bytes)?;
-    drop(p_aux_bytes);
+    let _ = util::get_p_aux::<Tree>(cache)?;
 
     // Make sure t_aux exists and is valid.
-    let t_aux = {
-        let t_aux_path = cache.join(CacheKey::TAux.to_string());
-        let t_aux_bytes = fs::read(&t_aux_path)
-            .with_context(|| format!("could not read file t_aux={:?}", t_aux_path))?;
-
-        let mut res: TemporaryAux<Tree, DefaultPieceHasher> = deserialize(&t_aux_bytes)?;
-
-        // Switch t_aux to the passed in cache_path
-        res.set_cache_path(&cache_path);
-        res
-    };
+    let t_aux = util::get_t_aux::<Tree>(cache)?;
 
     // Verify all stores/labels within the Labels object.
     let cache = cache_path.as_ref().to_path_buf();

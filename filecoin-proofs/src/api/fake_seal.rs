@@ -1,15 +1,14 @@
 use std::fs::File;
-use std::io::Write;
 use std::path::Path;
 
-use anyhow::{Context, Result};
-use bincode::serialize;
+use anyhow::Result;
 use filecoin_hashers::{Domain, Hasher};
 use rand::{thread_rng, Rng};
-use storage_proofs_core::{cache_key::CacheKey, merkle::MerkleTreeTrait};
+use storage_proofs_core::merkle::MerkleTreeTrait;
 use storage_proofs_porep::stacked::StackedDrg;
 
 use crate::{
+    api::util,
     constants::DefaultPieceHasher,
     types::{Commitment, PoRepConfig},
 };
@@ -45,13 +44,7 @@ pub fn fauxrep_aux<R: Rng, S: AsRef<Path>, T: AsRef<Path>, Tree: 'static + Merkl
         sector_bytes as usize,
     )?;
 
-    let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
-    let mut f_p_aux = File::create(&p_aux_path)
-        .with_context(|| format!("could not create file p_aux={:?}", p_aux_path))?;
-    let p_aux_bytes = serialize(&p_aux)?;
-    f_p_aux
-        .write_all(&p_aux_bytes)
-        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
+    util::persist_p_aux::<Tree>(&p_aux, cache_path.as_ref())?;
 
     let mut commitment = [0u8; 32];
     commitment[..].copy_from_slice(&comm_r.into_bytes()[..]);
@@ -69,13 +62,7 @@ pub fn fauxrep2<R: AsRef<Path>, S: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
     let (comm_r, p_aux) =
         StackedDrg::<Tree, DefaultPieceHasher>::fake_comm_r(fake_comm_c, existing_p_aux_path)?;
 
-    let p_aux_path = cache_path.as_ref().join(CacheKey::PAux.to_string());
-    let mut f_p_aux = File::create(&p_aux_path)
-        .with_context(|| format!("could not create file p_aux={:?}", p_aux_path))?;
-    let p_aux_bytes = serialize(&p_aux)?;
-    f_p_aux
-        .write_all(&p_aux_bytes)
-        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
+    util::persist_p_aux::<Tree>(&p_aux, cache_path.as_ref())?;
 
     let mut commitment = [0u8; 32];
     commitment[..].copy_from_slice(&comm_r.into_bytes()[..]);

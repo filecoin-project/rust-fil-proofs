@@ -1,11 +1,9 @@
 use std::cmp::Ordering;
-use std::fs;
 use std::hash::{Hash, Hasher as StdHasher};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
-use anyhow::{ensure, Context, Result};
-use bincode::deserialize;
+use anyhow::{ensure, Result};
 use filecoin_hashers::Hasher;
 use generic_array::typenum::Unsigned;
 use log::trace;
@@ -20,7 +18,7 @@ use storage_proofs_core::{
 };
 
 use crate::{
-    api::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size},
+    api::{as_safe_commitment, get_base_tree_leafs, get_base_tree_size, get_p_aux},
     types::{Commitment, PersistentAux, SectorSize},
 };
 
@@ -88,13 +86,7 @@ impl<Tree: 'static + MerkleTreeTrait> PrivateReplicaInfo<Tree> {
     pub fn new(replica: PathBuf, comm_r: Commitment, cache_dir: PathBuf) -> Result<Self> {
         ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
 
-        let aux = {
-            let f_aux_path = cache_dir.join(CacheKey::PAux.to_string());
-            let aux_bytes = fs::read(&f_aux_path)
-                .with_context(|| format!("could not read from path={:?}", f_aux_path))?;
-
-            deserialize(&aux_bytes)
-        }?;
+        let aux = get_p_aux::<Tree>(&cache_dir)?;
 
         ensure!(replica.exists(), "Sealed replica does not exist");
 
