@@ -208,6 +208,41 @@ pub(crate) fn pad_proofs_to_target(
     Ok(())
 }
 
+/// Given a list of public inputs and a target_len, make sure that the inputs list is padded to the target_len size.
+pub(crate) fn pad_inputs_to_target(
+    fr_inputs: &[Vec<Fr>],
+    num_inputs_per_proof: usize,
+    target_len: usize,
+) -> Result<Vec<Vec<Fr>>> {
+    ensure!(
+        !fr_inputs.is_empty(),
+        "cannot aggregate with empty public inputs"
+    );
+
+    let mut num_inputs = fr_inputs.len();
+    let mut new_inputs = fr_inputs.to_owned();
+
+    if target_len != num_inputs {
+        ensure!(
+            target_len > num_inputs,
+            "target len must be greater than actual num inputs"
+        );
+        let duplicate_inputs = &fr_inputs[(num_inputs - num_inputs_per_proof)..num_inputs];
+
+        trace!("padding inputs from {} to {}", num_inputs, target_len);
+        while target_len != num_inputs {
+            new_inputs.extend_from_slice(duplicate_inputs);
+            num_inputs += num_inputs_per_proof;
+            ensure!(
+                num_inputs <= target_len,
+                "num_inputs extended beyond target"
+            );
+        }
+    }
+
+    Ok(new_inputs)
+}
+
 #[cfg(all(test, feature = "fixed-rows-to-discard"))]
 mod tests {
     use super::*;

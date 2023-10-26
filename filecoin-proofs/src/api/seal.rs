@@ -35,7 +35,7 @@ use typenum::{Unsigned, U11, U2};
 
 use crate::POREP_MINIMUM_CHALLENGES;
 use crate::{
-    api::util::{get_aggregate_target_len, pad_proofs_to_target},
+    api::util::{get_aggregate_target_len, pad_inputs_to_target, pad_proofs_to_target},
     api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size, util},
     caches::{
         get_stacked_params, get_stacked_srs_key, get_stacked_srs_verifier_key,
@@ -670,37 +670,6 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
     trace!("get_seal_inputs:finish");
 
     Ok(inputs)
-}
-
-/// Given a list of public inputs and a target_len, make sure that the inputs list is padded to the target_len size.
-fn pad_inputs_to_target(
-    commit_inputs: &[Vec<Fr>],
-    num_inputs_per_proof: usize,
-    target_len: usize,
-) -> Result<Vec<Vec<Fr>>> {
-    ensure!(
-        !commit_inputs.is_empty(),
-        "cannot aggregate with empty public inputs"
-    );
-
-    let mut num_inputs = commit_inputs.len();
-    let mut new_inputs = commit_inputs.to_owned();
-
-    if target_len != num_inputs {
-        ensure!(
-            target_len > num_inputs,
-            "target len must be greater than actual num inputs"
-        );
-        let duplicate_inputs = &commit_inputs[(num_inputs - num_inputs_per_proof)..num_inputs];
-
-        trace!("padding inputs from {} to {}", num_inputs, target_len);
-        while target_len != num_inputs {
-            new_inputs.extend_from_slice(duplicate_inputs);
-            num_inputs += num_inputs_per_proof;
-        }
-    }
-
-    Ok(new_inputs)
 }
 
 /// Given a porep_config and a list of seal commit outputs, this method aggregates

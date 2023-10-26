@@ -32,7 +32,7 @@ use storage_proofs_update::{
 };
 
 use crate::{
-    api::util::{self, get_aggregate_target_len, pad_proofs_to_target},
+    api::util::{self, get_aggregate_target_len, pad_inputs_to_target, pad_proofs_to_target},
     caches::{
         get_empty_sector_update_params, get_empty_sector_update_verifying_key, get_stacked_srs_key,
         get_stacked_srs_verifier_key,
@@ -821,7 +821,7 @@ pub fn get_sector_update_inputs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHa
     let partitions = usize::from(config.update_partitions);
 
     let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
-        k: partitions,
+        k: 0,
         comm_r_old: comm_r_old_safe,
         comm_d_new: comm_d_new_safe,
         comm_r_new: comm_r_new_safe,
@@ -832,7 +832,7 @@ pub fn get_sector_update_inputs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHa
             sector_bytes: u64::from(config.sector_size),
         },
         partitions: Some(partitions),
-        priority: true,
+        priority: false,
     };
     let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
 
