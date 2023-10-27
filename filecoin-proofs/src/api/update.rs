@@ -95,7 +95,8 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     let config = SectorUpdateConfig::from_porep_config(porep_config);
 
     let p_aux = util::get_p_aux::<Tree>(sector_key_cache_path)?;
-    let t_aux = util::get_t_aux::<Tree>(sector_key_cache_path)?;
+    let t_aux =
+        util::get_t_aux::<Tree>(sector_key_cache_path, u64::from(porep_config.sector_size))?;
 
     let (tree_d_new_config, tree_r_last_new_config) =
         get_new_configs_from_t_aux_old::<Tree>(&t_aux, new_cache_path, config.nodes_count)?;
@@ -138,6 +139,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     let mut p_aux = p_aux;
     p_aux.comm_r_last = comm_r_last_domain;
     util::persist_p_aux::<Tree>(&p_aux, new_cache_path)?;
+    #[cfg(not(feature = "fixed-rows-to-discard"))]
     util::persist_t_aux::<Tree>(&t_aux, new_cache_path)?;
 
     info!("encode_into:finish");
@@ -272,7 +274,7 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
     info!("remove_data:start");
 
     let p_aux = util::get_p_aux::<Tree>(replica_cache_path)?;
-    let t_aux = util::get_t_aux::<Tree>(replica_cache_path)?;
+    let t_aux = util::get_t_aux::<Tree>(replica_cache_path, u64::from(config.sector_size))?;
 
     let (_, tree_r_last_new_config) =
         get_new_configs_from_t_aux_old::<Tree>(&t_aux, sector_key_cache_path, config.nodes_count)?;
@@ -295,6 +297,7 @@ pub fn remove_encoded_data<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>
     let mut p_aux = p_aux;
     p_aux.comm_r_last = tree_r_last_new;
     util::persist_p_aux::<Tree>(&p_aux, sector_key_cache_path)?;
+    #[cfg(not(feature = "fixed-rows-to-discard"))]
     util::persist_t_aux::<Tree>(&t_aux, sector_key_cache_path)?;
 
     info!("remove_data:finish");
@@ -337,7 +340,7 @@ pub fn generate_single_partition_proof<Tree: 'static + MerkleTreeTrait<Hasher = 
         h: config.h,
     };
 
-    let t_aux_old = util::get_t_aux::<Tree>(sector_key_cache_path)?;
+    let t_aux_old = util::get_t_aux::<Tree>(sector_key_cache_path, u64::from(config.sector_size))?;
 
     let (tree_d_new_config, tree_r_last_new_config) =
         get_new_configs_from_t_aux_old::<Tree>(&t_aux_old, replica_cache_path, config.nodes_count)?;
@@ -429,7 +432,7 @@ pub fn generate_partition_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRH
         h: config.h,
     };
 
-    let t_aux_old = util::get_t_aux::<Tree>(sector_key_cache_path)?;
+    let t_aux_old = util::get_t_aux::<Tree>(sector_key_cache_path, u64::from(config.sector_size))?;
 
     let (tree_d_new_config, tree_r_last_new_config) =
         get_new_configs_from_t_aux_old::<Tree>(&t_aux_old, replica_cache_path, config.nodes_count)?;
@@ -571,7 +574,7 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
         h: config.h,
     };
 
-    let t_aux_old = util::get_t_aux::<Tree>(sector_key_cache_path)?;
+    let t_aux_old = util::get_t_aux::<Tree>(sector_key_cache_path, u64::from(config.sector_size))?;
 
     let (tree_d_new_config, tree_r_last_new_config) =
         get_new_configs_from_t_aux_old::<Tree>(&t_aux_old, replica_cache_path, config.nodes_count)?;

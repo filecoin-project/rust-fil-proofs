@@ -59,6 +59,9 @@ asm = ["sha2/sha2-asm"]
 big-sector-sizes-bench = []
 measurements = ["cpu-time", "gperftools"]
 profile = ["measurements"]
+# This feature enables a fixed number of discarded rows for TreeR. The `FIL_PROOFS_ROWS_TO_DISCARD`
+# setting is ignored, no `TemporaryAux` file will be written.
+fixed-rows-to-discard = []
 
 cuda = ["bellperson/cuda", "filecoin-hashers/cuda"]
 cuda-supraseal = ["bellperson/cuda-supraseal", "filecoin-hashers/cuda"]

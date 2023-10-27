@@ -286,6 +286,8 @@ where
         _,
     >>::setup(&compound_setup_params)?;
 
+    // Silence Clippy warning for the case where `t_aux` is not written.
+    #[allow(unused_variables)]
     let (tau, (p_aux, t_aux)) = StackedDrg::<Tree, DefaultPieceHasher>::replicate_phase2(
         &compound_public_params.vanilla_params,
         labels,
@@ -299,7 +301,8 @@ where
 
     // Persist p_aux and t_aux here
     util::persist_p_aux::<Tree>(&p_aux, cache_path.as_ref())?;
-    util::persist_t_aux::<Tree>(&t_aux, cache_path.as_ref())?;
+    #[cfg(not(feature = "fixed-rows-to-discard"))]
+    util::persist_t_aux(&t_aux, cache_path.as_ref())?;
 
     let out = SealPreCommitOutput { comm_r, comm_d };
 
@@ -414,7 +417,7 @@ pub fn seal_commit_phase1_inner<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
     );
 
     let p_aux = util::get_p_aux::<Tree>(cache_path.as_ref())?;
-    let t_aux = util::get_t_aux::<Tree>(cache_path.as_ref())?;
+    let t_aux = util::get_t_aux::<Tree>(cache_path.as_ref(), u64::from(porep_config.sector_size))?;
 
     // Convert TemporaryAux to TemporaryAuxCache, which instantiates all
     // elements based on the configs stored in TemporaryAux.
@@ -1167,12 +1170,13 @@ where
         path: PathBuf::from(output_dir.as_ref()),
         id: CacheKey::CommRLastTree.to_string(),
         size: Some(size),
-        // A default 'rows_to_discard' value will be chosen for tree_r_last, unless the user
-        // overrides this value via the environment setting (FIL_PROOFS_ROWS_TO_DISCARD). If
-        // this value is specified, no checking is done on it and it may result in a broken
-        // configuration. *Use with caution*. It must be noted that if/when this unchecked
-        // value is passed through merkle_light, merkle_light now does a check that does not
-        // allow us to discard more rows than is possible to discard.
+        // A default 'rows_to_discard' value will be chosen for tree_r_last, unless the
+        // `fixed-rows-to-discard` feature is not enabled and the user overrides this value via
+        // the environment setting (FIL_PROOFS_ROWS_TO_DISCARD). If this value is specified, no
+        // checking is done on it and it may result in a broken configuration. *Use with caution*.
+        // It must be noted that if/when this unchecked value is passed through merkle_light,
+        // merkle_light now does a check that does not allow us to discard more rows than is
+        // possible to discard.
         rows_to_discard: default_rows_to_discard(base_tree_leafs, TreeR::Arity::to_usize()),
     };
 

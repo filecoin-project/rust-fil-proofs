@@ -50,3 +50,6 @@ simd = ["storage-proofs-core/simd"]
 asm = ["storage-proofs-core/asm"]
 cuda = ["storage-proofs-core/cuda", "storage-proofs-porep/cuda", "storage-proofs-post/cuda", "storage-proofs-update/cuda"]
 opencl = ["storage-proofs-core/opencl", "storage-proofs-porep/opencl", "storage-proofs-post/opencl", "storage-proofs-update/opencl"]
+# This feature enables a fixed number of discarded rows for TreeR. The `FIL_PROOFS_ROWS_TO_DISCARD`
+# setting is ignored, no `TemporaryAux` file will be written.
+fixed-rows-to-discard = ["filecoin-proofs/fixed-rows-to-discard", "storage-proofs-core/fixed-rows-to-discard", "storage-proofs-porep/fixed-rows-to-discard", "storage-proofs-post/fixed-rows-to-discard", "storage-proofs-update/fixed-rows-to-discard"]

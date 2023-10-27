@@ -73,6 +73,11 @@ jobs:
   test_release:
     executor: default
     environment: *setup-env
+    parameters:
+      cargo-args:
+        description: Addtional arguments for the cargo command
+        type: string
+        default: ""
     steps:
       - checkout
       - attach_workspace:
@@ -86,10 +91,10 @@ jobs:
             ulimit -n 20000
             ulimit -u 20000
             ulimit -n 20000
-            cargo test --verbose --release --workspace --all-targets
+            cargo test --verbose --release --workspace --all-targets << parameters.cargo-args >>
             # Some `storage-proofs-update` tests need to run sequentially due
             # to their high memory usage.
-            cargo test -p storage-proofs-update --features isolated-testing --release -- --test-threads=1
+            cargo test -p storage-proofs-update --features isolated-testing --release << parameters.cargo-args >> -- --test-threads=1
           no_output_timeout: 30m
 
   test_ignored_release:
@@ -431,7 +436,14 @@ workflows:
           requires:
             - cargo_fetch
             - ensure_groth_parameters_and_keys_linux
-            
+
+      - test_release:
+          name: test_release (fixed-rows-to-discard)
+          cargo-args: "--features fixed-rows-to-discard"
+          requires:
+            - cargo_fetch
+            - ensure_groth_parameters_and_keys_linux
+
       - test_ignored_release:
           name: test_ignored_release_storage_proofs_post
           crate: "storage-proofs-post"

@@ -65,6 +65,9 @@ cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "be
 opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl"]
 isolated-testing = []
 multicore-sdr = ["hwloc"]
+# This feature enables a fixed number of discarded rows for TreeR. The `FIL_PROOFS_ROWS_TO_DISCARD`
+# setting is ignored, no `TemporaryAux` file will be written.
+fixed-rows-to-discard = ["storage-proofs-core/fixed-rows-to-discard"]
 
 [[bench]]
 name = "encode"

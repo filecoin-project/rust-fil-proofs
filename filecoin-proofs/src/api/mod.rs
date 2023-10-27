@@ -739,8 +739,7 @@ where
     // Make sure p_aux exists and is valid.
     let _ = util::get_p_aux::<Tree>(cache)?;
 
-    // Make sure t_aux exists and is valid.
-    let t_aux = util::get_t_aux::<Tree>(cache)?;
+    let t_aux = util::get_t_aux::<Tree>(cache, metadata.len())?;
 
     // Verify all stores/labels within the Labels object.
     let cache = cache_path.as_ref().to_path_buf();
