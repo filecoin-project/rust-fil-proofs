@@ -167,17 +167,16 @@ mod tests {
 
     use storage_proofs_core::util::{self, NODE_SIZE};
 
-    use crate::SectorShape32GiB;
+    use crate::{SectorShape32GiB, SECTOR_SIZE_32_GIB};
 
     /// Testing whether the default values are set if there's no `t_aux` file.
     #[test]
     fn test_get_t_aux_defaults() {
         let dir_does_not_exist = Path::new("/path/does/not/exist");
-        let sector_size: usize = 34359738368;
-        let t_aux = get_t_aux::<SectorShape32GiB>(dir_does_not_exist, sector_size as u64)
+        let t_aux = get_t_aux::<SectorShape32GiB>(dir_does_not_exist, SECTOR_SIZE_32_GIB)
             .expect("t_aux should have been read");
         let expected_rows_to_discard = util::default_rows_to_discard(
-            sector_size / NODE_SIZE,
+            SECTOR_SIZE_32_GIB as usize / NODE_SIZE,
             <SectorShape32GiB as MerkleTreeTrait>::Arity::to_usize(),
         );
         assert_eq!(
@@ -189,18 +188,17 @@ mod tests {
     /// Testing whether the values from the `t_aux` file are used in case there is any.
     #[test]
     fn test_get_t_aux_file_exists() {
-        let sector_size = 34359738368;
         let cache_dir = tempfile::tempdir()
             .expect("tempdir should have been created")
             .into_path();
 
         // Check if getting t_aux if no such file exists returns the default values.
         let default_t_aux = TemporaryAux::<SectorShape32GiB, DefaultPieceHasher>::new(
-            sector_size / NODE_SIZE,
+            SECTOR_SIZE_32_GIB as usize / NODE_SIZE,
             11,
             cache_dir.clone(),
         );
-        let t_aux = get_t_aux::<SectorShape32GiB>(&cache_dir, sector_size as u64)
+        let t_aux = get_t_aux::<SectorShape32GiB>(&cache_dir, SECTOR_SIZE_32_GIB)
             .expect("t_aux should have been read");
         assert_eq!(
             t_aux.tree_r_last_config.rows_to_discard,
@@ -212,7 +210,7 @@ mod tests {
         custom_t_aux.tree_r_last_config.rows_to_discard = 5;
         persist_t_aux::<SectorShape32GiB>(&custom_t_aux, &cache_dir)
             .expect("t_aux should have been persisted");
-        let read_t_aux = get_t_aux::<SectorShape32GiB>(&cache_dir, sector_size as u64)
+        let read_t_aux = get_t_aux::<SectorShape32GiB>(&cache_dir, SECTOR_SIZE_32_GIB)
             .expect("t_aux should have been read");
         assert_ne!(
             read_t_aux.tree_r_last_config.rows_to_discard,
