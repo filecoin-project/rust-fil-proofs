@@ -60,6 +60,12 @@ impl SectorUpdateProofInputs {
         dest[33..64].copy_from_slice(&self.comm_r_new[..]);
         dest[65..96].copy_from_slice(&self.comm_d_new[..]);
     }
+
+    pub fn update_commitment(&self, hasher: &mut Sha256) {
+        hasher.update(self.comm_r_old);
+        hasher.update(self.comm_r_new);
+        hasher.update(self.comm_d_new);
+    }
 }
 
 /// Given a list of public inputs and a target_len, make sure that the inputs list is padded to the target_len size.
@@ -853,6 +859,19 @@ pub fn get_sector_update_inputs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHa
     Ok(inputs)
 }
 
+// Hash all of the commitments into an ordered digest for the aggregate proof method.
+fn get_hashed_commitments(sector_update_inputs: &[SectorUpdateProofInputs]) -> [u8; 32] {
+    let hashed_commitments: [u8; 32] = {
+        let mut hasher = Sha256::new();
+        for input in sector_update_inputs.iter() {
+            input.update_commitment(&mut hasher);
+        }
+        hasher.finalize().into()
+    };
+
+    hashed_commitments
+}
+
 pub fn aggregate_empty_sector_update_proofs<
     Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
 >(
@@ -916,17 +935,7 @@ pub fn aggregate_empty_sector_update_proofs<
     // If we're not at the pow2 target, duplicate the last proof until we are.
     pad_proofs_to_target(&mut proofs, target_proofs_len)?;
 
-    // Hash all of the commitments into an ordered digest for the aggregate proof method.
-    let hashed_commitments: [u8; 32] = {
-        let mut hasher = Sha256::new();
-        for input in sector_update_inputs.iter() {
-            hasher.update(input.comm_r_old);
-            hasher.update(input.comm_r_new);
-            hasher.update(input.comm_d_new);
-        }
-        hasher.finalize().into()
-    };
-
+    let hashed_commitments = get_hashed_commitments(sector_update_inputs);
     let srs_prover_key = get_stacked_srs_key::<Tree>(porep_config, proofs.len())?;
     let aggregate_proof = EmptySectorUpdateCompound::<Tree>::aggregate_proofs(
         &srs_prover_key,
@@ -1013,17 +1022,7 @@ pub fn verify_aggregate_sector_update_proofs<
         target_inputs_len,
     )?;
 
-    // Hash all of the commitments into an ordered digest for the aggregate proof method.
-    let hashed_commitments: [u8; 32] = {
-        let mut hasher = Sha256::new();
-        for input in inputs.iter() {
-            hasher.update(input.comm_r_old);
-            hasher.update(input.comm_r_new);
-            hasher.update(input.comm_d_new);
-        }
-        hasher.finalize().into()
-    };
-
+    let hashed_commitments = get_hashed_commitments(inputs);
     let verifying_key = get_empty_sector_update_verifying_key::<Tree>(porep_config)?;
     let srs_verifier_key =
         get_stacked_srs_verifier_key::<Tree>(porep_config, aggregated_proofs_len)?;
