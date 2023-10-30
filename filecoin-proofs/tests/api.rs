@@ -56,8 +56,7 @@ use filecoin_proofs::constants::MAX_LEGACY_REGISTERED_SEAL_PROOF_ID;
 
 #[cfg(feature = "big-tests")]
 use filecoin_proofs::{
-    SectorShape32GiB, SectorShape512MiB, SectorShape64GiB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB,
-    SECTOR_SIZE_64_GIB,
+    SectorShape512MiB, SectorShape64GiB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
 };
 
 // Use a fixed PoRep ID, so that the parents cache can be re-used between some tests.
