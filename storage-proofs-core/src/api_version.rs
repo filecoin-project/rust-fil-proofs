@@ -5,6 +5,8 @@ use std::str::FromStr;
 use anyhow::{format_err, Error, Result};
 use semver::Version;
 
+pub use bellperson::groth16::aggregate::AggregateVersion;
+
 /// The ApiVersion enum is used for mandatory changes that the network
 /// must use and recognize.
 ///
