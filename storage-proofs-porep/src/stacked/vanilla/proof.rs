@@ -394,7 +394,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         num_layers: usize,
         path: PathBuf,
     ) -> Result<()> {
-        use crate::stacked::vanilla::SynthChallenges;
+        use crate::stacked::vanilla::challenges::synthetic::SynthChallenges;
 
         ensure!(
             pub_inputs.tau.is_some(),

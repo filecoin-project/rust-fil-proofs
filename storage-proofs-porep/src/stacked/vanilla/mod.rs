@@ -24,7 +24,7 @@ mod utils;
 
 pub use challenges::{
     synthetic::SYNTHETIC_POREP_VANILLA_PROOFS_EXT, synthetic::SYNTHETIC_POREP_VANILLA_PROOFS_KEY,
-    ChallengeRequirements, LayerChallenges, SynthChallenges,
+    ChallengeRequirements, LayerChallenges,
 };
 pub use clear_files::{clear_cache_dir, clear_synthetic_proofs};
 pub use column::Column;
