@@ -156,7 +156,7 @@ pub struct ChallengeRequirements {
     pub minimum_challenges: usize,
 }
 
-pub mod synthetic {
+pub(crate) mod synthetic {
     use super::*;
 
     use std::cmp::min;
@@ -204,7 +204,7 @@ pub mod synthetic {
         ChaCha20::new(key.as_bytes().into(), CHACHA20_NONCE.into())
     }
 
-    pub struct SynthChallenges {
+    pub(crate) struct SynthChallenges {
         sector_nodes: usize,
         replica_id: [u8; 32],
         comm_r: [u8; 32],
@@ -340,6 +340,7 @@ pub mod synthetic {
 
         /// Returns all porep challenges selected from the synthetic challenges.
         #[inline]
+        #[cfg(test)]
         pub fn gen_porep_challenges(
             &self,
             num_porep_challenges: usize,
@@ -350,7 +351,7 @@ pub mod synthetic {
     }
 }
 
-pub use synthetic::SynthChallenges;
+use synthetic::SynthChallenges;
 
 #[cfg(test)]
 mod test {
