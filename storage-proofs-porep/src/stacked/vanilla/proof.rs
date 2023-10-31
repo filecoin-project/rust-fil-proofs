@@ -394,7 +394,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         num_layers: usize,
         path: PathBuf,
     ) -> Result<()> {
-        use crate::stacked::vanilla::challenges::synthetic::SynthChallenges;
+        use crate::stacked::vanilla::challenges::synthetic::SynthChallengeGenerator;
 
         ensure!(
             pub_inputs.tau.is_some(),
@@ -413,7 +413,8 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 .as_ref()
                 .map(|tau| tau.comm_r.into())
                 .expect("unwrapping should not fail");
-            let synth_challenges = SynthChallenges::default(graph.size(), &replica_id, &comm_r);
+            let synth_challenges =
+                SynthChallengeGenerator::default(graph.size(), &replica_id, &comm_r);
             assert_eq!(synth_proofs.len(), synth_challenges.num_synth_challenges);
             for (challenge, proof) in synth_challenges.zip(synth_proofs) {
                 let proof_inner = proof.clone();
