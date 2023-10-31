@@ -101,11 +101,8 @@ impl LayerChallenges {
         let partition_challenge_count = self.challenges_count_all();
         let replica_id: Fr = (*replica_id).into();
         let comm_r: Fr = (*comm_r).into();
-        SynthChallenges::default(sector_nodes, &replica_id, &comm_r).gen_porep_partition_challenges(
-            partition_challenge_count,
-            seed,
-            k as usize,
-        )
+        SynthChallengeGenerator::default(sector_nodes, &replica_id, &comm_r)
+            .gen_porep_partition_challenges(partition_challenge_count, seed, k as usize)
     }
 
     /// Returns the synthetic challenge indexes of the porep challenges for partition `k`.
@@ -125,11 +122,8 @@ impl LayerChallenges {
         let partition_challenge_count = self.challenges_count_all();
         let replica_id: Fr = (*replica_id).into();
         let comm_r: Fr = (*comm_r).into();
-        SynthChallenges::default(sector_nodes, &replica_id, &comm_r).gen_partition_synth_indexes(
-            partition_challenge_count,
-            seed,
-            k as usize,
-        )
+        SynthChallengeGenerator::default(sector_nodes, &replica_id, &comm_r)
+            .gen_partition_synth_indexes(partition_challenge_count, seed, k as usize)
     }
 
     /// Returns the entire synthetic challenge set.
@@ -142,7 +136,7 @@ impl LayerChallenges {
         assert!(self.use_synthetic);
         let replica_id: Fr = (*replica_id).into();
         let comm_r: Fr = (*comm_r).into();
-        let synth = SynthChallenges::default(sector_nodes, &replica_id, &comm_r);
+        let synth = SynthChallengeGenerator::default(sector_nodes, &replica_id, &comm_r);
         trace!(
             "generating entire synthetic challenge set (num_synth_challenges = {})",
             synth.num_synth_challenges,
@@ -204,7 +198,7 @@ pub(crate) mod synthetic {
         ChaCha20::new(key.as_bytes().into(), CHACHA20_NONCE.into())
     }
 
-    pub(crate) struct SynthChallenges {
+    pub(crate) struct SynthChallengeGenerator {
         sector_nodes: usize,
         replica_id: [u8; 32],
         comm_r: [u8; 32],
@@ -218,9 +212,9 @@ pub(crate) mod synthetic {
         i: usize,
     }
 
-    impl Clone for SynthChallenges {
+    impl Clone for SynthChallengeGenerator {
         fn clone(&self) -> Self {
-            let mut synth = SynthChallenges {
+            let mut synth = Self {
                 sector_nodes: self.sector_nodes,
                 replica_id: self.replica_id,
                 comm_r: self.comm_r,
@@ -233,7 +227,7 @@ pub(crate) mod synthetic {
         }
     }
 
-    impl Iterator for SynthChallenges {
+    impl Iterator for SynthChallengeGenerator {
         type Item = usize;
 
         // Generates and returns the next synthetic challenge.
@@ -250,7 +244,7 @@ pub(crate) mod synthetic {
         }
     }
 
-    impl SynthChallenges {
+    impl SynthChallengeGenerator {
         pub fn new(
             sector_nodes: usize,
             replica_id: &Fr,
@@ -264,7 +258,7 @@ pub(crate) mod synthetic {
             let replica_id = replica_id.to_repr();
             let comm_r = comm_r.to_repr();
             let chacha20 = chacha20_gen(&replica_id, &comm_r);
-            SynthChallenges {
+            Self {
                 sector_nodes,
                 replica_id,
                 comm_r,
@@ -280,7 +274,7 @@ pub(crate) mod synthetic {
         }
 
         /// Seeks to the `i`-th synthetic challenge; seeking to `i` results in the next call to
-        /// `SynthChallenges::next` returning the `i`-th synthetic challenge.
+        /// `SynthChallengeGenerator::next` returning the `i`-th synthetic challenge.
         pub(super) fn seek(&mut self, i: usize) {
             self.chacha20
                 .try_seek((i * SYNTH_CHALLENGE_SIZE) as u32)
@@ -351,7 +345,7 @@ pub(crate) mod synthetic {
     }
 }
 
-use synthetic::SynthChallenges;
+use synthetic::SynthChallengeGenerator;
 
 #[cfg(test)]
 mod test {
@@ -441,7 +435,7 @@ mod test {
         let replica_id = Fr::from(thread_rng().next_u64());
         let comm_r = Fr::from(thread_rng().next_u64());
 
-        let mut synth = SynthChallenges::default(sector_nodes, &replica_id, &comm_r);
+        let mut synth = SynthChallengeGenerator::default(sector_nodes, &replica_id, &comm_r);
 
         // Test synthetic challenge generation.
         let synth_challenges: Vec<usize> = synth.clone().collect();
@@ -487,7 +481,7 @@ mod test {
             [176, 781, 801, 986, 290, 211, 692, 856, 986, 332];
 
         let mut synth =
-            SynthChallenges::new(sector_nodes, &replica_id, &comm_r, num_synth_challenges);
+            SynthChallengeGenerator::new(sector_nodes, &replica_id, &comm_r, num_synth_challenges);
 
         // Test synthetic challenge generation against hardcoded challenges.
         let synth_challenges: Vec<usize> = synth.clone().collect();
