@@ -31,7 +31,6 @@ pub struct StackedCircuit<Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> 
     comm_r: Option<<Tree::Hasher as Hasher>::Domain>,
     comm_r_last: Option<<Tree::Hasher as Hasher>::Domain>,
     comm_c: Option<<Tree::Hasher as Hasher>::Domain>,
-    num_layers: usize,
 
     // one proof per challenge
     proofs: Vec<Proof<Tree, G>>,
@@ -49,7 +48,6 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Clone for StackedCircuit<Tree, G> {
             comm_r: self.comm_r,
             comm_r_last: self.comm_r_last,
             comm_c: self.comm_c,
-            num_layers: self.num_layers,
             proofs: self.proofs.clone(),
         }
     }
@@ -59,11 +57,9 @@ impl<Tree: MerkleTreeTrait, G: Hasher> CircuitComponent for StackedCircuit<Tree,
     type ComponentPrivateInputs = ();
 }
 
-impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedCircuit<Tree, G> {
-    #[allow(clippy::too_many_arguments)]
+impl<Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedCircuit<Tree, G> {
     pub fn synthesize<CS>(
         mut cs: CS,
-        public_params: <StackedDrg<'a, Tree, G> as ProofScheme<'a>>::PublicParams,
         replica_id: Option<<Tree::Hasher as Hasher>::Domain>,
         comm_d: Option<G::Domain>,
         comm_r: Option<<Tree::Hasher as Hasher>::Domain>,
@@ -80,7 +76,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedCircuit<Tr
             comm_r,
             comm_r_last,
             comm_c,
-            num_layers: public_params.num_layers,
             proofs,
         };
 
@@ -97,7 +92,6 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Circuit<Fr> for StackedCircuit<Tree, G> {
             comm_d,
             comm_r_last,
             comm_c,
-            num_layers,
         } = self;
 
         // Allocate replica_id
@@ -167,7 +161,6 @@ impl<Tree: MerkleTreeTrait, G: Hasher> Circuit<Fr> for StackedCircuit<Tree, G> {
         for (i, proof) in proofs.into_iter().enumerate() {
             proof.synthesize(
                 &mut cs.namespace(|| format!("challenge_{}", i)),
-                num_layers,
                 &comm_d_num,
                 &comm_c_num,
                 &comm_r_last_num,
@@ -293,7 +286,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         public_inputs: &'b <StackedDrg<'_, Tree, G> as ProofScheme<'_>>::PublicInputs,
         _component_private_inputs: <StackedCircuit<Tree, G> as CircuitComponent>::ComponentPrivateInputs,
         vanilla_proof: &'b <StackedDrg<'_, Tree, G> as ProofScheme<'_>>::Proof,
-        public_params: &'b <StackedDrg<'_, Tree, G> as ProofScheme<'_>>::PublicParams,
+        _public_params: &'b <StackedDrg<'_, Tree, G> as ProofScheme<'_>>::PublicParams,
         _partition_k: Option<usize>,
     ) -> Result<StackedCircuit<Tree, G>> {
         ensure!(
@@ -320,7 +313,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             comm_r: public_inputs.tau.as_ref().map(|t| t.comm_r),
             comm_r_last: Some(comm_r_last),
             comm_c: Some(comm_c),
-            num_layers: public_params.num_layers,
             proofs: vanilla_proof.iter().cloned().map(|p| p.into()).collect(),
         })
     }
@@ -334,7 +326,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             comm_r: None,
             comm_r_last: None,
             comm_c: None,
-            num_layers: public_params.num_layers,
             proofs: (0..public_params.challenges.challenges_count_all())
                 .map(|_challenge_index| Proof::empty(public_params))
                 .collect(),
