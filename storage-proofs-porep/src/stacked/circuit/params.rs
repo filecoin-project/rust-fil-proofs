@@ -99,7 +99,6 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
     pub fn synthesize<CS: ConstraintSystem<Fr>>(
         self,
         mut cs: CS,
-        layers: usize,
         comm_d: &AllocatedNum<Fr>,
         comm_c: &AllocatedNum<Fr>,
         comm_r_last: &AllocatedNum<Fr>,
@@ -137,12 +136,12 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         // -- verify replica column openings
 
         // Private Inputs for the DRG parent nodes.
-        let mut drg_parents = Vec::with_capacity(layers);
+        let num_layers = drg_parents_proofs[0].len();
+        let mut drg_parents = Vec::with_capacity(num_layers);
 
         for (i, parent) in drg_parents_proofs.into_iter().enumerate() {
             let (parent_col, inclusion_path) =
                 parent.alloc(cs.namespace(|| format!("drg_parent_{}_num", i)))?;
-            assert_eq!(layers, parent_col.len());
 
             // calculate column hash
             let val = parent_col.hash(cs.namespace(|| format!("drg_parent_{}_constraint", i)))?;
@@ -162,7 +161,6 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         for (i, parent) in exp_parents_proofs.into_iter().enumerate() {
             let (parent_col, inclusion_path) =
                 parent.alloc(cs.namespace(|| format!("exp_parent_{}_num", i)))?;
-            assert_eq!(layers, parent_col.len());
 
             // calculate column hash
             let val = parent_col.hash(cs.namespace(|| format!("exp_parent_{}_constraint", i)))?;
@@ -185,7 +183,7 @@ impl<Tree: MerkleTreeTrait, G: 'static + Hasher> Proof<Tree, G> {
         let challenge_num = UInt64::alloc(cs.namespace(|| "challenge"), challenge)?;
         challenge_num.pack_into_input(cs.namespace(|| "challenge input"))?;
 
-        for layer in 1..=layers {
+        for layer in 1..=num_layers {
             let layer_num = UInt32::constant(layer as u32);
 
             let mut cs = cs.namespace(|| format!("labeling_{}", layer));

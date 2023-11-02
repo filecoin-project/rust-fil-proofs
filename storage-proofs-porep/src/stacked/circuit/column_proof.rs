@@ -57,6 +57,10 @@ impl<
 
         Ok((column, inclusion_path))
     }
+
+    pub(crate) fn len(&self) -> usize {
+        self.column.len()
+    }
 }
 
 impl<Proof: MerkleProofTrait> From<VanillaColumnProof<Proof>>
