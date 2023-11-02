@@ -57,32 +57,6 @@ impl<Tree: MerkleTreeTrait, G: Hasher> CircuitComponent for StackedCircuit<Tree,
     type ComponentPrivateInputs = ();
 }
 
-impl<Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedCircuit<Tree, G> {
-    pub fn synthesize<CS>(
-        mut cs: CS,
-        replica_id: Option<<Tree::Hasher as Hasher>::Domain>,
-        comm_d: Option<G::Domain>,
-        comm_r: Option<<Tree::Hasher as Hasher>::Domain>,
-        comm_r_last: Option<<Tree::Hasher as Hasher>::Domain>,
-        comm_c: Option<<Tree::Hasher as Hasher>::Domain>,
-        proofs: Vec<Proof<Tree, G>>,
-    ) -> Result<(), SynthesisError>
-    where
-        CS: ConstraintSystem<Fr>,
-    {
-        let circuit = StackedCircuit::<Tree, G> {
-            replica_id,
-            comm_d,
-            comm_r,
-            comm_r_last,
-            comm_c,
-            proofs,
-        };
-
-        circuit.synthesize(&mut cs)
-    }
-}
-
 impl<Tree: MerkleTreeTrait, G: Hasher> Circuit<Fr> for StackedCircuit<Tree, G> {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let StackedCircuit {
