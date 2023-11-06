@@ -88,29 +88,29 @@ fn test_seal_lifecycle_2kib_base_8() -> Result<()> {
     // The second value is the ApiVersion to use
     // The third value is whether to use SyntheticPoRep
     let test_inputs = vec![
-        (0u64, ApiVersion::V1_0_0, false),
+        (0u64, ApiVersion::V1_0_0, Vec::new()),
         (
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
             ApiVersion::V1_1_0,
-            false,
+            Vec::new(),
         ),
         (
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
             ApiVersion::V1_2_0,
-            false,
+            Vec::new(),
         ),
         (
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
             ApiVersion::V1_2_0,
-            true,
+            vec![ApiFeature::SyntheticPoRep],
         ),
     ];
 
-    for (porep_id_num, api_version, use_synthetic) in test_inputs {
+    for (porep_id_num, api_version, features) in test_inputs {
         let porep_id = to_porep_id_verified(porep_id_num, api_version);
         let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_2_KIB, porep_id, api_version);
-        if use_synthetic {
-            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        for feature in features {
+            porep_config.enable_feature(feature);
         }
         seal_lifecycle::<SectorShape2KiB>(&porep_config)?;
     }
@@ -128,25 +128,25 @@ fn test_seal_lifecycle_upgrade_2kib_base_8() -> Result<()> {
         (
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
             ApiVersion::V1_1_0,
-            false,
+            Vec::new(),
         ),
         (
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
             ApiVersion::V1_2_0,
-            false,
+            Vec::new(),
         ),
         (
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
             ApiVersion::V1_2_0,
-            true,
+            vec![ApiFeature::SyntheticPoRep],
         ),
     ];
 
-    for (porep_id_num, api_version, use_synthetic) in test_inputs {
+    for (porep_id_num, api_version, features) in test_inputs {
         let porep_id = to_porep_id_verified(porep_id_num, api_version);
         let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_2_KIB, porep_id, api_version);
-        if use_synthetic {
-            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        for feature in features {
+            porep_config.enable_feature(feature);
         }
         seal_lifecycle_upgrade::<SectorShape2KiB>(&porep_config)?;
     }
@@ -158,16 +158,20 @@ fn test_seal_lifecycle_upgrade_2kib_base_8() -> Result<()> {
 #[ignore]
 fn test_seal_lifecycle_4kib_base_8() -> Result<()> {
     let test_inputs = vec![
-        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, false),
-        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, false),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, false),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, true),
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, Vec::new()),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::SyntheticPoRep],
+        ),
     ];
 
-    for (porep_id, api_version, use_synthetic) in test_inputs {
+    for (porep_id, api_version, features) in test_inputs {
         let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_4_KIB, porep_id, api_version);
-        if use_synthetic {
-            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        for feature in features {
+            porep_config.enable_feature(feature);
         }
         seal_lifecycle::<SectorShape4KiB>(&porep_config)?;
     }
@@ -179,16 +183,20 @@ fn test_seal_lifecycle_4kib_base_8() -> Result<()> {
 #[ignore]
 fn test_seal_lifecycle_upgrade_4kib_base_8() -> Result<()> {
     let test_inputs = vec![
-        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, false),
-        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, false),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, false),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, true),
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, Vec::new()),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::SyntheticPoRep],
+        ),
     ];
 
-    for (porep_id, api_version, use_synthetic) in test_inputs {
+    for (porep_id, api_version, features) in test_inputs {
         let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_4_KIB, porep_id, api_version);
-        if use_synthetic {
-            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        for feature in features {
+            porep_config.enable_feature(feature);
         }
         seal_lifecycle_upgrade::<SectorShape4KiB>(&porep_config)?;
     }
@@ -200,16 +208,20 @@ fn test_seal_lifecycle_upgrade_4kib_base_8() -> Result<()> {
 #[ignore]
 fn test_seal_lifecycle_16kib_base_8() -> Result<()> {
     let test_inputs = vec![
-        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, false),
-        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, false),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, false),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, true),
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, Vec::new()),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::SyntheticPoRep],
+        ),
     ];
 
-    for (porep_id, api_version, use_synthetic) in test_inputs {
+    for (porep_id, api_version, features) in test_inputs {
         let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_16_KIB, porep_id, api_version);
-        if use_synthetic {
-            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        for feature in features {
+            porep_config.enable_feature(feature);
         }
         seal_lifecycle::<SectorShape16KiB>(&porep_config)?;
     }
@@ -221,16 +233,20 @@ fn test_seal_lifecycle_16kib_base_8() -> Result<()> {
 #[ignore]
 fn test_seal_lifecycle_upgrade_16kib_base_8() -> Result<()> {
     let test_inputs = vec![
-        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, false),
-        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, false),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, false),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, true),
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, Vec::new()),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::SyntheticPoRep],
+        ),
     ];
 
-    for (porep_id, api_version, use_synthetic) in test_inputs {
+    for (porep_id, api_version, features) in test_inputs {
         let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_16_KIB, porep_id, api_version);
-        if use_synthetic {
-            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        for feature in features {
+            porep_config.enable_feature(feature);
         }
         seal_lifecycle_upgrade::<SectorShape16KiB>(&porep_config)?;
     }
@@ -242,16 +258,20 @@ fn test_seal_lifecycle_upgrade_16kib_base_8() -> Result<()> {
 #[ignore]
 fn test_seal_lifecycle_32kib_base_8() -> Result<()> {
     let test_inputs = vec![
-        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, false),
-        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, false),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, false),
-        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, true),
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, Vec::new()),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::SyntheticPoRep],
+        ),
     ];
 
-    for (porep_id, api_version, use_synthetic) in test_inputs {
+    for (porep_id, api_version, features) in test_inputs {
         let mut porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_32_KIB, porep_id, api_version);
-        if use_synthetic {
-            porep_config.enable_feature(ApiFeature::SyntheticPoRep);
+        for feature in features {
+            porep_config.enable_feature(feature);
         }
         seal_lifecycle::<SectorShape32KiB>(&porep_config)?;
     }
