@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [16.1.0] - 2023-11-08
+
+- Update lifecycle upgrade 'big-tests' [#1737](https://github.com/filecoin-project/rust-fil-proofs/pull/1737)
+- Add optional support for sealing without requiring t_aux [#1717](https://github.com/filecoin-project/rust-fil-proofs/pull/1717)
+- Re-factor p_aux/t_aux handling [#1721](https://github.com/filecoin-project/rust-fil-proofs/pull/1721)
+- Add a parameter id test [#1728](https://github.com/filecoin-project/rust-fil-proofs/pull/1728)
+- Additional CI improvements [#1727](https://github.com/filecoin-project/rust-fil-proofs/pull/1727)
+- Re-factor cache cleaning [#1723](https://github.com/filecoin-project/rust-fil-proofs/pull/1723)
+- Re-factor rows to discard values [#1724](https://github.com/filecoin-project/rust-fil-proofs/pull/1724)
+- CI improvements [#1726](https://github.com/filecoin-project/rust-fil-proofs/pull/1726)
+- Re-factors and clean-ups [#1719](https://github.com/filecoin-project/rust-fil-proofs/pull/1719)
+- Simplify a StoreConfig usage [#1716](https://github.com/filecoin-project/rust-fil-proofs/pull/1716)
+
 ## [16.0.0] - 2023-09-05
 
 - Add optional support for SupraSeal C2 proving [#1709](https://github.com/filecoin-project/rust-fil-proofs/pull/1709)
@@ -406,7 +419,8 @@ mainnet ready and will be replaced in a future version.  This release is intende
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v16.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v16.1.0...HEAD
+[16.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v16.1.0
 [16.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v16.0.0
 [15.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v15.0.0
 [14.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v14.0.0
