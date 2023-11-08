@@ -9,7 +9,7 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../storage-proofs-core", version = "~16.0.0", default-features = false}
+storage-proofs-core = { path = "../storage-proofs-core", version = "~16.1.0", default-features = false}
 storage-proofs-porep = { path = "../storage-proofs-porep", version = "~16.0.0", default-features = false}
 filecoin-hashers = { path = "../filecoin-hashers", version = "~11.1.0", default-features = false, features = ["poseidon", "sha256"]}
 merkletree = "0.23.0"
