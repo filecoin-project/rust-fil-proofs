@@ -31,7 +31,7 @@ sha2 = "0.10.2"
 typenum = "1.11.2"
 gperftools = { version = "0.2", optional = true }
 generic-array = "0.14.4"
-fr32 = { path = "../fr32", version = "~9.0.0", default-features = false }
+fr32 = { path = "../fr32", version = "~9.1.0", default-features = false }
 once_cell = "1.8.0"
 blstrs = "0.7.0"
 ff = { version = "0.13.0", default-features = false }
