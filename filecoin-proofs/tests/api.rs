@@ -292,11 +292,12 @@ fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1_1() -> Result<()> {
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_seal_lifecycle_upgrade_512mib_top_8_0_0_v1_1() -> Result<()> {
-    seal_lifecycle_upgrade::<SectorShape512MiB>(
+    let porep_config = PoRepConfig::new_groth16(
         SECTOR_SIZE_512_MIB,
-        &ARBITRARY_POREP_ID_V1_1_0,
-        ApiVersion::V1_1_0,
-    )
+        ARBITRARY_POREP_ID_V1_2_0,
+        ApiVersion::V1_2_0,
+    );
+    seal_lifecycle_upgrade::<SectorShape512MiB>(&porep_config)
 }
 
 #[cfg(feature = "big-tests")]
@@ -343,11 +344,12 @@ fn test_seal_lifecycle_32gib_porep_id_v1_2_top_8_8_0_api_v1_2() -> Result<()> {
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_1() -> Result<()> {
-    seal_lifecycle_upgrade::<SectorShape32GiB>(
+    let porep_config = PoRepConfig::new_groth16(
         SECTOR_SIZE_32_GIB,
-        &ARBITRARY_POREP_ID_V1_1_0,
-        ApiVersion::V1_1_0,
-    )
+        ARBITRARY_POREP_ID_V1_2_0,
+        ApiVersion::V1_2_0,
+    );
+    seal_lifecycle_upgrade::<SectorShape32GiB>(&porep_config)
 }
 
 #[cfg(feature = "big-tests")]
@@ -394,11 +396,12 @@ fn test_seal_lifecycle_64gib_porep_id_v1_2_top_8_8_2_api_v1_2() -> Result<()> {
 #[cfg(feature = "big-tests")]
 #[test]
 fn test_seal_lifecycle_upgrade_64gib_top_8_8_2_v1_1() -> Result<()> {
-    seal_lifecycle_upgrade::<SectorShape64GiB>(
+    let porep_config = PoRepConfig::new_groth16(
         SECTOR_SIZE_64_GIB,
-        &ARBITRARY_POREP_ID_V1_1_0,
-        ApiVersion::V1_1_0,
-    )
+        ARBITRARY_POREP_ID_V1_2_0,
+        ApiVersion::V1_2_0,
+    );
+    seal_lifecycle_upgrade::<SectorShape64GiB>(&porep_config)
 }
 
 fn seal_lifecycle<Tree: 'static + MerkleTreeTrait>(porep_config: &PoRepConfig) -> Result<()> {
