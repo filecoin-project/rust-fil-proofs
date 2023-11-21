@@ -130,6 +130,14 @@ impl PoRepConfig {
         self.padded_bytes_amount().into()
     }
 
+    pub fn minimum_challenges(&self) -> usize {
+        if self.feature_enabled(ApiFeature::NonInteractivePoRep) {
+            constants::get_porep_non_interactive_minimum_challenges(u64::from(self.sector_size))
+        } else {
+            constants::get_porep_interactive_minimum_challenges(u64::from(self.sector_size))
+        }
+    }
+
     /// Returns the cache identifier as used by `storage-proofs::parameter_cache`.
     pub fn get_cache_identifier<Tree: 'static + MerkleTreeTrait>(&self) -> Result<String> {
         let params = public_params::<Tree>(self)?;

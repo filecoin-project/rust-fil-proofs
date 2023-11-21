@@ -4,9 +4,8 @@ use storage_proofs_porep::stacked::{self, Challenges, StackedDrg};
 use storage_proofs_post::fallback::{self, FallbackPoSt};
 
 use crate::{
-    constants::{DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS},
+    constants::{DefaultPieceHasher, DRG_DEGREE, EXP_DEGREE, LAYERS, MAX_CHALLENGES_PER_PARTITION},
     types::{MerkleTreeTrait, PoRepConfig, PoStConfig},
-    POREP_MINIMUM_CHALLENGES,
 };
 
 type WinningPostSetupParams = fallback::SetupParams;
@@ -71,7 +70,7 @@ pub fn setup_params(porep_config: &PoRepConfig) -> Result<stacked::SetupParams> 
     let sector_bytes = porep_config.padded_bytes_amount();
     let challenges = select_challenges(
         usize::from(porep_config.partitions),
-        POREP_MINIMUM_CHALLENGES.from_sector_size(u64::from(sector_bytes)),
+        porep_config.minimum_challenges(),
         &porep_config.api_features,
     );
     let num_layers = *LAYERS
@@ -115,6 +114,8 @@ fn select_challenges(
     features: &[ApiFeature],
 ) -> Challenges {
     let challenges = div_ceil(minimum_total_challenges, partitions);
+    assert!(challenges <= usize::from(MAX_CHALLENGES_PER_PARTITION));
+
     if features.contains(&ApiFeature::SyntheticPoRep) {
         Challenges::new_synthetic(challenges)
     } else if features.contains(&ApiFeature::NonInteractivePoRep) {

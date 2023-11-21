@@ -1,5 +1,5 @@
+use std::collections::HashMap;
 use std::sync::RwLock;
-use std::{collections::HashMap, sync::RwLockWriteGuard};
 
 pub use storage_proofs_core::drgraph::BASE_DEGREE as DRG_DEGREE;
 pub use storage_proofs_porep::stacked::EXP_DEGREE;
@@ -47,47 +47,7 @@ pub const PUBLISHED_SECTOR_SIZES: [u64; 10] = [
     SECTOR_SIZE_64_GIB,
 ];
 
-pub struct PorepMinimumChallenges(RwLock<HashMap<u64, usize>>);
-impl PorepMinimumChallenges {
-    fn new() -> Self {
-        Self(RwLock::new(
-            [
-                (SECTOR_SIZE_2_KIB, 2),
-                (SECTOR_SIZE_4_KIB, 2),
-                (SECTOR_SIZE_16_KIB, 2),
-                (SECTOR_SIZE_32_KIB, 2),
-                (SECTOR_SIZE_8_MIB, 2),
-                (SECTOR_SIZE_16_MIB, 2),
-                (SECTOR_SIZE_512_MIB, 2),
-                (SECTOR_SIZE_1_GIB, 2),
-                (SECTOR_SIZE_32_GIB, 176),
-                (SECTOR_SIZE_64_GIB, 176),
-            ]
-            .iter()
-            .copied()
-            .collect(),
-        ))
-    }
-
-    pub fn get_mut(&self) -> RwLockWriteGuard<'_, HashMap<u64, usize>> {
-        self.0.write().expect("POREP_MINIMUM_CHALLENGES poisoned")
-    }
-
-    pub fn from_sector_size(&self, sector_size: u64) -> usize {
-        match self
-            .0
-            .read()
-            .expect("POREP_MINIMUM_CHALLENGES poisoned")
-            .get(&sector_size)
-        {
-            Some(c) => *c,
-            None => panic!("invalid sector size"),
-        }
-    }
-}
-
 lazy_static! {
-    pub static ref POREP_MINIMUM_CHALLENGES: PorepMinimumChallenges = PorepMinimumChallenges::new();
     pub static ref POREP_PARTITIONS: RwLock<HashMap<u64, u8>> = RwLock::new(
         [
             (SECTOR_SIZE_2_KIB, 1),
@@ -144,13 +104,38 @@ lazy_static! {
     );
 }
 
+/// Returns the minimum number of challenges used for the (synth and non-synth) interactive PoRep
+/// for a certain sector size.
+pub(crate) const fn get_porep_interactive_minimum_challenges(sector_size: u64) -> usize {
+    match sector_size {
+        SECTOR_SIZE_2_KIB | SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB
+        | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 2,
+        SECTOR_SIZE_32_GIB | SECTOR_SIZE_64_GIB => 176,
+        _ => panic!("invalid sector size"),
+    }
+}
+
+/// Returns the minimum number of challenges used for the non-interactive PoRep fo a certain sector
+/// size.
+pub(crate) const fn get_porep_non_interactive_minimum_challenges(sector_size: u64) -> usize {
+    match sector_size {
+        SECTOR_SIZE_2_KIB | SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB
+        | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 4,
+        SECTOR_SIZE_32_GIB | SECTOR_SIZE_64_GIB => 2253,
+        _ => panic!("invalid sector size"),
+    }
+}
+
 /// Returns the number of partitions for non-interactive PoRep for a certain sector size.
 pub const fn get_porep_non_interactive_partitions(sector_size: u64) -> u8 {
     match sector_size {
-        // A single PoRep is used for the test sized sectors, so that the verifying key from the
-        // non-interacive PoRep can be used.
+        // The filename of the parameter files and verifying keys depend on the number of
+        // challenges per partition. In order to be able to re-use the files that were generated
+        // for the interactive PoRep, we need to use certain numbers, also for the test sector
+        // sizes. The number of challenges per partition for test sizes is 2, for production
+        // parameters it's 18.
         SECTOR_SIZE_2_KIB | SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB
-        | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 1,
+        | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 2,
         SECTOR_SIZE_32_GIB | SECTOR_SIZE_64_GIB => 126,
         _ => panic!("invalid sector size"),
     }
@@ -167,6 +152,9 @@ pub const MINIMUM_RESERVED_BYTES_FOR_PIECE_IN_FULLY_ALIGNED_SECTOR: u64 =
 
 /// The minimum size a single piece must have before padding.
 pub const MIN_PIECE_SIZE: UnpaddedBytesAmount = UnpaddedBytesAmount(127);
+
+/// The maximum number of challenges per partition the circuits can work with.
+pub(crate) const MAX_CHALLENGES_PER_PARTITION: u8 = 18;
 
 /// The hasher used for creating comm_d.
 pub type DefaultPieceHasher = Sha256Hasher;

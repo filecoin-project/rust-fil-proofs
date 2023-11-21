@@ -34,7 +34,6 @@ use storage_proofs_porep::stacked::{
 use storage_proofs_update::vanilla::prepare_tree_r_data;
 use typenum::{Unsigned, U11, U2};
 
-use crate::POREP_MINIMUM_CHALLENGES;
 use crate::{
     api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size, util},
     caches::{
@@ -1076,8 +1075,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
             &public_inputs,
             &proof,
             &ChallengeRequirements {
-                minimum_challenges: POREP_MINIMUM_CHALLENGES
-                    .from_sector_size(u64::from(porep_config.sector_size)),
+                minimum_challenges: porep_config.minimum_challenges(),
             },
         )
     };
@@ -1191,8 +1189,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
         &public_inputs,
         &proofs,
         &ChallengeRequirements {
-            minimum_challenges: POREP_MINIMUM_CHALLENGES
-                .from_sector_size(u64::from(porep_config.sector_size)),
+            minimum_challenges: porep_config.minimum_challenges(),
         },
     )
     .map_err(Into::into);
