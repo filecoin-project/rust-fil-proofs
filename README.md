@@ -320,7 +320,7 @@ FIL_PROOFS_GPU_FRAMEWORK=cuda
 
 You can set it to `opencl` to use OpenCL instead.  The default value is `cuda`, when you set nothing or any other (invalid) value.
 
-CUDA kernels are compiled and build time.  By default, they are built for recent architectures, Turing (`sm_75` and Ampere (`sm_80`, `sm_86`).  This increases the overall build time by several minutes.  You can reduce it by compiling it only for the specific aritecture you need.  For example if you only need the CUDA kernels to work on the Turing architecture, you can set on all dependencies that use CUDA kernels:
+CUDA kernels are compiled and build time.  By default, they are built for recent architectures, Turing (`sm_75` and Ampere (`sm_80`, `sm_86`).  This increases the overall build time by several minutes.  You can reduce it by compiling it only for the specific architecture you need.  For example if you only need the CUDA kernels to work on the Turing architecture, you can set on all dependencies that use CUDA kernels:
 
 ```
 BELLMAN_CUDA_NVCC_ARGS="--fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75"
