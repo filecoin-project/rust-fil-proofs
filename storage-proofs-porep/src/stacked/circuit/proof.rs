@@ -168,7 +168,7 @@ impl<'a, Tree: MerkleTreeTrait, G: Hasher> Circuit<Fr> for StackedCircuit<'a, Tr
         for (i, proof) in proofs.into_iter().enumerate() {
             proof.synthesize(
                 &mut cs.namespace(|| format!("challenge_{}", i)),
-                public_params.layer_challenges.layers(),
+                public_params.num_layers,
                 &comm_d_num,
                 &comm_c_num,
                 &comm_r_last_num,
@@ -234,7 +234,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
         let por_params = PoR::<Tree>::setup(&por_setup_params)?;
         let por_params_d = PoR::<BinaryMerkleTree<G>>::setup(&por_setup_params)?;
 
-        let all_challenges = pub_in.challenges(&pub_params.layer_challenges, graph.size(), k);
+        let all_challenges = pub_in.challenges(&pub_params.challenges, graph.size(), k);
 
         for challenge in all_challenges.into_iter() {
             // comm_d inclusion proof for the data leaf
@@ -336,7 +336,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher>
             comm_r: None,
             comm_r_last: None,
             comm_c: None,
-            proofs: (0..public_params.layer_challenges.challenges_count_all())
+            proofs: (0..public_params.challenges.challenges_count_all())
                 .map(|_challenge_index| Proof::empty(public_params))
                 .collect(),
         }

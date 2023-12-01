@@ -70,16 +70,16 @@ pub fn window_post_setup_params(post_config: &PoStConfig) -> WindowPostSetupPara
 pub fn setup_params(porep_config: &PoRepConfig) -> Result<stacked::SetupParams> {
     let use_synthetic = porep_config.feature_enabled(ApiFeature::SyntheticPoRep);
     let sector_bytes = porep_config.padded_bytes_amount();
-    let layer_challenges = select_challenges(
+    let challenges = select_challenges(
         usize::from(porep_config.partitions),
         POREP_MINIMUM_CHALLENGES.from_sector_size(u64::from(sector_bytes)),
-        *LAYERS
-            .read()
-            .expect("LAYERS poisoned")
-            .get(&u64::from(sector_bytes))
-            .expect("unknown sector size"),
         use_synthetic,
     );
+    let num_layers = *LAYERS
+        .read()
+        .expect("LAYERS poisoned")
+        .get(&u64::from(sector_bytes))
+        .expect("unknown sector size");
     let sector_bytes = u64::from(sector_bytes);
 
     ensure!(
@@ -97,7 +97,8 @@ pub fn setup_params(porep_config: &PoRepConfig) -> Result<stacked::SetupParams> 
         degree,
         expansion_degree,
         porep_id: porep_config.porep_id,
-        layer_challenges,
+        challenges,
+        num_layers,
         api_version: porep_config.api_version,
         api_features: porep_config.api_features.clone(),
     })
@@ -106,14 +107,13 @@ pub fn setup_params(porep_config: &PoRepConfig) -> Result<stacked::SetupParams> 
 fn select_challenges(
     partitions: usize,
     minimum_total_challenges: usize,
-    layers: usize,
     use_synthetic: bool,
 ) -> LayerChallenges {
     let mut count = 1;
-    let mut guess = LayerChallenges::new(layers, count);
+    let mut guess = LayerChallenges::new(count);
     while partitions * guess.challenges_count_all() < minimum_total_challenges {
         count += 1;
-        guess = LayerChallenges::new(layers, count);
+        guess = LayerChallenges::new(count);
     }
 
     guess.use_synthetic = use_synthetic;
@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn partition_layer_challenges_test() {
-        let f = |partitions| select_challenges(partitions, 12, 11, false).challenges_count_all();
+        let f = |partitions| select_challenges(partitions, 12, false).challenges_count_all();
         // Update to ensure all supported PoRepProofPartitions options are represented here.
         assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
 

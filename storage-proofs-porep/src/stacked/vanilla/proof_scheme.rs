@@ -32,7 +32,11 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
             sp.api_version,
         )?;
 
-        Ok(PublicParams::new(graph, sp.layer_challenges.clone()))
+        Ok(PublicParams::new(
+            graph,
+            sp.challenges.clone(),
+            sp.num_layers,
+        ))
     }
 
     fn prove<'b>(
@@ -67,8 +71,8 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
             pub_inputs,
             &priv_inputs.p_aux,
             &priv_inputs.t_aux,
-            &pub_params.layer_challenges,
-            pub_params.layer_challenges.layers(),
+            &pub_params.challenges,
+            pub_params.num_layers,
             partition_count,
         )
     }
@@ -92,7 +96,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
         // If the caller attempts to verify the empty set of synthetic vanilla proofs, return early
         // (without error) as the synthetic prover validated the synthetic proofs prior to writing
         // them to disk.
-        let skip_synth_verification = pub_params.layer_challenges.use_synthetic
+        let skip_synth_verification = pub_params.challenges.use_synthetic
             && pub_inputs.seed.is_none()
             && partition_proofs.iter().all(Vec::is_empty);
         if skip_synth_verification {
@@ -120,8 +124,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
                 return false;
             }
 
-            let challenges =
-                pub_inputs.challenges(&pub_params.layer_challenges, graph.size(), Some(k));
+            let challenges = pub_inputs.challenges(&pub_params.challenges, graph.size(), Some(k));
 
             let (num_proofs, num_challenges) = (proofs.len(), challenges.len());
             if num_proofs != num_challenges {
@@ -169,7 +172,7 @@ impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'
         requirements: &ChallengeRequirements,
         partitions: usize,
     ) -> bool {
-        let partition_challenges = public_params.layer_challenges.challenges_count_all();
+        let partition_challenges = public_params.challenges.challenges_count_all();
 
         assert_eq!(
             partition_challenges.checked_mul(partitions),
