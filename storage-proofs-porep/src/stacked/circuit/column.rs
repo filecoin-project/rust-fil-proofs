@@ -52,13 +52,13 @@ impl Column {
 
         Ok(AllocatedColumn { rows })
     }
+
+    pub(crate) fn len(&self) -> usize {
+        self.rows.len()
+    }
 }
 
 impl AllocatedColumn {
-    pub fn len(&self) -> usize {
-        self.rows.len()
-    }
-
     /// Creates the column hash of this column.
     pub fn hash<CS: ConstraintSystem<Fr>>(
         &self,
@@ -76,5 +76,9 @@ impl AllocatedColumn {
             self.rows.len()
         );
         &self.rows[layer - 1]
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.rows.len()
     }
 }
