@@ -26,10 +26,10 @@ use filecoin_proofs::{
     Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
     PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput,
     SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB,
-    SectorShape32GiB, SectorShape32KiB, SectorShape4KiB, SectorUpdateConfig, UnpaddedByteIndex,
-    UnpaddedBytesAmount, SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
-    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
-    WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
+    SectorShape32KiB, SectorShape4KiB, SectorUpdateConfig, UnpaddedByteIndex, UnpaddedBytesAmount,
+    SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
+    WINNING_POST_SECTOR_COUNT,
 };
 use fr32::bytes_into_fr;
 use log::info;
@@ -53,7 +53,8 @@ use filecoin_proofs::constants::MAX_LEGACY_REGISTERED_SEAL_PROOF_ID;
 
 #[cfg(feature = "big-tests")]
 use filecoin_proofs::{
-    SectorShape512MiB, SectorShape64GiB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
+    SectorShape32GiB, SectorShape512MiB, SectorShape64GiB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB,
+    SECTOR_SIZE_64_GIB,
 };
 
 // Use a fixed PoRep ID, so that the parents cache can be re-used between some tests.
