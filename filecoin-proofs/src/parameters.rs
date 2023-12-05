@@ -1,6 +1,6 @@
 use anyhow::{ensure, Result};
 use storage_proofs_core::{api_version::ApiFeature, proof::ProofScheme};
-use storage_proofs_porep::stacked::{self, LayerChallenges, StackedDrg};
+use storage_proofs_porep::stacked::{self, Challenges, StackedDrg};
 use storage_proofs_post::fallback::{self, FallbackPoSt};
 
 use crate::{
@@ -114,11 +114,13 @@ fn select_challenges(
     partitions: usize,
     minimum_total_challenges: usize,
     use_synthetic: bool,
-) -> LayerChallenges {
+) -> Challenges {
     let challenges = div_ceil(minimum_total_challenges, partitions);
-    let mut result = LayerChallenges::new(challenges);
-    result.use_synthetic = use_synthetic;
-    result
+    if use_synthetic {
+        Challenges::new_synthetic(challenges)
+    } else {
+        Challenges::new_interactive(challenges)
+    }
 }
 
 #[cfg(test)]
@@ -129,7 +131,8 @@ mod tests {
 
     #[test]
     fn partition_layer_challenges_test() {
-        let f = |partitions| select_challenges(partitions, 12, false).challenges_count_all();
+        let f =
+            |partitions| select_challenges(partitions, 12, false).num_challenges_per_partition();
         // Update to ensure all supported PoRepProofPartitions options are represented here.
         assert_eq!(6, f(usize::from(PoRepProofPartitions(2))));
 

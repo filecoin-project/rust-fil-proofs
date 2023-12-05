@@ -12,7 +12,7 @@ use filecoin_proofs::{
 };
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{api_version::ApiVersion, merkle::MerkleTreeTrait, proof::ProofScheme};
-use storage_proofs_porep::stacked::{LayerChallenges, SetupParams, StackedDrg};
+use storage_proofs_porep::stacked::{Challenges, SetupParams, StackedDrg};
 
 const PARENT_CACHE_JSON_OUTPUT: &str = "./parent_cache.json";
 
@@ -36,7 +36,7 @@ fn gen_graph_cache<Tree: 'static + MerkleTreeTrait>(
     // we just use dummy values of 1 for the setup params.
     let num_layers = 1;
     let challenge_count = 1;
-    let challenges = LayerChallenges::new(challenge_count);
+    let challenges = Challenges::new_interactive(challenge_count);
 
     let sp = SetupParams {
         nodes,

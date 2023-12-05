@@ -19,7 +19,7 @@ use storage_proofs_core::{
     TEST_SEED,
 };
 use storage_proofs_porep::stacked::{
-    self, LayerChallenges, PrivateInputs, PublicInputs, SetupParams, StackedCompound, StackedDrg,
+    self, Challenges, PrivateInputs, PublicInputs, SetupParams, StackedCompound, StackedDrg,
     TemporaryAuxCache, EXP_DEGREE,
 };
 use tempfile::tempdir;
@@ -54,7 +54,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
     let degree = BASE_DEGREE;
     let expansion_degree = EXP_DEGREE;
     let num_layers = 2;
-    let challenges = LayerChallenges::new(1);
+    let challenges = Challenges::new_interactive(1);
 
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
 
