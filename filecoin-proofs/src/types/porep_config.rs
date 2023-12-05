@@ -73,6 +73,27 @@ impl PoRepConfig {
         }
     }
 
+    pub fn new_groth16_with_features(
+        sector_size: u64,
+        porep_id: [u8; 32],
+        api_version: ApiVersion,
+        api_features: Vec<ApiFeature>,
+    ) -> Self {
+        Self {
+            sector_size: SectorSize(sector_size),
+            partitions: PoRepProofPartitions(
+                *POREP_PARTITIONS
+                    .read()
+                    .expect("POREP_PARTITIONS poisoned")
+                    .get(&sector_size)
+                    .expect("unknown sector size"),
+            ),
+            porep_id,
+            api_version,
+            api_features,
+        }
+    }
+
     #[inline]
     pub fn enable_feature(&mut self, feat: ApiFeature) {
         if !self.feature_enabled(feat) {
