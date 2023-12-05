@@ -15,6 +15,7 @@ ff = "0.13.0"
 fil_logger = "0.1.7"
 filecoin-hashers = { path = "../filecoin-hashers", version = "~11.1.0", default-features = false }
 filecoin-proofs = { path = "../filecoin-proofs", version = "~16.1.0", default-features = false, features = ["tooling"] }
+flexi_logger = "0.27.3"
 fr32 = { path = "../fr32", version = "~9.1.0", default-features = false }
 generic-array = "0.14.7"
 hex = { version = "0.4.3", features = ["serde"] }
