@@ -140,10 +140,10 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     comm_r_domain.write_bytes(&mut comm_r)?;
     comm_r_last_domain.write_bytes(&mut comm_r_last)?;
 
-    /// Note that there's nothing inherently incorrect about zero
-    /// commitments, but given that this check exists during the
-    /// sealing process and may have historically been hit, this is
-    /// considered a consistency check
+    // Note that there's nothing inherently incorrect about zero
+    // commitments, but given that this check exists during the
+    // sealing process and may have historically been hit, this is
+    // considered a consistency check
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
     ensure!(
@@ -694,10 +694,10 @@ pub fn get_sector_update_inputs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHa
 ) -> Result<Vec<Vec<Fr>>> {
     trace!("get_sector_update_inputs:start");
 
-    /// Note that there's nothing inherently incorrect about zero
-    /// commitments, but given that this check exists during the
-    /// sealing process and may have historically been hit, this is
-    /// considered a consistency check
+    // Note that there's nothing inherently incorrect about zero
+    // commitments, but given that this check exists during the
+    // sealing process and may have historically been hit, this is
+    // considered a consistency check
     ensure!(
         comm_r_old != [0; 32],
         "Invalid all zero commitment (comm_r_old)"
