@@ -42,17 +42,9 @@ use crate::{
     pieces::verify_pieces,
     types::{
         AggregateSnarkProof, Commitment, EmptySectorUpdateEncoded, EmptySectorUpdateProof,
-        PieceInfo, PoRepConfig, SectorUpdateConfig,
+        PieceInfo, PoRepConfig, SectorUpdateConfig, SectorUpdateProofInputs,
     },
 };
-
-#[derive(Debug, Clone)]
-pub struct SectorUpdateProofInputs {
-    //pub porep_config: PoRepConfig,
-    pub comm_r_old: Commitment,
-    pub comm_r_new: Commitment,
-    pub comm_d_new: Commitment,
-}
 
 // Re-instantiate a t_aux with the new cache path, then use the tree_d
 // and tree_r_last configs from it.  This is done to preserve the

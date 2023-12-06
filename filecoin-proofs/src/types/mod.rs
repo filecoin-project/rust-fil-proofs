@@ -1,6 +1,7 @@
 pub use merkletree::store::StoreConfig;
 pub use storage_proofs_core::merkle::{MerkleProof, MerkleTreeTrait};
 pub use storage_proofs_porep::stacked::{Labels, PersistentAux, TemporaryAux};
+pub use storage_proofs_update::constants::TreeRHasher;
 
 use filecoin_hashers::Hasher;
 use serde::{Deserialize, Serialize};
@@ -98,6 +99,14 @@ pub type PartitionProof<Tree> = storage_proofs_update::vanilla::PartitionProof<T
 #[derive(Debug, Clone, PartialEq)]
 #[repr(transparent)]
 pub struct EmptySectorUpdateProof(pub Vec<u8>);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectorUpdateProofInputs {
+    //pub porep_config: PoRepConfig,
+    pub comm_r_old: Commitment,
+    pub comm_r_new: Commitment,
+    pub comm_d_new: Commitment,
+}
 
 // This FallbackPoStSectorProof is used during Fallback PoSt, but
 // contains only Vanilla proof information and is not a full Fallback
