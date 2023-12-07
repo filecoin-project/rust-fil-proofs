@@ -811,7 +811,7 @@ pub fn aggregate_empty_sector_update_proofs<
         "cannot aggregate less than two proofs"
     );
     trace!(
-        "aggregate_seal_commit_proofs will pad proofs to target_len {}",
+        "aggregate_sector_update_proofs will pad proofs to target_len {}",
         target_proofs_len
     );
 
