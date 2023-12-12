@@ -774,7 +774,7 @@ pub fn aggregate_empty_sector_update_proofs<
         porep_config.api_version
     );
     ensure!(
-        porep_config.api_version > ApiVersion::V1_1_0,
+        porep_config.api_version >= ApiVersion::V1_2_0,
         "Empty Sector Update proof aggregation is supported in ApiVersion 1.2.0 or later"
     );
     ensure!(
@@ -850,7 +850,7 @@ pub fn verify_aggregate_sector_update_proofs<
         porep_config.api_version
     );
     ensure!(
-        porep_config.api_version > ApiVersion::V1_1_0,
+        porep_config.api_version >= ApiVersion::V1_2_0,
         "Empty Sector Update proof aggregation is supported in ApiVersion 1.2.0 or later"
     );
     ensure!(
