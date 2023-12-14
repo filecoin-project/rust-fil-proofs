@@ -703,6 +703,7 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
 }
 
 /// Given a value, get one suitable for aggregation.
+#[cfg_attr(feature = "tooling", visibility::make(pub))]
 fn get_aggregate_target_len(len: usize) -> usize {
     if len == 1 {
         2
@@ -712,6 +713,7 @@ fn get_aggregate_target_len(len: usize) -> usize {
 }
 
 /// Given a list of proofs and a target_len, make sure that the proofs list is padded to the target_len size.
+#[cfg_attr(feature = "tooling", visibility::make(pub))]
 fn pad_proofs_to_target(proofs: &mut Vec<groth16::Proof<Bls12>>, target_len: usize) -> Result<()> {
     trace!(
         "pad_proofs_to_target target_len {}, proofs len {}",
@@ -749,6 +751,7 @@ fn pad_proofs_to_target(proofs: &mut Vec<groth16::Proof<Bls12>>, target_len: usi
 }
 
 /// Given a list of public inputs and a target_len, make sure that the inputs list is padded to the target_len size.
+#[cfg_attr(feature = "tooling", visibility::make(pub))]
 fn pad_inputs_to_target(
     commit_inputs: &[Vec<Fr>],
     num_inputs_per_proof: usize,
