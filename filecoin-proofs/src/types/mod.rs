@@ -102,7 +102,7 @@ pub struct EmptySectorUpdateProof(pub Vec<u8>);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SectorUpdateProofInputs {
-    //pub porep_config: PoRepConfig,
+    pub h: usize,
     pub comm_r_old: Commitment,
     pub comm_r_new: Commitment,
     pub comm_d_new: Commitment,

@@ -17,7 +17,7 @@ use typenum::Unsigned;
 
 use crate::{
     constants::DefaultPieceHasher,
-    types::{Commitment, SectorSize},
+    types::{Commitment, PoRepConfig, SectorSize, SectorUpdateConfig},
 };
 
 pub fn as_safe_commitment<H: Domain, T: AsRef<str>>(
@@ -241,6 +241,11 @@ pub(crate) fn pad_inputs_to_target(
     }
 
     Ok(new_inputs)
+}
+
+#[inline]
+pub fn get_sector_update_h_select_from_porep_config(porep_config: &PoRepConfig) -> usize {
+    SectorUpdateConfig::from_porep_config(porep_config).h
 }
 
 #[cfg(all(test, feature = "fixed-rows-to-discard"))]

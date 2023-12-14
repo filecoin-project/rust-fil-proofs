@@ -749,6 +749,7 @@ fn get_hashed_commitments(sector_update_inputs: &[SectorUpdateProofInputs]) -> [
     let hashed_commitments: [u8; 32] = {
         let mut hasher = Sha256::new();
         for input in sector_update_inputs.iter() {
+            hasher.update([input.h as u8]);
             hasher.update(input.comm_r_old);
             hasher.update(input.comm_r_new);
             hasher.update(input.comm_d_new);
@@ -786,6 +787,13 @@ pub fn aggregate_empty_sector_update_proofs<
         "cannot aggregate with empty sector_update_inputs"
     );
 
+    let h = sector_update_inputs[0].h;
+    for sector_update_input in sector_update_inputs {
+        ensure!(
+            h == sector_update_input.h,
+            "mismatched h values in sector update aggregation inputs!"
+        );
+    }
     let config = SectorUpdateConfig::from_porep_config(porep_config);
     let partitions = usize::from(config.update_partitions);
 
@@ -868,6 +876,17 @@ pub fn verify_aggregate_sector_update_proofs<
         !sector_update_inputs.is_empty(),
         "cannot verify with empty inputs"
     );
+    ensure!(
+        !inputs.is_empty(),
+        "cannot verify with empty sector_update_inputs"
+    );
+    let h = inputs[0].h;
+    for input in inputs {
+        ensure!(
+            h == input.h,
+            "mismatched h values in sector update verify aggregation inputs!"
+        );
+    }
 
     trace!(
         "verify_aggregate_sector_update_proofs called with len {}",
@@ -884,7 +903,12 @@ pub fn verify_aggregate_sector_update_proofs<
     );
 
     let num_inputs = sector_update_inputs.len();
+
+    // Note that 'num_inputs_per_proof' should always be exactly 1 --
+    // each vector in 'sector_update_inputs' are the public inputs to
+    // one Groth16 proof
     let num_inputs_per_proof = get_aggregate_target_len(num_inputs) / aggregated_proofs_len;
+    ensure!(num_inputs_per_proof == 1, "num_inputs per proof mismatch");
     let target_inputs_len = aggregated_proofs_len * num_inputs_per_proof;
 
     trace!(

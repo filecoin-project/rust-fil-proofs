@@ -19,9 +19,10 @@ use filecoin_proofs::{
     generate_tree_c, generate_tree_r_last, generate_window_post, generate_window_post_with_vanilla,
     generate_winning_post, generate_winning_post_sector_challenge,
     generate_winning_post_with_vanilla, get_num_partition_for_fallback_post, get_seal_inputs,
-    get_sector_update_inputs, merge_window_post_partition_proofs, remove_encoded_data,
-    seal_commit_phase1, seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2,
-    unseal_range, validate_cache_for_commit, validate_cache_for_precommit_phase2,
+    get_sector_update_h_select_from_porep_config, get_sector_update_inputs,
+    merge_window_post_partition_proofs, remove_encoded_data, seal_commit_phase1,
+    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, unseal_range,
+    validate_cache_for_commit, validate_cache_for_precommit_phase2,
     verify_aggregate_seal_commit_proofs, verify_aggregate_sector_update_proofs,
     verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
     verify_single_partition_proof, verify_window_post, verify_winning_post, Commitment,
@@ -2640,6 +2641,7 @@ fn create_seal_for_upgrade_aggregation<
     ensure!(valid, "Empty Sector Update proof failed to verify");
 
     let proof_inputs = SectorUpdateProofInputs {
+        h: get_sector_update_h_select_from_porep_config(porep_config),
         comm_r_old: comm_r,
         comm_r_new: encoded.comm_r_new,
         comm_d_new: encoded.comm_d_new,
