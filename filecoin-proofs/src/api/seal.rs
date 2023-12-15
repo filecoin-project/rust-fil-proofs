@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
 use bellperson::groth16;
-use blstrs::{Bls12, Scalar as Fr};
+use blstrs::Scalar as Fr;
 use filecoin_hashers::{Domain, Hasher};
 use log::{info, trace};
 use memmap2::MmapOptions;
@@ -21,7 +21,6 @@ use storage_proofs_core::{
         MerkleTreeTrait,
     },
     multi_proof::MultiProof,
-    parameter_cache::SRS_MAX_PROOFS_TO_AGGREGATE,
     proof::ProofScheme,
     sector::SectorId,
     util::{default_rows_to_discard, NODE_SIZE},
@@ -36,6 +35,7 @@ use typenum::{Unsigned, U11, U2};
 
 use crate::POREP_MINIMUM_CHALLENGES;
 use crate::{
+    api::util::{get_aggregate_target_len, pad_inputs_to_target, pad_proofs_to_target},
     api::{as_safe_commitment, commitment_from_fr, get_base_tree_leafs, get_base_tree_size, util},
     caches::{
         get_stacked_params, get_stacked_srs_key, get_stacked_srs_verifier_key,
@@ -670,83 +670,6 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
     trace!("get_seal_inputs:finish");
 
     Ok(inputs)
-}
-
-/// Given a value, get one suitable for aggregation.
-fn get_aggregate_target_len(len: usize) -> usize {
-    if len == 1 {
-        2
-    } else {
-        len.next_power_of_two()
-    }
-}
-
-/// Given a list of proofs and a target_len, make sure that the proofs list is padded to the target_len size.
-fn pad_proofs_to_target(proofs: &mut Vec<groth16::Proof<Bls12>>, target_len: usize) -> Result<()> {
-    trace!(
-        "pad_proofs_to_target target_len {}, proofs len {}",
-        target_len,
-        proofs.len()
-    );
-    ensure!(
-        target_len >= proofs.len(),
-        "target len must be greater than actual num proofs"
-    );
-    ensure!(
-        proofs.last().is_some(),
-        "invalid last proof for duplication"
-    );
-
-    let last = proofs
-        .last()
-        .expect("invalid last proof for duplication")
-        .clone();
-    let mut padding: Vec<groth16::Proof<Bls12>> = (0..target_len - proofs.len())
-        .map(|_| last.clone())
-        .collect();
-    proofs.append(&mut padding);
-
-    ensure!(
-        proofs.len().next_power_of_two() == proofs.len(),
-        "proof count must be a power of 2 for aggregation"
-    );
-    ensure!(
-        proofs.len() <= SRS_MAX_PROOFS_TO_AGGREGATE,
-        "proof count for aggregation is larger than the max supported value"
-    );
-
-    Ok(())
-}
-
-/// Given a list of public inputs and a target_len, make sure that the inputs list is padded to the target_len size.
-fn pad_inputs_to_target(
-    commit_inputs: &[Vec<Fr>],
-    num_inputs_per_proof: usize,
-    target_len: usize,
-) -> Result<Vec<Vec<Fr>>> {
-    ensure!(
-        !commit_inputs.is_empty(),
-        "cannot aggregate with empty public inputs"
-    );
-
-    let mut num_inputs = commit_inputs.len();
-    let mut new_inputs = commit_inputs.to_owned();
-
-    if target_len != num_inputs {
-        ensure!(
-            target_len > num_inputs,
-            "target len must be greater than actual num inputs"
-        );
-        let duplicate_inputs = &commit_inputs[(num_inputs - num_inputs_per_proof)..num_inputs];
-
-        trace!("padding inputs from {} to {}", num_inputs, target_len);
-        while target_len != num_inputs {
-            new_inputs.extend_from_slice(duplicate_inputs);
-            num_inputs += num_inputs_per_proof;
-        }
-    }
-
-    Ok(new_inputs)
 }
 
 /// Given a porep_config and a list of seal commit outputs, this method aggregates

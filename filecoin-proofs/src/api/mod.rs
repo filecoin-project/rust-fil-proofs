@@ -17,7 +17,6 @@ use storage_proofs_core::{
     sector::SectorId,
 };
 use storage_proofs_porep::stacked::{self, generate_replica_id, PublicParams, StackedDrg};
-pub use storage_proofs_update::constants::TreeRHasher;
 use typenum::Unsigned;
 
 use crate::{
@@ -50,7 +49,7 @@ pub use util::*;
 pub use window_post::*;
 pub use winning_post::*;
 
-pub use storage_proofs_update::constants::partition_count;
+pub use storage_proofs_update::constants::{partition_count, TreeRHasher};
 
 // TODO vmx 2023-09-26: The `Tree` generic is not needed, it's only there in order to not breaking
 // the public API. Once we break the API, remove that generic.

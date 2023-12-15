@@ -10,29 +10,33 @@ use blstrs::{Bls12, Scalar as Fr};
 use ff::Field;
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
-    add_piece, aggregate_seal_commit_proofs, clear_cache, clear_synthetic_proofs, compute_comm_d,
-    decode_from, decode_from_range, encode_into, fauxrep_aux, generate_empty_sector_update_proof,
+    add_piece, aggregate_empty_sector_update_proofs, aggregate_seal_commit_proofs, clear_cache,
+    clear_layer_data, clear_synthetic_proofs, compute_comm_d, decode_from, decode_from_range,
+    encode_into, fauxrep_aux, generate_empty_sector_update_proof,
     generate_empty_sector_update_proof_with_vanilla, generate_fallback_sector_challenges,
     generate_partition_proofs, generate_piece_commitment, generate_single_partition_proof,
     generate_single_vanilla_proof, generate_single_window_post_with_vanilla, generate_synth_proofs,
     generate_tree_c, generate_tree_r_last, generate_window_post, generate_window_post_with_vanilla,
     generate_winning_post, generate_winning_post_sector_challenge,
     generate_winning_post_with_vanilla, get_num_partition_for_fallback_post, get_seal_inputs,
+    get_sector_update_h_select_from_porep_config, get_sector_update_inputs,
     merge_window_post_partition_proofs, remove_encoded_data, seal_commit_phase1,
     seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, unseal_range,
     validate_cache_for_commit, validate_cache_for_precommit_phase2,
-    verify_aggregate_seal_commit_proofs, verify_empty_sector_update_proof, verify_partition_proofs,
-    verify_seal, verify_single_partition_proof, verify_window_post, verify_winning_post,
-    Commitment, DefaultTreeDomain, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig,
-    PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo, SealCommitOutput,
-    SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB, SectorShape2KiB,
-    SectorShape32KiB, SectorShape4KiB, SectorUpdateConfig, UnpaddedByteIndex, UnpaddedBytesAmount,
-    SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
+    verify_aggregate_seal_commit_proofs, verify_aggregate_sector_update_proofs,
+    verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
+    verify_single_partition_proof, verify_window_post, verify_winning_post, Commitment,
+    DefaultTreeDomain, EmptySectorUpdateProof, MerkleTreeTrait, PaddedBytesAmount, PieceInfo,
+    PoRepConfig, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
+    SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
+    SectorShape2KiB, SectorShape32GiB, SectorShape32KiB, SectorShape4KiB, SectorUpdateConfig,
+    SectorUpdateProofInputs, UnpaddedByteIndex, UnpaddedBytesAmount, SECTOR_SIZE_16_KIB,
+    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
     WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
     WINNING_POST_SECTOR_COUNT,
 };
 use fr32::bytes_into_fr;
-use log::info;
+use log::{info, trace};
 use memmap2::MmapOptions;
 use merkletree::store::StoreConfig;
 use rand::{random, Rng, SeedableRng};
@@ -53,8 +57,7 @@ use filecoin_proofs::constants::MAX_LEGACY_REGISTERED_SEAL_PROOF_ID;
 
 #[cfg(feature = "big-tests")]
 use filecoin_proofs::{
-    SectorShape32GiB, SectorShape512MiB, SectorShape64GiB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB,
-    SECTOR_SIZE_64_GIB,
+    SectorShape512MiB, SectorShape64GiB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
 };
 
 // Use a fixed PoRep ID, so that the parents cache can be re-used between some tests.
@@ -79,6 +82,64 @@ fn to_porep_id_verified(registered_seal_proof: u64, api_version: ApiVersion) -> 
     });
 
     porep_id
+}
+
+#[test]
+fn test_get_sector_update_inputs() -> Result<()> {
+    fil_logger::maybe_init();
+
+    let porep_id_v1_1_2k: u64 = 5; // This is a RegisteredSealProof value
+    let porep_id_v1_1_32g: u64 = 8; // This is a RegisteredSealProof value
+
+    let mut porep_id_2k = [0u8; 32];
+    porep_id_2k[..8].copy_from_slice(&porep_id_v1_1_2k.to_le_bytes());
+    assert!(!is_legacy_porep_id(porep_id_2k));
+
+    let mut porep_id_32g = [0u8; 32];
+    porep_id_32g[..8].copy_from_slice(&porep_id_v1_1_32g.to_le_bytes());
+    assert!(!is_legacy_porep_id(porep_id_32g));
+
+    let porep_config_2k =
+        PoRepConfig::new_groth16(SECTOR_SIZE_2_KIB, porep_id_2k, ApiVersion::V1_2_0);
+    let sector_config_2k = SectorUpdateConfig::from_porep_config(&porep_config_2k);
+
+    let porep_config_32g =
+        PoRepConfig::new_groth16(SECTOR_SIZE_32_GIB, porep_id_32g, ApiVersion::V1_2_0);
+    let sector_config_32g = SectorUpdateConfig::from_porep_config(&porep_config_32g);
+
+    let comm_r_old = [5u8; 32];
+    let comm_r_new = [6u8; 32];
+    let comm_d_new = [7u8; 32];
+
+    let inputs_2k = get_sector_update_inputs::<SectorShape2KiB>(
+        &porep_config_2k,
+        comm_r_old,
+        comm_r_new,
+        comm_d_new,
+    )?;
+
+    // Ensure the num inputs is equal to the number of partitions
+    info!("2k sector inputs count is {}", inputs_2k.len());
+    ensure!(
+        inputs_2k.len() == usize::from(sector_config_2k.update_partitions),
+        "2k sector_update_inputs length mismatch"
+    );
+
+    let inputs_32g = get_sector_update_inputs::<SectorShape32GiB>(
+        &porep_config_32g,
+        comm_r_old,
+        comm_r_new,
+        comm_d_new,
+    )?;
+
+    // Ensure the num inputs is equal to the number of partitions
+    info!("32g sector inputs count is {}", inputs_32g.len());
+    ensure!(
+        inputs_32g.len() == usize::from(sector_config_32g.update_partitions),
+        "32g sector_update_inputs length mismatch"
+    );
+
+    Ok(())
 }
 
 #[test]
@@ -384,7 +445,7 @@ fn test_seal_lifecycle_32gib_porep_id_v1_2_top_8_8_0_api_v1_2() -> Result<()> {
 
 #[cfg(feature = "big-tests")]
 #[test]
-fn test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_1() -> Result<()> {
+fn test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_2() -> Result<()> {
     let porep_config = PoRepConfig::new_groth16(
         SECTOR_SIZE_32_GIB,
         ARBITRARY_POREP_ID_V1_2_0,
@@ -591,6 +652,97 @@ fn test_seal_proof_aggregation_818_32kib_porep_id_v1_1_base_8() -> Result<()> {
 //    Ok(())
 //}
 
+#[test]
+#[ignore]
+fn test_sector_update_proof_aggregation_1011_2kib() -> Result<()> {
+    let proofs_to_aggregate = 1011; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_2_KIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape2KiB>(&porep_config, proofs_to_aggregate)
+}
+
+#[test]
+#[ignore]
+fn test_sector_update_proof_aggregation_33_4kib() -> Result<()> {
+    let proofs_to_aggregate = 33; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_4_KIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape4KiB>(&porep_config, proofs_to_aggregate)
+}
+
+#[test]
+#[ignore]
+fn test_sector_update_proof_aggregation_508_16kib() -> Result<()> {
+    let proofs_to_aggregate = 508; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_16_KIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape16KiB>(&porep_config, proofs_to_aggregate)
+}
+
+#[test]
+#[ignore]
+fn test_sector_update_proof_aggregation_818_32kib() -> Result<()> {
+    let proofs_to_aggregate = 818; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_32_KIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape32KiB>(&porep_config, proofs_to_aggregate)
+}
+
+#[test]
+#[cfg(feature = "big-tests")]
+fn test_sector_update_proof_aggregation_11_512mib() -> Result<()> {
+    let proofs_to_aggregate = 11; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_512_MIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape512MiB>(&porep_config, proofs_to_aggregate)
+}
+
+#[test]
+#[cfg(feature = "big-tests")]
+fn test_sector_update_proof_aggregation_455_32gib() -> Result<()> {
+    let proofs_to_aggregate = 455; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_32_GIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape32GiB>(&porep_config, proofs_to_aggregate)
+}
+
+#[test]
+#[cfg(feature = "big-tests")]
+fn test_sector_update_proof_aggregation_3_64gib() -> Result<()> {
+    let proofs_to_aggregate = 3; // Requires auto-padding
+
+    let api_version = ApiVersion::V1_2_0;
+    let porep_id = ARBITRARY_POREP_ID_V1_2_0;
+    assert!(!is_legacy_porep_id(porep_id));
+
+    let porep_config = porep_config(SECTOR_SIZE_64_GIB, porep_id, api_version);
+    aggregate_sector_update_proofs::<SectorShape64GiB>(&porep_config, proofs_to_aggregate)
+}
+
 fn aggregate_seal_proofs<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     porep_id: &[u8; 32],
@@ -662,6 +814,78 @@ fn aggregate_seal_proofs<Tree: 'static + MerkleTreeTrait>(
 
     Ok(())
 }
+
+fn aggregate_sector_update_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+    porep_config: &PoRepConfig,
+    num_proofs_to_aggregate: usize,
+) -> Result<()> {
+    let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
+    let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
+    let mut prover_id = [0u8; 32];
+    prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
+
+    // Note: Sector Update aggregation only supports SnarkPackV2
+    let aggregate_versions = vec![groth16::aggregate::AggregateVersion::V2];
+
+    let (proof, proof_inputs) =
+        create_seal_for_upgrade_aggregation::<_, Tree>(porep_config, &mut rng, prover_id)?;
+
+    for aggregate_version in aggregate_versions {
+        info!(
+            "***** Aggregating {} sector update proofs *****",
+            num_proofs_to_aggregate
+        );
+        let mut sector_update_proofs = Vec::with_capacity(num_proofs_to_aggregate);
+        let mut sector_update_inputs = Vec::with_capacity(num_proofs_to_aggregate);
+        for _ in 0..num_proofs_to_aggregate {
+            sector_update_proofs.push(proof.clone());
+            sector_update_inputs.push(proof_inputs.clone());
+        }
+        ensure!(sector_update_proofs.len() == num_proofs_to_aggregate);
+        ensure!(sector_update_inputs.len() == num_proofs_to_aggregate);
+
+        let agg_update_proof = aggregate_empty_sector_update_proofs::<Tree>(
+            porep_config,
+            &sector_update_proofs,
+            &sector_update_inputs,
+            aggregate_version,
+        )?;
+
+        let combined_sector_update_inputs: Vec<Vec<Fr>> = sector_update_inputs
+            .iter()
+            .flat_map(|input| {
+                get_sector_update_inputs::<Tree>(
+                    porep_config,
+                    input.comm_r_old,
+                    input.comm_r_new,
+                    input.comm_d_new,
+                )
+                .expect("failed to get sector update inputs")
+            })
+            .collect();
+
+        trace!(
+            "combined sector update inputs len {}, sector_update_inputs len {}",
+            combined_sector_update_inputs.len(),
+            sector_update_inputs.len()
+        );
+
+        let valid = verify_aggregate_sector_update_proofs::<Tree>(
+            porep_config,
+            agg_update_proof,
+            &sector_update_inputs,
+            combined_sector_update_inputs,
+            aggregate_version,
+        )?;
+        ensure!(
+            valid,
+            "aggregate empty sector update proof failed to verify"
+        );
+    }
+
+    Ok(())
+}
+
 fn get_layer_file_paths(cache_dir: &tempfile::TempDir) -> Vec<PathBuf> {
     let mut list: Vec<_> = read_dir(cache_dir)
         .unwrap_or_else(|_| panic!("failed to read directory {:?}", cache_dir))
@@ -2296,6 +2520,134 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     clear_cache::<Tree>(new_cache_dir.path())?;
 
     Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
+}
+
+fn create_seal_for_upgrade_aggregation<
+    R: Rng,
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
+>(
+    porep_config: &PoRepConfig,
+    rng: &mut R,
+    prover_id: ProverId,
+) -> Result<(EmptySectorUpdateProof, SectorUpdateProofInputs)> {
+    fil_logger::maybe_init();
+
+    let sector_size = porep_config.sector_size.into();
+    let (mut piece_file, _piece_bytes) = generate_piece_file(sector_size)?;
+    let sealed_sector_file = NamedTempFile::new()?;
+    let cache_dir = tempdir().expect("failed to create temp dir");
+
+    let ticket = rng.gen();
+    let sector_id = rng.gen::<u64>().into();
+
+    let (piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
+        porep_config,
+        prover_id,
+        sector_id,
+        ticket,
+        &cache_dir,
+        &mut piece_file,
+        &sealed_sector_file,
+    )?;
+
+    let pre_commit_output = seal_pre_commit_phase2(
+        porep_config,
+        phase1_output,
+        cache_dir.path(),
+        sealed_sector_file.path(),
+    )?;
+    let comm_r = pre_commit_output.comm_r;
+
+    if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
+        info!("SyntheticPoRep is enabled");
+        generate_synth_proofs::<_, Tree>(
+            porep_config,
+            cache_dir.path(),
+            sealed_sector_file.path(),
+            prover_id,
+            sector_id,
+            ticket,
+            pre_commit_output,
+            &piece_infos,
+        )?;
+        clear_layer_data::<Tree>(cache_dir.path())?;
+    } else {
+        info!("SyntheticPoRep is NOT enabled");
+        validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
+    }
+
+    // Upgrade the cc sector here.
+    let new_sealed_sector_file = NamedTempFile::new()?;
+    let new_cache_dir = tempdir().expect("failed to create temp dir");
+
+    // create and generate some random data in staged_data_file.
+    let (mut new_piece_file, _new_piece_bytes) = generate_piece_file(sector_size)?;
+    let number_of_bytes_in_piece = porep_config.unpadded_bytes_amount();
+
+    let new_piece_info =
+        generate_piece_commitment(new_piece_file.as_file_mut(), number_of_bytes_in_piece)?;
+    new_piece_file.as_file_mut().rewind()?;
+
+    let mut new_staged_sector_file = NamedTempFile::new()?;
+    add_piece(
+        &mut new_piece_file,
+        &mut new_staged_sector_file,
+        number_of_bytes_in_piece,
+        &[],
+    )?;
+
+    let new_piece_infos = vec![new_piece_info];
+
+    // New replica (new_sealed_sector_file) is currently 0 bytes --
+    // set a length here to ensure proper mmap later.  Lotus will
+    // already be passing in a destination path of the proper size in
+    // the future, so this is a test specific work-around.
+    let new_replica_target_len = metadata(&sealed_sector_file)?.len();
+    let f_sealed_sector = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(new_sealed_sector_file.path())
+        .with_context(|| format!("could not open path={:?}", new_sealed_sector_file.path()))?;
+    f_sealed_sector.set_len(new_replica_target_len)?;
+
+    let encoded = encode_into::<Tree>(
+        porep_config,
+        new_sealed_sector_file.path(),
+        new_cache_dir.path(),
+        sealed_sector_file.path(),
+        cache_dir.path(),
+        new_staged_sector_file.path(),
+        &new_piece_infos,
+    )?;
+
+    let proof = generate_empty_sector_update_proof::<Tree>(
+        porep_config,
+        comm_r,
+        encoded.comm_r_new,
+        encoded.comm_d_new,
+        sealed_sector_file.path(), /* sector key file */
+        cache_dir.path(),          /* sector key path needed for p_aux and t_aux */
+        new_sealed_sector_file.path(),
+        new_cache_dir.path(),
+    )?;
+    let valid = verify_empty_sector_update_proof::<Tree>(
+        porep_config,
+        &proof.0,
+        comm_r,
+        encoded.comm_r_new,
+        encoded.comm_d_new,
+    )?;
+    ensure!(valid, "Empty Sector Update proof failed to verify");
+
+    let proof_inputs = SectorUpdateProofInputs {
+        h: get_sector_update_h_select_from_porep_config(porep_config),
+        comm_r_old: comm_r,
+        comm_r_new: encoded.comm_r_new,
+        comm_d_new: encoded.comm_d_new,
+    };
+
+    Ok((proof, proof_inputs))
 }
 
 fn create_fake_seal<R: rand::Rng, Tree: 'static + MerkleTreeTrait>(

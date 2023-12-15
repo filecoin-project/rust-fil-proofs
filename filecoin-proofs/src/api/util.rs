@@ -1,7 +1,7 @@
 use std::{fs, mem::size_of, path::Path};
 
-use anyhow::{Context, Result};
-use bellperson::groth16::Proof;
+use anyhow::{ensure, Context, Result};
+use bellperson::groth16::{self, Proof};
 use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::{Domain, Hasher};
 use fr32::{bytes_into_fr, fr_into_bytes};
@@ -10,13 +10,14 @@ use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};
 use storage_proofs_core::{
     cache_key::CacheKey,
     merkle::{get_base_tree_count, MerkleTreeTrait},
+    parameter_cache::SRS_MAX_PROOFS_TO_AGGREGATE,
 };
 use storage_proofs_porep::stacked::{PersistentAux, TemporaryAux};
 use typenum::Unsigned;
 
 use crate::{
     constants::DefaultPieceHasher,
-    types::{Commitment, SectorSize},
+    types::{Commitment, PoRepConfig, SectorSize, SectorUpdateConfig},
 };
 
 pub fn as_safe_commitment<H: Domain, T: AsRef<str>>(
@@ -65,9 +66,7 @@ pub(crate) fn persist_p_aux<Tree: MerkleTreeTrait>(
     let p_aux_bytes = bincode::serialize(&p_aux)?;
 
     fs::write(&p_aux_path, p_aux_bytes)
-        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))?;
-
-    Ok(())
+        .with_context(|| format!("could not write to file p_aux={:?}", p_aux_path))
 }
 
 /// Instantiates p_aux from the specified cache_dir for access to comm_c and comm_r_last.
@@ -156,9 +155,97 @@ pub(crate) fn persist_t_aux<Tree: MerkleTreeTrait>(
     let t_aux_bytes = bincode::serialize(&t_aux)?;
 
     fs::write(&t_aux_path, t_aux_bytes)
-        .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))?;
+        .with_context(|| format!("could not write to file t_aux={:?}", t_aux_path))
+}
+
+/// Given a value, get one suitable for aggregation.
+#[inline]
+pub(crate) fn get_aggregate_target_len(len: usize) -> usize {
+    if len == 1 {
+        2
+    } else {
+        len.next_power_of_two()
+    }
+}
+
+/// Given a list of proofs and a target_len, make sure that the proofs list is padded to the target_len size.
+pub(crate) fn pad_proofs_to_target(
+    proofs: &mut Vec<groth16::Proof<Bls12>>,
+    target_len: usize,
+) -> Result<()> {
+    trace!(
+        "pad_proofs_to_target target_len {}, proofs len {}",
+        target_len,
+        proofs.len()
+    );
+    ensure!(
+        target_len >= proofs.len(),
+        "target len must be greater than actual num proofs"
+    );
+    ensure!(
+        proofs.last().is_some(),
+        "invalid last proof for duplication"
+    );
+
+    let last = proofs
+        .last()
+        .expect("invalid last proof for duplication")
+        .clone();
+    let mut padding: Vec<groth16::Proof<Bls12>> = (0..target_len - proofs.len())
+        .map(|_| last.clone())
+        .collect();
+    proofs.append(&mut padding);
+
+    ensure!(
+        proofs.len().next_power_of_two() == proofs.len(),
+        "proof count must be a power of 2 for aggregation"
+    );
+    ensure!(
+        proofs.len() <= SRS_MAX_PROOFS_TO_AGGREGATE,
+        "proof count for aggregation is larger than the max supported value"
+    );
 
     Ok(())
+}
+
+/// Given a list of public inputs and a target_len, make sure that the inputs list is padded to the target_len size.
+pub(crate) fn pad_inputs_to_target(
+    fr_inputs: &[Vec<Fr>],
+    num_inputs_per_proof: usize,
+    target_len: usize,
+) -> Result<Vec<Vec<Fr>>> {
+    ensure!(
+        !fr_inputs.is_empty(),
+        "cannot aggregate with empty public inputs"
+    );
+
+    let mut num_inputs = fr_inputs.len();
+    let mut new_inputs = fr_inputs.to_owned();
+
+    if target_len != num_inputs {
+        ensure!(
+            target_len > num_inputs,
+            "target len must be greater than actual num inputs"
+        );
+        let duplicate_inputs = &fr_inputs[(num_inputs - num_inputs_per_proof)..num_inputs];
+
+        trace!("padding inputs from {} to {}", num_inputs, target_len);
+        while target_len != num_inputs {
+            new_inputs.extend_from_slice(duplicate_inputs);
+            num_inputs += num_inputs_per_proof;
+            ensure!(
+                num_inputs <= target_len,
+                "num_inputs extended beyond target"
+            );
+        }
+    }
+
+    Ok(new_inputs)
+}
+
+#[inline]
+pub fn get_sector_update_h_select_from_porep_config(porep_config: &PoRepConfig) -> usize {
+    SectorUpdateConfig::from_porep_config(porep_config).h
 }
 
 #[cfg(all(test, feature = "fixed-rows-to-discard"))]

@@ -3,14 +3,19 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 use anyhow::{ensure, Context, Result};
+use bellperson::groth16;
+use blstrs::Scalar as Fr;
 use ff::PrimeField;
 use filecoin_hashers::{Domain, Hasher};
 use fr32::bytes_into_fr;
 use generic_array::typenum::Unsigned;
-use log::info;
+use log::{info, trace};
 use merkletree::merkle::get_merkle_tree_len;
 use merkletree::store::StoreConfig;
+use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 use storage_proofs_core::{
+    api_version::ApiVersion,
     compound_proof::{self, CompoundProof},
     merkle::{get_base_tree_count, MerkleTreeTrait},
     multi_proof::MultiProof,
@@ -27,14 +32,17 @@ use storage_proofs_update::{
 };
 
 use crate::{
-    api::util,
-    caches::{get_empty_sector_update_params, get_empty_sector_update_verifying_key},
+    api::util::{self, get_aggregate_target_len, pad_inputs_to_target, pad_proofs_to_target},
+    caches::{
+        get_empty_sector_update_params, get_empty_sector_update_verifying_key, get_stacked_srs_key,
+        get_stacked_srs_verifier_key,
+    },
     chunk_iter::ChunkIterator,
     constants::{DefaultPieceDomain, DefaultPieceHasher},
     pieces::verify_pieces,
     types::{
-        Commitment, EmptySectorUpdateEncoded, EmptySectorUpdateProof, PieceInfo, PoRepConfig,
-        SectorUpdateConfig,
+        AggregateSnarkProof, Commitment, EmptySectorUpdateEncoded, EmptySectorUpdateProof,
+        PieceInfo, PoRepConfig, SectorUpdateConfig, SectorUpdateProofInputs,
     },
 };
 
@@ -124,6 +132,10 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     comm_r_domain.write_bytes(&mut comm_r)?;
     comm_r_last_domain.write_bytes(&mut comm_r_last)?;
 
+    // Note that there's nothing inherently incorrect about zero
+    // commitments, but given that this check exists during the
+    // sealing process and may have historically been hit, this is
+    // considered a consistency check
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
     ensure!(
@@ -651,4 +663,289 @@ pub fn verify_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher =
     info!("verify_empty_sector_update_proof:finish");
 
     Ok(valid)
+}
+
+/// Given the specified arguments, this method returns the inputs that were used to
+/// generate the sector update proof.  This can be useful for proof aggregation, as verification
+/// requires these inputs.
+///
+/// This method allows them to be retrieved when needed, rather than storing them for
+/// some amount of time.
+///
+/// # Arguments
+///
+/// * `porep_config` - this sector's porep config that contains the number of bytes in the sector.
+/// * `comm_r_old` - a commitment to a sector's previous replica.
+/// * `comm_r_new` - a commitment to a sector's current replica.
+/// * `comm_d_new` - a commitment to a sector's current data.
+pub fn get_sector_update_inputs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
+    porep_config: &PoRepConfig,
+    comm_r_old: Commitment,
+    comm_r_new: Commitment,
+    comm_d_new: Commitment,
+) -> Result<Vec<Vec<Fr>>> {
+    trace!("get_sector_update_inputs:start");
+
+    // Note that there's nothing inherently incorrect about zero
+    // commitments, but given that this check exists during the
+    // sealing process and may have historically been hit, this is
+    // considered a consistency check
+    ensure!(
+        comm_r_old != [0; 32],
+        "Invalid all zero commitment (comm_r_old)"
+    );
+    ensure!(
+        comm_r_new != [0; 32],
+        "Invalid all zero commitment (comm_r_new)"
+    );
+    ensure!(
+        comm_d_new != [0; 32],
+        "Invalid all zero commitment (comm_d_new)"
+    );
+
+    let comm_r_old_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_old)?;
+    let comm_r_new_safe = <TreeRHasher as Hasher>::Domain::try_from_bytes(&comm_r_new)?;
+
+    let comm_d_new_safe = DefaultPieceDomain::try_from_bytes(&comm_d_new)?;
+
+    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let partitions = usize::from(config.update_partitions);
+
+    let public_inputs: storage_proofs_update::PublicInputs = PublicInputs {
+        k: 0,
+        comm_r_old: comm_r_old_safe,
+        comm_d_new: comm_d_new_safe,
+        comm_r_new: comm_r_new_safe,
+        h: config.h,
+    };
+    let setup_params_compound = compound_proof::SetupParams {
+        vanilla_params: SetupParams {
+            sector_bytes: u64::from(config.sector_size),
+        },
+        partitions: Some(partitions),
+        priority: false,
+    };
+    let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
+
+    // These are returned for aggregated proof verification.
+    let inputs: Vec<_> = (0..partitions)
+        .into_par_iter()
+        .map(|k| {
+            EmptySectorUpdateCompound::<Tree>::generate_public_inputs(
+                &public_inputs,
+                &pub_params_compound.vanilla_params,
+                Some(k),
+            )
+        })
+        .collect::<Result<_>>()?;
+
+    trace!("get_sector_update_inputs:finish");
+
+    Ok(inputs)
+}
+
+// Hash all of the commitments into an ordered digest for the aggregate proof method.
+fn get_hashed_commitments(sector_update_inputs: &[SectorUpdateProofInputs]) -> [u8; 32] {
+    let hashed_commitments: [u8; 32] = {
+        let mut hasher = Sha256::new();
+        for input in sector_update_inputs.iter() {
+            hasher.update([input.h as u8]);
+            hasher.update(input.comm_r_old);
+            hasher.update(input.comm_r_new);
+            hasher.update(input.comm_d_new);
+        }
+        hasher.finalize().into()
+    };
+
+    hashed_commitments
+}
+
+pub fn aggregate_empty_sector_update_proofs<
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
+>(
+    porep_config: &PoRepConfig,
+    proofs: &[EmptySectorUpdateProof],
+    sector_update_inputs: &[SectorUpdateProofInputs],
+    aggregate_version: groth16::aggregate::AggregateVersion,
+) -> Result<AggregateSnarkProof> {
+    info!("aggregate_empty_sector_update_proofs:start");
+
+    info!(
+        "aggregate_empty_sector_update_proofs using API Version {}",
+        porep_config.api_version
+    );
+    ensure!(
+        porep_config.api_version >= ApiVersion::V1_2_0,
+        "Empty Sector Update proof aggregation is supported in ApiVersion 1.2.0 or later"
+    );
+    ensure!(
+        aggregate_version == groth16::aggregate::AggregateVersion::V2,
+        "Empty sector update aggregation requires SnarkPackV2"
+    );
+    ensure!(
+        !sector_update_inputs.is_empty(),
+        "cannot aggregate with empty sector_update_inputs"
+    );
+
+    let h = sector_update_inputs[0].h;
+    for sector_update_input in sector_update_inputs {
+        ensure!(
+            h == sector_update_input.h,
+            "mismatched h values in sector update aggregation inputs!"
+        );
+    }
+    let config = SectorUpdateConfig::from_porep_config(porep_config);
+    let partitions = usize::from(config.update_partitions);
+
+    let mut proofs: Vec<_> = proofs
+        .iter()
+        .try_fold(Vec::new(), |mut acc, proof| -> Result<_> {
+            acc.extend(groth16::Proof::read_many(proof.0.as_slice(), partitions)?);
+
+            Ok(acc)
+        })?;
+    trace!(
+        "aggregate_sector_update_proofs called with {} inputs for {} proofs",
+        sector_update_inputs.len(),
+        proofs.len(),
+    );
+
+    // Note that the proofs count here is not the same as the input
+    // proofs since the multi proof type takes the partitions into
+    // account
+    let target_proofs_len = get_aggregate_target_len(proofs.len());
+    ensure!(
+        target_proofs_len > 1,
+        "cannot aggregate less than two proofs"
+    );
+    trace!(
+        "aggregate_sector_update_proofs will pad proofs to target_len {}",
+        target_proofs_len
+    );
+
+    // If we're not at the pow2 target, duplicate the last proof until we are.
+    pad_proofs_to_target(&mut proofs, target_proofs_len)?;
+
+    let hashed_commitments = get_hashed_commitments(sector_update_inputs);
+    let srs_prover_key = get_stacked_srs_key::<Tree>(porep_config, proofs.len())?;
+    let aggregate_proof = EmptySectorUpdateCompound::<Tree>::aggregate_proofs(
+        &srs_prover_key,
+        &hashed_commitments,
+        proofs.as_slice(),
+        aggregate_version,
+    )?;
+    let mut aggregate_proof_bytes = Vec::new();
+    aggregate_proof.write(&mut aggregate_proof_bytes)?;
+
+    info!("aggregate_empty_sector_update_proofs:finish");
+
+    Ok(aggregate_proof_bytes)
+}
+
+pub fn verify_aggregate_sector_update_proofs<
+    Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
+>(
+    porep_config: &PoRepConfig,
+    aggregate_proof_bytes: AggregateSnarkProof,
+    inputs: &[SectorUpdateProofInputs],
+    sector_update_inputs: Vec<Vec<Fr>>,
+    aggregate_version: groth16::aggregate::AggregateVersion,
+) -> Result<bool> {
+    info!("verify_aggregate_sector_update_proofs:start");
+
+    info!(
+        "verify_aggregate_sector_update_proofs using API Version {}",
+        porep_config.api_version
+    );
+    ensure!(
+        porep_config.api_version >= ApiVersion::V1_2_0,
+        "Empty Sector Update proof aggregation is supported in ApiVersion 1.2.0 or later"
+    );
+    ensure!(
+        aggregate_version == groth16::aggregate::AggregateVersion::V2,
+        "Empty sector update aggregate verification requires SnarkPackV2"
+    );
+
+    let aggregate_proof =
+        groth16::aggregate::AggregateProof::read(std::io::Cursor::new(&aggregate_proof_bytes))?;
+
+    let aggregated_proofs_len = aggregate_proof.tmipp.gipa.nproofs as usize;
+
+    ensure!(aggregated_proofs_len != 0, "cannot verify zero proofs");
+    ensure!(
+        !sector_update_inputs.is_empty(),
+        "cannot verify with empty inputs"
+    );
+    ensure!(
+        !inputs.is_empty(),
+        "cannot verify with empty sector_update_inputs"
+    );
+    let h = inputs[0].h;
+    for input in inputs {
+        ensure!(
+            h == input.h,
+            "mismatched h values in sector update verify aggregation inputs!"
+        );
+    }
+
+    trace!(
+        "verify_aggregate_sector_update_proofs called with len {}",
+        aggregated_proofs_len,
+    );
+
+    ensure!(
+        aggregated_proofs_len > 1,
+        "cannot verify less than two proofs"
+    );
+    ensure!(
+        aggregated_proofs_len == aggregated_proofs_len.next_power_of_two(),
+        "cannot verify non-pow2 aggregate seal proofs"
+    );
+
+    let num_inputs = sector_update_inputs.len();
+
+    // Note that 'num_inputs_per_proof' should always be exactly 1 --
+    // each vector in 'sector_update_inputs' are the public inputs to
+    // one Groth16 proof
+    let num_inputs_per_proof = get_aggregate_target_len(num_inputs) / aggregated_proofs_len;
+    ensure!(num_inputs_per_proof == 1, "num_inputs per proof mismatch");
+    let target_inputs_len = aggregated_proofs_len * num_inputs_per_proof;
+
+    trace!(
+        "verify_aggregate_sector_update_proofs got {} combined inputs with {} inputs per proof, target_len is {}",
+        num_inputs,
+        num_inputs_per_proof,
+        target_inputs_len,
+    );
+
+    ensure!(
+        target_inputs_len % aggregated_proofs_len == 0,
+        "invalid number of inputs provided",
+    );
+
+    let sector_update_inputs = pad_inputs_to_target(
+        &sector_update_inputs,
+        num_inputs_per_proof,
+        target_inputs_len,
+    )?;
+
+    let hashed_commitments = get_hashed_commitments(inputs);
+    let verifying_key = get_empty_sector_update_verifying_key::<Tree>(porep_config)?;
+    let srs_verifier_key =
+        get_stacked_srs_verifier_key::<Tree>(porep_config, aggregated_proofs_len)?;
+
+    trace!("start verifying aggregate sector update proof");
+    let result = EmptySectorUpdateCompound::<Tree>::verify_aggregate_proofs(
+        &srs_verifier_key,
+        &verifying_key,
+        &hashed_commitments,
+        sector_update_inputs.as_slice(),
+        &aggregate_proof,
+        aggregate_version,
+    )?;
+    trace!("end verifying aggregate sector update proof");
+
+    info!("verify_aggregate_sector_update_proofs:finish");
+
+    Ok(result)
 }
