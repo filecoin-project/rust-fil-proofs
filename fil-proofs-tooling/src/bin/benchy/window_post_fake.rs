@@ -55,20 +55,14 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     api_version: ApiVersion,
     api_features: Vec<ApiFeature>,
 ) -> anyhow::Result<()> {
-    let arbitrary_porep_id = [66; 32];
     let sector_count = *WINDOW_POST_SECTOR_COUNT
         .read()
         .expect("WINDOW_POST_SECTOR_COUNT poisoned")
         .get(&sector_size)
         .expect("unknown sector size");
 
-    let (sector_id, replica_output) = create_replica::<Tree>(
-        sector_size,
-        arbitrary_porep_id,
-        fake_replica,
-        api_version,
-        api_features,
-    );
+    let (sector_id, replica_output) =
+        create_replica::<Tree>(sector_size, fake_replica, api_version, api_features);
 
     // Store the replica's private and publicly facing info for proving and verifying respectively.
     let mut pub_replica_info: BTreeMap<SectorId, PublicReplicaInfo> = BTreeMap::new();

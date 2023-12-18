@@ -6,10 +6,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{ensure, Context};
 use bincode::{deserialize, serialize};
 use fil_proofs_tooling::measure::FuncMeasurement;
-use fil_proofs_tooling::shared::{PROVER_ID, TICKET_BYTES};
+use fil_proofs_tooling::shared::{self, PROVER_ID, TICKET_BYTES};
 use fil_proofs_tooling::{measure, Metadata};
 use filecoin_proofs::types::{
-    PaddedBytesAmount, PieceInfo, PoRepConfig, SealCommitPhase1Output, SealPreCommitOutput,
+    PaddedBytesAmount, PieceInfo, SealCommitPhase1Output, SealPreCommitOutput,
     SealPreCommitPhase1Output, UnpaddedBytesAmount,
 };
 use filecoin_proofs::{
@@ -72,18 +72,6 @@ impl Report {
     }
 }
 
-fn get_porep_config(sector_size: u64, api_version: ApiVersion, use_synthetic: bool) -> PoRepConfig {
-    let arbitrary_porep_id = [99; 32];
-
-    // Replicate the staged sector, write the replica file to `sealed_path`.
-    let mut config = PoRepConfig::new_groth16(sector_size, arbitrary_porep_id, api_version);
-    if use_synthetic {
-        config.enable_feature(ApiFeature::SyntheticPoRep);
-    }
-
-    config
-}
-
 #[allow(clippy::too_many_arguments)]
 fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
@@ -93,7 +81,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
     skip_precommit_phase2: bool,
     test_resume: bool,
     skip_staging: bool,
-    use_synthetic: bool,
+    features: Vec<ApiFeature>,
 ) -> anyhow::Result<((u64, u64), (u64, u64), (u64, u64))> {
     let (seal_pre_commit_phase1_measurement_cpu_time, seal_pre_commit_phase1_measurement_wall_time): (u64, u64) = if skip_precommit_phase1 {
             // generate no-op measurements
@@ -153,7 +141,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
 
         let piece_infos = vec![piece_info];
         let sector_id = SectorId::from(SECTOR_ID);
-        let porep_config = get_porep_config(sector_size, api_version, use_synthetic);
+        let porep_config = shared::get_porep_config(sector_size, api_version, features.clone());
 
         let seal_pre_commit_phase1_measurement: FuncMeasurement<SealPreCommitPhase1Output<Tree>> = measure(|| {
             seal_pre_commit_phase1::<_, _, _, Tree>(
@@ -191,7 +179,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
             info!("Test resume requested.  Removing last layer {:?}", layers[layers.len() - 1]);
             std::fs::remove_file(&layers[layers.len() - 1])?;
 
-            return run_pre_commit_phases::<Tree>(sector_size, api_version, cache_dir, skip_precommit_phase1, skip_precommit_phase2, false, true, use_synthetic);
+            return run_pre_commit_phases::<Tree>(sector_size, api_version, cache_dir, skip_precommit_phase1, skip_precommit_phase2, false, true, features);
         }
 
         // Persist piece_infos here
@@ -245,7 +233,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
         };
 
         let sealed_file_path = cache_dir.join(SEALED_FILE);
-        let porep_config = get_porep_config(sector_size, api_version, use_synthetic);
+        let porep_config = shared::get_porep_config(sector_size, api_version, features);
 
         let validate_cache_for_precommit_phase2_measurement: FuncMeasurement<()> = measure(|| {
             validate_cache_for_precommit_phase2::<_, _, Tree>(
@@ -335,6 +323,12 @@ pub fn run_porep_bench<Tree: 'static + MerkleTreeTrait>(
     test_resume: bool,
     use_synthetic: bool,
 ) -> anyhow::Result<()> {
+    let features = if use_synthetic {
+        vec![ApiFeature::SyntheticPoRep]
+    } else {
+        Vec::new()
+    };
+
     let (
         (seal_pre_commit_phase1_cpu_time_ms, seal_pre_commit_phase1_wall_time_ms),
         (
@@ -354,7 +348,7 @@ pub fn run_porep_bench<Tree: 'static + MerkleTreeTrait>(
             skip_precommit_phase2,
             test_resume,
             false, // skip staging
-            use_synthetic,
+            features.clone(),
         )
     }?;
 
@@ -390,7 +384,7 @@ pub fn run_porep_bench<Tree: 'static + MerkleTreeTrait>(
 
     let seed = [1u8; 32];
     let sector_id = SectorId::from(SECTOR_ID);
-    let porep_config = get_porep_config(sector_size, api_version, use_synthetic);
+    let porep_config = shared::get_porep_config(sector_size, api_version, features);
 
     let sealed_file_path = cache_dir.join(SEALED_FILE);
 
