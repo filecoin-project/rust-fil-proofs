@@ -132,6 +132,20 @@ impl Display for ApiFeature {
     }
 }
 
+impl FromStr for ApiFeature {
+    type Err = Error;
+    fn from_str(api_feature_str: &str) -> Result<Self> {
+        match api_feature_str {
+            "synthetic-porep" => Ok(ApiFeature::SyntheticPoRep),
+            "non-interactive-porep" => Ok(ApiFeature::NonInteractivePoRep),
+            _ => Err(format_err!(
+                "'{}' cannot be parsed as valid API feature",
+                api_feature_str
+            )),
+        }
+    }
+}
+
 #[test]
 fn test_fmt() {
     assert_eq!(format!("{}", ApiVersion::V1_0_0), "1.0.0");
@@ -161,6 +175,13 @@ fn test_api_version_order() {
 #[test]
 fn test_api_feature_synthetic_porep() {
     let feature = ApiFeature::SyntheticPoRep;
+
+    assert_eq!(format!("{}", feature), "synthetic-porep");
+    assert_eq!(
+        ApiFeature::from_str("synthetic-porep").expect("can be parsed"),
+        feature
+    );
+
     assert!(feature.first_supported_version() == ApiVersion::V1_2_0);
     assert!(feature.last_supported_version().is_none());
 }

@@ -314,6 +314,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
 pub fn run_porep_bench<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
     api_version: ApiVersion,
+    api_features: Vec<ApiFeature>,
     cache_dir: PathBuf,
     preserve_cache: bool,
     skip_precommit_phase1: bool,
@@ -321,14 +322,7 @@ pub fn run_porep_bench<Tree: 'static + MerkleTreeTrait>(
     skip_commit_phase1: bool,
     skip_commit_phase2: bool,
     test_resume: bool,
-    use_synthetic: bool,
 ) -> anyhow::Result<()> {
-    let features = if use_synthetic {
-        vec![ApiFeature::SyntheticPoRep]
-    } else {
-        Vec::new()
-    };
-
     let (
         (seal_pre_commit_phase1_cpu_time_ms, seal_pre_commit_phase1_wall_time_ms),
         (
@@ -348,7 +342,7 @@ pub fn run_porep_bench<Tree: 'static + MerkleTreeTrait>(
             skip_precommit_phase2,
             test_resume,
             false, // skip staging
-            features.clone(),
+            api_features.clone(),
         )
     }?;
 
@@ -384,7 +378,7 @@ pub fn run_porep_bench<Tree: 'static + MerkleTreeTrait>(
 
     let seed = [1u8; 32];
     let sector_id = SectorId::from(SECTOR_ID);
-    let porep_config = shared::get_porep_config(sector_size, api_version, features);
+    let porep_config = shared::get_porep_config(sector_size, api_version, api_features);
 
     let sealed_file_path = cache_dir.join(SEALED_FILE);
 
@@ -393,7 +387,7 @@ pub fn run_porep_bench<Tree: 'static + MerkleTreeTrait>(
         validate_cache_for_commit_wall_time_ms,
         seal_commit_phase1_cpu_time_ms,
         seal_commit_phase1_wall_time_ms,
-    ) = if skip_commit_phase1 && !use_synthetic {
+    ) = if skip_commit_phase1 && !porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
         // generate no-op measurements
         (0, 0, 0, 0)
     } else {
@@ -535,6 +529,7 @@ pub fn run_porep_bench<Tree: 'static + MerkleTreeTrait>(
 pub fn run(
     sector_size: usize,
     api_version: ApiVersion,
+    api_features: Vec<ApiFeature>,
     cache: String,
     preserve_cache: bool,
     skip_precommit_phase1: bool,
@@ -542,9 +537,13 @@ pub fn run(
     skip_commit_phase1: bool,
     skip_commit_phase2: bool,
     test_resume: bool,
-    use_synthetic: bool,
 ) -> anyhow::Result<()> {
-    info!("Benchy PoRep: sector-size={}, api_version={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}, use_synthetic={}", sector_size, api_version, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume, use_synthetic);
+    let api_features_str = api_features
+        .iter()
+        .map(|api_feature| api_feature.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
+    info!("Benchy PoRep: sector-size={}, api_version={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}, api_features={}", sector_size, api_version, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume, api_features_str);
 
     let cache_dir_specified = !cache.is_empty();
 
@@ -588,6 +587,7 @@ pub fn run(
         run_porep_bench,
         sector_size as u64,
         api_version,
+        api_features,
         cache_dir,
         preserve_cache,
         skip_precommit_phase1,
@@ -595,6 +595,5 @@ pub fn run(
         skip_commit_phase1,
         skip_commit_phase2,
         test_resume,
-        use_synthetic,
     )
 }
