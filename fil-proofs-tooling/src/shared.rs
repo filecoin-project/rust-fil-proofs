@@ -79,7 +79,6 @@ pub fn create_piece(piece_bytes: UnpaddedBytesAmount, use_random: bool) -> Named
 /// Create a replica for a single sector
 pub fn create_replica<Tree: 'static + MerkleTreeTrait>(
     sector_size: u64,
-    porep_id: [u8; 32],
     fake_replica: bool,
     api_version: ApiVersion,
     api_features: Vec<ApiFeature>,
@@ -89,7 +88,6 @@ pub fn create_replica<Tree: 'static + MerkleTreeTrait>(
         1,
         false,
         fake_replica,
-        porep_id,
         api_version,
         api_features,
     );
@@ -107,7 +105,6 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     qty_sectors: usize,
     only_add: bool,
     fake_replicas: bool,
-    porep_id: [u8; 32],
     api_version: ApiVersion,
     api_features: Vec<ApiFeature>,
 ) -> (
@@ -121,10 +118,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     let sector_size_unpadded_bytes_ammount =
         UnpaddedBytesAmount::from(PaddedBytesAmount::from(sector_size));
 
-    let mut porep_config = PoRepConfig::new_groth16(u64::from(sector_size), porep_id, api_version);
-    for feature in api_features {
-        porep_config.enable_feature(feature);
-    }
+    let porep_config = get_porep_config(u64::from(sector_size), api_version, api_features);
 
     let mut out: Vec<(SectorId, PreCommitReplicaOutput<Tree>)> = Default::default();
     let mut sector_ids = Vec::new();
@@ -336,4 +330,13 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     }
 
     (porep_config, Some((out, seal_pre_commit_outputs)))
+}
+
+pub fn get_porep_config(
+    sector_size: u64,
+    api_version: ApiVersion,
+    features: Vec<ApiFeature>,
+) -> PoRepConfig {
+    let arbitrary_porep_id = [99; 32];
+    PoRepConfig::new_groth16_with_features(sector_size, arbitrary_porep_id, api_version, features)
 }
