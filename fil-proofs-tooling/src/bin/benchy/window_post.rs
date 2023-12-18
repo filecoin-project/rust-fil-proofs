@@ -329,14 +329,8 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     skip_commit_phase1: bool,
     skip_commit_phase2: bool,
     test_resume: bool,
-    use_synthetic: bool,
+    api_features: Vec<ApiFeature>,
 ) -> anyhow::Result<()> {
-    let features = if use_synthetic {
-        vec![ApiFeature::SyntheticPoRep]
-    } else {
-        Vec::new()
-    };
-
     let (
         (seal_pre_commit_phase1_cpu_time_ms, seal_pre_commit_phase1_wall_time_ms),
         (
@@ -356,7 +350,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
             skip_precommit_phase2,
             test_resume,
             false, // skip staging
-            features.clone(),
+            api_features.clone(),
         )
     }?;
 
@@ -394,7 +388,7 @@ pub fn run_window_post_bench<Tree: 'static + MerkleTreeTrait>(
     let comm_r = seal_pre_commit_output.comm_r;
 
     let sector_id = SectorId::from(SECTOR_ID);
-    let porep_config = shared::get_porep_config(sector_size, api_version, features);
+    let porep_config = shared::get_porep_config(sector_size, api_version, api_features);
 
     let sealed_file_path = cache_dir.join(SEALED_FILE);
 
@@ -603,9 +597,14 @@ pub fn run(
     skip_commit_phase1: bool,
     skip_commit_phase2: bool,
     test_resume: bool,
-    use_synthetic: bool,
+    api_features: Vec<ApiFeature>,
 ) -> anyhow::Result<()> {
-    info!("Benchy Window PoSt: sector-size={}, api_version={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}, use_synthetic={}", sector_size, api_version, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume, use_synthetic);
+    let api_features_str = api_features
+        .iter()
+        .map(|api_feature| api_feature.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
+    info!("Benchy Window PoSt: sector-size={}, api_version={}, preserve_cache={}, skip_precommit_phase1={}, skip_precommit_phase2={}, skip_commit_phase1={}, skip_commit_phase2={}, test_resume={}, apu_features={}", sector_size, api_version, preserve_cache, skip_precommit_phase1, skip_precommit_phase2, skip_commit_phase1, skip_commit_phase2, test_resume, api_features_str);
 
     let cache_dir_specified = !cache.is_empty();
 
@@ -656,6 +655,6 @@ pub fn run(
         skip_commit_phase1,
         skip_commit_phase2,
         test_resume,
-        use_synthetic,
+        api_features,
     )
 }
