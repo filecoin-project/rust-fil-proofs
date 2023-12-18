@@ -3,7 +3,7 @@ version: 2.1
 executors:
   default:
     docker:
-      - image: cimg/rust:1.67
+      - image: cimg/rust:1.70
     resource_class: 2xlarge+
   gpu:
     machine:
@@ -16,6 +16,8 @@ executors:
     resource_class: arm.large
 
 setup-env: &setup-env
+  # The sparse index makes the `cargo update` a lot faster.
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   FIL_PROOFS_PARAMETER_CACHE: "/tmp/filecoin-proof-parameters/"
   RUST_LOG: info
 
@@ -373,11 +375,6 @@ commands:
           command: chmod -R 755 ${FIL_PROOFS_PARAMETER_CACHE}
   save_rustup_cache:
     steps:
-      - run:
-          name: Reduce registry size a bit
-          command: |
-            cd ~/.cargo/registry/index/github.com-1ecc6299db9ec823/
-            git gc
       # Move things from the home directory to `/tmp` first, so that it can be
       # restored on executors that have a different home directory.
       - run: cp -fR ~/.cargo ~/.rustup /tmp/
