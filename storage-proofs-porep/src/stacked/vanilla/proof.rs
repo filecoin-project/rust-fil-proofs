@@ -1,20 +1,19 @@
 use std::any::TypeId;
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter};
 use std::marker::PhantomData;
 use std::panic::panic_any;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Mutex;
 
 use anyhow::{ensure, Context};
 use bincode::deserialize;
 use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
-use ff::PrimeField;
 use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0, U11, U2, U8};
 use lazy_static::lazy_static;
-use log::{error, info, trace, warn};
+use log::{error, info, trace};
 use merkletree::{
     merkle::{get_merkle_tree_len, is_merkle_tree_size_valid},
     store::{DiskStore, Store, StoreConfig},
@@ -39,7 +38,7 @@ use storage_proofs_core::{
 use yastl::Pool;
 
 use crate::{
-    encode::{decode, encode, encode_fr},
+    encode::{decode, encode},
     stacked::vanilla::{
         challenges::{Challenges, SynthChallenges},
         column::Column,
@@ -702,12 +701,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 labels,
             )
         } else {
-            Self::generate_tree_c_cpu::<ColumnArity, TreeArity>(
-                nodes_count,
-                tree_count,
-                configs,
-                labels,
-            )
+            Self::generate_tree_c_cpu::<ColumnArity>(nodes_count, tree_count, configs, labels)
         }
     }
 
@@ -722,12 +716,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         ColumnArity: 'static + PoseidonArity,
         TreeArity: PoseidonArity,
     {
-        Self::generate_tree_c_cpu::<ColumnArity, TreeArity>(
-            nodes_count,
-            tree_count,
-            configs,
-            labels,
-        )
+        Self::generate_tree_c_cpu::<ColumnArity>(nodes_count, tree_count, configs, labels)
     }
 
     #[allow(clippy::needless_range_loop)]
@@ -743,10 +732,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         TreeArity: PoseidonArity,
     {
         use std::cmp::min;
-        use std::sync::mpsc::sync_channel as channel;
+        use std::sync::{mpsc::sync_channel as channel, Arc, RwLock};
 
         use fr32::fr_into_bytes;
         use generic_array::GenericArray;
+        use log::warn;
         use neptune::{
             batch_hasher::Batcher,
             column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait},
@@ -990,7 +980,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         })
     }
 
-    fn generate_tree_c_cpu<ColumnArity, TreeArity>(
+    fn generate_tree_c_cpu<ColumnArity>(
         nodes_count: usize,
         tree_count: usize,
         configs: Vec<StoreConfig>,
@@ -998,7 +988,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     ) -> Result<DiskTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
     where
         ColumnArity: PoseidonArity,
-        TreeArity: PoseidonArity,
     {
         info!("generating tree c using the CPU");
         measure_op(Operation::GenerateTreeC, || {
@@ -1095,7 +1084,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         end: usize,
     ) -> Result<TreeRElementData<Tree>> {
         if Self::use_gpu_tree_builder() {
+            use ff::PrimeField;
             use fr32::bytes_into_fr;
+
+            use crate::encode::encode_fr;
 
             let mut layer_bytes = vec![0u8; (end - start) * std::mem::size_of::<Fr>()];
             source
@@ -1260,9 +1252,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>> {
         use std::cmp::min;
         use std::fs::OpenOptions;
+        use std::io::Write;
         use std::sync::mpsc::sync_channel as channel;
 
         use fr32::fr_into_bytes;
+        use log::warn;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
             batch_hasher::Batcher,
@@ -1730,19 +1724,17 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     // Replica path is used to create configs, but is not read.
     // Instead new zeros are provided (hence the need for replica to be all zeros).
     #[cfg(any(feature = "cuda", feature = "opencl"))]
-    fn generate_fake_tree_r_last<TreeArity>(
+    fn generate_fake_tree_r_last(
         nodes_count: usize,
         tree_count: usize,
         tree_r_last_config: StoreConfig,
         replica_path: PathBuf,
-    ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
-    where
-        TreeArity: PoseidonArity,
-    {
-        use std::fs::OpenOptions;
+    ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>> {
+        use std::{fs::OpenOptions, io::Write};
 
         use ff::Field;
         use fr32::fr_into_bytes;
+        use log::warn;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
             batch_hasher::Batcher,
@@ -1864,15 +1856,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     // Replica path is used to create configs, but is not read.
     // Instead new zeros are provided (hence the need for replica to be all zeros).
     #[cfg(not(any(feature = "cuda", feature = "opencl")))]
-    fn generate_fake_tree_r_last<TreeArity>(
+    fn generate_fake_tree_r_last(
         nodes_count: usize,
         tree_count: usize,
         tree_r_last_config: StoreConfig,
         replica_path: PathBuf,
-    ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>>
-    where
-        TreeArity: PoseidonArity,
-    {
+    ) -> Result<LCTree<Tree::Hasher, Tree::Arity, Tree::SubTreeArity, Tree::TopTreeArity>> {
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
             replica_path,
@@ -1926,7 +1915,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         // Encode original data into the last layer.
         info!("building tree_r_last");
-        let tree_r_last = Self::generate_fake_tree_r_last::<Tree::Arity>(
+        let tree_r_last = Self::generate_fake_tree_r_last(
             nodes_count,
             tree_count,
             tree_r_last_config,

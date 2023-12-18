@@ -43,7 +43,6 @@ fn merkle_benchmark_poseidon(c: &mut Criterion) {
             let mut rng = thread_rng();
             let mut data: Vec<u8> = Vec::with_capacity(32 * n_nodes);
             (0..n_nodes)
-                .into_iter()
                 .try_for_each(|_| -> Result<()> {
                     let node = PoseidonDomain::random(&mut rng);
                     data.extend(node.into_bytes());
