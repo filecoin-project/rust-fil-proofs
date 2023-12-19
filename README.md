@@ -23,19 +23,29 @@ There are currently several different crates:
 
 
 - [**Filecoin Proofs (`filecoin-proofs`)**](./filecoin-proofs)
-  A wrapper around `storage-proofs`, providing an FFI-exported API callable from C (and in practice called by [lotus](https://github.com/filecoin-project/lotus) via cgo). Filecoin-specific values of setup parameters are included here.
+    Filecoin-specific values of setup parameters are included here. The API is wrapped in [`rust-filecoin-proofs-api`](https://github.com/filecoin-project/rust-filecoin-proofs-api), which then is the basis for the FFI-exported API in [`filecoin-ffi`](https://github.com/filecoin-project/filecoin-ffi) callable from C (and in practice called by [lotus](https://github.com/filecoin-project/lotus) via cgo).
 
 The dependencies between those crates look like this:
 
 ```
-
-filecoin-proofs
-
-
-storage-proofs-update 
-
+       ┌────────────────────────────────────────────────────────────────────┐
+       │                             filecoin-proofs                        │
+       └─────┬────────────────────────────┬──────────────┬─────────────┬────┘
+             │                            │              │             │
+             │                            │              │             │
+             │                            │              │             │
+┌────────────▼──────────┐     ┌───────────▼──────────┐   │   ┌─────────▼───────────┐
+│ storage-proofs-update ├─────▶ storage-proofs-porep │   │   │ storage-proofs-post │
+└────────────┬──────────┘     └───────────┬──────────┘   │   └─────────┬───────────┘
+             │                            │              │             │
+             │                            │              │             │
+             │                            │              │             │
+       ┌─────▼────────────────────────────▼──────────────▼─────────────▼────┐
+       │                           storage-proofs-core                      │
+       └────────────────────────────────────────────────────────────────────┘
 ```
 
+Things shared between crates, should go into `storage-proofs-core`. An exception is the `storage-proofs-update`, which needs the needs the stacked DRG from `storage-proofs-porep`. All crates are free to use other crates for the workspace like [`filecoin-hashers`](./filecoin-hashers) or [`fr32`](./fr32).
 
 ## Security Audits
 
