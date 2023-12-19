@@ -25,6 +25,18 @@ There are currently several different crates:
 - [**Filecoin Proofs (`filecoin-proofs`)**](./filecoin-proofs)
   A wrapper around `storage-proofs`, providing an FFI-exported API callable from C (and in practice called by [lotus](https://github.com/filecoin-project/lotus) via cgo). Filecoin-specific values of setup parameters are included here.
 
+The dependencies between those crates look like this:
+
+```
+
+filecoin-proofs
+
+
+storage-proofs-update 
+
+```
+
+
 ## Security Audits
 
 The `rust-fil-proofs` proofs code and the [Filecoin Spec](https://spec.filecoin.io/algorithms/sdr/) has undergone a [proofs security audit](audits/Sigma-Prime-Protocol-Labs-Filecoin-Proofs-Security-Review-v2.1.pdf) performed by [Sigma Prime](https://sigmaprime.io/) and been deemed free of *critical* or *major* security issues.  In addition to the security review, the document provides the summary of findings, vulnerability classifications, and recommended resolutions.  All known issues have been resolved to date in both the code and the specification.
