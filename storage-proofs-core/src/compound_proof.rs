@@ -5,7 +5,7 @@ use bellperson::{
         aggregate::{
             aggregate_proofs, verify_aggregate_proof, AggregateProof, ProverSRS, VerifierSRS,
         },
-        create_random_proof_batch, create_random_proof_batch_in_priority, verify_proofs_batch,
+        create_proof_batch_priority_nonzk, verify_proofs_batch,
         PreparedVerifyingKey,
     },
     Circuit,
@@ -256,11 +256,7 @@ where
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let groth_proofs = if priority {
-            create_random_proof_batch_in_priority(circuits, groth_params, &mut rng)?
-        } else {
-            create_random_proof_batch(circuits, groth_params, &mut rng)?
-        };
+        let groth_proofs = create_proof_batch_priority_nonzk(circuits, groth_params, priority)?;
 
         groth_proofs
             .into_iter()
