@@ -567,55 +567,34 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     proof.write(&mut buf)?;
 
-    // Verification is cheap when parameters are cached,
-    // and it is never correct to return a proof which does not verify.
-    // Non-interactive PoRep is an aggregated proof, hence we also need a different code path for
-    // the verifucation.
-    let out = if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) {
-        let aggregated = aggregate_seal_commit_proofs::<Tree>(
+    // Non-interactive PoRep is an aggregated proof, hence we use that as the returned buffer.
+    if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) {
+        buf = aggregate_seal_commit_proofs::<Tree>(
             porep_config,
             &[comm_r],
             &[seed],
             &[SealCommitOutput { proof: buf }],
             groth16::aggregate::AggregateVersion::V2,
         )?;
-        let inputs = get_seal_inputs::<Tree>(
-            porep_config,
-            comm_r,
-            comm_d,
-            prover_id,
-            sector_id,
-            ticket,
-            seed,
-        )?;
-        let is_valid = verify_aggregate_seal_commit_proofs::<Tree>(
-            porep_config,
-            aggregated.clone(),
-            &[comm_r],
-            &[seed],
-            inputs,
-            groth16::aggregate::AggregateVersion::V2,
-        )
-        .context("post-seal aggregation verification sanity check failed")?;
-        ensure!(is_valid, "post seal aggregation verifies");
-        SealCommitOutput { proof: aggregated }
-    } else {
-        verify_seal::<Tree>(
-            porep_config,
-            comm_r,
-            comm_d,
-            prover_id,
-            sector_id,
-            ticket,
-            seed,
-            &buf,
-        )
-        .context("post-seal verification sanity check failed")?;
-        SealCommitOutput { proof: buf }
-    };
+    }
+
+    // Verification is cheap when parameters are cached,
+    // and it is never correct to return a proof which does not verify.
+    let is_valid = verify_seal::<Tree>(
+        porep_config,
+        comm_r,
+        comm_d,
+        prover_id,
+        sector_id,
+        ticket,
+        seed,
+        &buf,
+    )
+    .context("post-seal verification sanity check failed")?;
+    ensure!(is_valid, "post seal aggregation verifies");
 
     info!("seal_commit_phase2:finish: {:?}", sector_id);
-    Ok(out)
+    Ok(SealCommitOutput { proof: buf })
 }
 
 /// Given the specified arguments, this method returns the inputs that were used to
