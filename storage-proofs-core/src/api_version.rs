@@ -112,6 +112,24 @@ impl ApiFeature {
             ApiFeature::SyntheticPoRep | ApiFeature::NonInteractivePoRep => None,
         }
     }
+
+    /// Return the features that are in conflict with the current one.
+    pub fn conflicting_features(&self) -> &[ApiFeature] {
+        match self {
+            ApiFeature::SyntheticPoRep => &[ApiFeature::NonInteractivePoRep],
+            ApiFeature::NonInteractivePoRep => &[ApiFeature::SyntheticPoRep],
+        }
+    }
+}
+
+impl Display for ApiFeature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let api_feature_str = match self {
+            Self::SyntheticPoRep => "synthetic-porep",
+            Self::NonInteractivePoRep => "non-interactive-porep",
+        };
+        write!(f, "{}", api_feature_str)
+    }
 }
 
 #[test]
