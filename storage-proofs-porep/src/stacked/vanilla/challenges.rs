@@ -120,9 +120,47 @@ impl SynthChallenges {
 }
 
 #[derive(Clone, Debug)]
+pub struct NiChallenges {
+    challenges_per_partition: usize,
+}
+
+impl NiChallenges {
+    pub const fn new(challenges_per_partition: usize) -> Self {
+        Self {
+            challenges_per_partition,
+        }
+    }
+
+    pub fn derive<D: Domain>(
+        &self,
+        sector_nodes: usize,
+        replica_id: &D,
+        comm_r: &D,
+        k: u8,
+    ) -> Vec<usize> {
+        const TAG: &[u8] = b"filecoin.io|PoRep|1|NonInteractive|1";
+        let hash_init = Sha256::new()
+            .chain_update(TAG)
+            .chain_update(replica_id.into_bytes())
+            .chain_update(comm_r);
+        (0..self.challenges_per_partition)
+            .map(|i| {
+                let j: u32 = ((self.challenges_per_partition * k as usize) + i) as u32;
+
+                let hash = hash_init.clone().chain_update(j.to_le_bytes()).finalize();
+
+                let bigint = BigUint::from_bytes_le(hash.as_ref());
+                bigint_to_challenge(bigint, sector_nodes)
+            })
+            .collect()
+    }
+}
+
+#[derive(Clone, Debug)]
 pub enum Challenges {
     Interactive(InteractiveChallenges),
     Synth(SynthChallenges),
+    Ni(NiChallenges),
 }
 
 impl Challenges {
@@ -134,12 +172,19 @@ impl Challenges {
         Self::Synth(SynthChallenges::new(challenges_per_partition))
     }
 
+    pub const fn new_non_interactive(challenges_per_partition: usize) -> Self {
+        Self::Ni(NiChallenges::new(challenges_per_partition))
+    }
+
     pub fn num_challenges_per_partition(&self) -> usize {
         match self {
             Self::Interactive(InteractiveChallenges {
                 challenges_per_partition,
             })
             | Self::Synth(SynthChallenges {
+                challenges_per_partition,
+            })
+            | Self::Ni(NiChallenges {
                 challenges_per_partition,
             }) => *challenges_per_partition,
         }
