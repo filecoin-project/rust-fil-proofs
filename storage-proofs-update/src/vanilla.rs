@@ -877,22 +877,10 @@ where
         comm_c: TreeRDomain,
         comm_r_last_old: TreeRDomain,
         new_replica_path: &Path,
-        new_cache_path: &Path,
         sector_key_path: &Path,
-        sector_key_cache_path: &Path,
         staged_data_path: &Path,
         h: usize,
     ) -> Result<(TreeRDomain, TreeRDomain, TreeDDomain)> {
-        // Sanity check all input path types.
-        ensure!(
-            metadata(new_cache_path)?.is_dir(),
-            "new_cache_path must be a directory"
-        );
-        ensure!(
-            metadata(sector_key_cache_path)?.is_dir(),
-            "sector_key_cache_path must be a directory"
-        );
-
         let tree_count = get_base_tree_count::<TreeR>();
         let base_tree_nodes_count = nodes_count / tree_count;
 

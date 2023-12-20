@@ -1,4 +1,5 @@
 use std::cmp;
+use std::fs;
 use std::io::{Read, Write};
 use std::path::Path;
 
@@ -102,10 +103,18 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     info!("encode_into:start");
     let config = SectorUpdateConfig::from_porep_config(porep_config);
 
+    ensure!(
+        fs::metadata(sector_key_cache_path)?.is_dir(),
+        "sector_key_cache_path must be a directory",
+    );
     let p_aux = util::get_p_aux::<Tree>(sector_key_cache_path)?;
     let t_aux =
         util::get_t_aux::<Tree>(sector_key_cache_path, u64::from(porep_config.sector_size))?;
 
+    ensure!(
+        fs::metadata(new_cache_path)?.is_dir(),
+        "new_cache_path must be a directory"
+    );
     let (tree_d_new_config, tree_r_last_new_config) =
         get_new_configs_from_t_aux_old::<Tree>(&t_aux, new_cache_path, config.nodes_count)?;
 
@@ -117,9 +126,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
             <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_c.into_bytes())?,
             <Tree::Hasher as Hasher>::Domain::try_from_bytes(&p_aux.comm_r_last.into_bytes())?,
             new_replica_path,
-            new_cache_path,
             sector_key_path,
-            sector_key_cache_path,
             staged_data_path,
             h_default(config.nodes_count),
         )?;
