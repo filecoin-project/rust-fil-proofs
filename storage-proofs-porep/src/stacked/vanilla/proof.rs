@@ -10,7 +10,7 @@ use bincode::deserialize;
 use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
-use generic_array::typenum::{Unsigned, U0, U11, U2, U8};
+use generic_array::typenum::{Unsigned, U0, U11, U2};
 use lazy_static::lazy_static;
 use log::{error, info, trace};
 use merkletree::{
@@ -1584,15 +1584,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let tree_c_root = match num_layers {
             2 => {
                 let tree_c = Self::generate_tree_c::<U2, Tree::Arity>(
-                    nodes_count,
-                    tree_count,
-                    configs,
-                    &labels,
-                )?;
-                tree_c.root()
-            }
-            8 => {
-                let tree_c = Self::generate_tree_c::<U8, Tree::Arity>(
                     nodes_count,
                     tree_count,
                     configs,
