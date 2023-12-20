@@ -92,7 +92,7 @@ fn get_new_configs_from_t_aux_old<Tree: 'static + MerkleTreeTrait<Hasher = TreeR
 /// new_cache_path).
 #[allow(clippy::too_many_arguments)]
 pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
-    porep_config: &PoRepConfig,
+    config: &SectorUpdateConfig,
     new_replica_path: &Path,
     new_cache_path: &Path,
     sector_key_path: &Path,
@@ -101,15 +101,13 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
     piece_infos: &[PieceInfo],
 ) -> Result<EmptySectorUpdateEncoded> {
     info!("encode_into:start");
-    let config = SectorUpdateConfig::from_porep_config(porep_config);
 
     ensure!(
         fs::metadata(sector_key_cache_path)?.is_dir(),
         "sector_key_cache_path must be a directory",
     );
     let p_aux = util::get_p_aux::<Tree>(sector_key_cache_path)?;
-    let t_aux =
-        util::get_t_aux::<Tree>(sector_key_cache_path, u64::from(porep_config.sector_size))?;
+    let t_aux = util::get_t_aux::<Tree>(sector_key_cache_path, u64::from(config.sector_size))?;
 
     ensure!(
         fs::metadata(new_cache_path)?.is_dir(),
@@ -150,7 +148,7 @@ pub fn encode_into<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>(
         "Invalid all zero commitment (comm_r)"
     );
     ensure!(
-        verify_pieces(&comm_d, piece_infos, porep_config.sector_size)?,
+        verify_pieces(&comm_d, piece_infos, config.sector_size)?,
         "pieces and comm_d do not match"
     );
 

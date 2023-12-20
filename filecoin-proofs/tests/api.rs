@@ -2416,7 +2416,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     f_sealed_sector.set_len(new_replica_target_len)?;
 
     let encoded = encode_into::<Tree>(
-        porep_config,
+        &config,
         new_sealed_sector_file.path(),
         new_cache_dir.path(),
         sealed_sector_file.path(),
@@ -2606,6 +2606,7 @@ fn create_seal_for_upgrade_aggregation<
     let sealed_sector_file = NamedTempFile::new()?;
     let cache_dir = tempdir().expect("failed to create temp dir");
 
+    let config = SectorUpdateConfig::from_porep_config(porep_config);
     let ticket = rng.gen();
     let sector_id = rng.gen::<u64>().into();
 
@@ -2681,7 +2682,7 @@ fn create_seal_for_upgrade_aggregation<
     f_sealed_sector.set_len(new_replica_target_len)?;
 
     let encoded = encode_into::<Tree>(
-        porep_config,
+        &config,
         new_sealed_sector_file.path(),
         new_cache_dir.path(),
         sealed_sector_file.path(),
