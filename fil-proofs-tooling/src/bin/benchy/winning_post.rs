@@ -140,18 +140,12 @@ pub fn run(
     sector_size: usize,
     fake_replica: bool,
     api_version: ApiVersion,
-    use_synthetic: bool,
+    api_features: Vec<ApiFeature>,
 ) -> anyhow::Result<()> {
     info!(
         "Benchy Winning PoSt: sector-size={}, fake_replica={}, api_version={}",
         sector_size, fake_replica, api_version
     );
-
-    let api_features = if use_synthetic {
-        vec![ApiFeature::SyntheticPoRep]
-    } else {
-        Vec::new()
-    };
 
     with_shape!(
         sector_size as u64,

@@ -127,18 +127,12 @@ pub fn run(
     sector_size: usize,
     fake_replica: bool,
     api_version: ApiVersion,
-    use_synthetic_porep: bool,
+    api_features: Vec<ApiFeature>,
 ) -> anyhow::Result<()> {
     info!(
         "Benchy Window PoSt Fake: sector-size={}, fake_replica={}, api_version={}",
         sector_size, fake_replica, api_version
     );
-
-    let api_features = if use_synthetic_porep {
-        vec![ApiFeature::SyntheticPoRep]
-    } else {
-        Vec::new()
-    };
 
     with_shape!(
         sector_size as u64,

@@ -5,9 +5,9 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use byte_unit::Byte;
-use clap::{Arg, Command};
+use clap::{builder::PossibleValuesParser, Arg, ArgMatches, Command};
 
-use storage_proofs_core::api_version::ApiVersion;
+use storage_proofs_core::api_version::{ApiFeature, ApiVersion};
 
 mod hash_fns;
 mod merkleproofs;
@@ -15,6 +15,17 @@ mod porep;
 mod window_post;
 mod window_post_fake;
 mod winning_post;
+
+const API_FEATURES: [&str; 2] = ["synthetic-porep", "non-interactive-porep"];
+
+fn parse_api_features(m: &ArgMatches) -> Result<Vec<ApiFeature>> {
+    match m.get_many::<String>("api_features") {
+        Some(api_features) => api_features
+            .map(|api_feature| ApiFeature::from_str(api_feature))
+            .collect::<Result<_, _>>(),
+        None => Ok(Vec::new()),
+    }
+}
 
 fn main() -> Result<()> {
     fil_logger::init();
@@ -87,10 +98,12 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
-            Arg::new("synthetic")
-                .long("synthetic")
-                .help("Use Synthetic PoRep (default: false)")
-                .takes_value(false),
+            Arg::new("api_features")
+                .long("api-features")
+                .value_delimiter(',')
+                .value_parser(PossibleValuesParser::new(API_FEATURES))
+                .help("The api_features to use, comma separated (e.g. synthetic-porep)")
+                .takes_value(true),
         )
         .arg(
             Arg::new("api_version")
@@ -116,10 +129,12 @@ fn main() -> Result<()> {
                 .takes_value(false),
         )
         .arg(
-            Arg::new("synthetic")
-                .long("synthetic")
-                .help("Use Synthetic PoRep (default: false)")
-                .takes_value(false),
+            Arg::new("api_features")
+                .long("api-features")
+                .value_delimiter(',')
+                .value_parser(PossibleValuesParser::new(API_FEATURES))
+                .help("The api_features to use, comma separated (e.g. synthetic-porep)")
+                .takes_value(true),
         )
         .arg(
             Arg::new("api_version")
@@ -145,10 +160,12 @@ fn main() -> Result<()> {
                 .takes_value(false),
         )
         .arg(
-            Arg::new("synthetic")
-                .long("synthetic")
-                .help("Use Synthetic PoRep (default: false)")
-                .takes_value(false),
+            Arg::new("api_features")
+                .long("api-features")
+                .value_delimiter(',')
+                .value_parser(PossibleValuesParser::new(API_FEATURES))
+                .help("The api_features to use, comma separated (e.g. synthetic-porep)")
+                .takes_value(true),
         )
         .arg(
             Arg::new("api_version")
@@ -229,10 +246,12 @@ fn main() -> Result<()> {
                 .takes_value(true),
         )
         .arg(
-            Arg::new("synthetic")
-                .long("synthetic")
-                .help("Use Synthetic PoRep (default: false)")
-                .takes_value(false),
+            Arg::new("api_features")
+                .long("api-features")
+                .value_delimiter(',')
+                .value_parser(PossibleValuesParser::new(API_FEATURES))
+                .help("The api_features to use, comma separated (e.g. synthetic-porep)")
+                .takes_value(true),
         )
         .arg(
             Arg::new("api_version")
@@ -291,7 +310,7 @@ fn main() -> Result<()> {
             let cache_dir = m.value_of_t::<String>("cache")?;
             let sector_size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;
             let api_version = ApiVersion::from_str(&m.value_of_t::<String>("api_version")?)?;
-            let use_synthetic = m.is_present("synthetic");
+            let api_features = parse_api_features(m)?;
             let task_numbers = m.value_of_t::<usize>("task_numbers")?;
 
             if task_numbers == 1 {
@@ -305,7 +324,7 @@ fn main() -> Result<()> {
                     skip_commit_phase1,
                     skip_commit_phase2,
                     test_resume,
-                    use_synthetic,
+                    api_features,
                 )?;
             } else {
                 let cache_dir: Vec<&str> = cache_dir.split(',').collect();
@@ -315,6 +334,7 @@ fn main() -> Result<()> {
                 let mut children = Vec::new();
                 for dir in cache_dir.iter().take(task_numbers) {
                     let task_dir = String::from(*dir);
+                    let api_features_clone = api_features.clone();
                     let t = std::thread::spawn(move || {
                         window_post::run(
                             sector_size,
@@ -326,7 +346,7 @@ fn main() -> Result<()> {
                             skip_commit_phase1,
                             skip_commit_phase2,
                             test_resume,
-                            use_synthetic,
+                            api_features_clone,
                         )
                         .expect("window_post run error");
                     });
@@ -342,15 +362,15 @@ fn main() -> Result<()> {
             let sector_size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;
             let fake_replica = m.is_present("fake");
             let api_version = ApiVersion::from_str(&m.value_of_t::<String>("api_version")?)?;
-            let use_synthetic = m.is_present("synthetic");
-            winning_post::run(sector_size, fake_replica, api_version, use_synthetic)?;
+            let api_features = parse_api_features(m)?;
+            winning_post::run(sector_size, fake_replica, api_version, api_features)?;
         }
         Some(("window-post-fake", m)) => {
             let sector_size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;
             let fake_replica = m.is_present("fake");
             let api_version = ApiVersion::from_str(&m.value_of_t::<String>("api_version")?)?;
-            let use_synthetic = m.is_present("synthetic");
-            window_post_fake::run(sector_size, fake_replica, api_version, use_synthetic)?;
+            let api_features = parse_api_features(m)?;
+            window_post_fake::run(sector_size, fake_replica, api_version, api_features)?;
         }
         Some(("hash-constraints", _m)) => {
             hash_fns::run()?;
@@ -372,11 +392,12 @@ fn main() -> Result<()> {
             let cache_dir = m.value_of_t::<String>("cache")?;
             let sector_size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;
             let api_version = ApiVersion::from_str(&m.value_of_t::<String>("api_version")?)?;
-            let use_synthetic = m.is_present("synthetic");
+            let api_features = parse_api_features(m)?;
 
             porep::run(
                 sector_size,
                 api_version,
+                api_features,
                 cache_dir,
                 preserve_cache,
                 skip_precommit_phase1,
@@ -384,7 +405,6 @@ fn main() -> Result<()> {
                 skip_commit_phase1,
                 skip_commit_phase2,
                 test_resume,
-                use_synthetic,
             )?;
         }
         _ => unreachable!(),
