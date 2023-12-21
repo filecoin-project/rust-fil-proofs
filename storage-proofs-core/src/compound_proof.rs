@@ -23,7 +23,6 @@ use crate::{
     error::Result,
     multi_proof::MultiProof,
     parameter_cache::{Bls12GrothParams, CacheableParameters, ParameterSetMetadata},
-    partitions::partition_count,
     proof::ProofScheme,
 };
 
@@ -435,7 +434,7 @@ where
         private_inputs: &S::PrivateInputs,
     ) -> Result<(C, Vec<Fr>)> {
         let vanilla_params = &public_parameters.vanilla_params;
-        let partition_count = partition_count(public_parameters.partitions);
+        let partition_count = Self::partition_count(public_parameters);
         let vanilla_proofs = S::prove_all_partitions(
             vanilla_params,
             public_inputs,
@@ -479,7 +478,7 @@ where
         private_inputs: &S::PrivateInputs,
     ) -> Result<Vec<(C, Vec<Fr>)>> {
         let vanilla_params = &public_parameters.vanilla_params;
-        let partition_count = partition_count(public_parameters.partitions);
+        let partition_count = Self::partition_count(public_parameters);
         let vanilla_proofs = S::prove_all_partitions(
             vanilla_params,
             public_inputs,

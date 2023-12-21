@@ -23,7 +23,6 @@ pub mod measurements;
 pub mod merkle;
 pub mod multi_proof;
 pub mod parameter_cache;
-pub mod partitions;
 pub mod pieces;
 pub mod por;
 pub mod proof;
