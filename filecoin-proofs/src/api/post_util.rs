@@ -70,7 +70,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
                     n,
                 );
                 let challenged_leaf = generate_leaf_challenge(
-                    &public_params,
+                    public_params.sector_size,
                     randomness_safe,
                     u64::from(*sector),
                     challenge_index,

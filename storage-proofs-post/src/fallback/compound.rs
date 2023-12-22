@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 use anyhow::{anyhow, ensure};
 use bellperson::Circuit;
 use blstrs::Scalar as Fr;
-use filecoin_hashers::Hasher;
 use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     compound_proof::{CircuitComponent, CompoundProof},
@@ -79,10 +78,10 @@ impl<'a, Tree: 'static + MerkleTreeTrait>
                     pub_params.challenge_count,
                     n,
                 );
-                let challenged_leaf = generate_leaf_challenge_inner::<
-                    <Tree::Hasher as Hasher>::Domain,
-                >(
-                    challenge_hasher.clone(), pub_params, challenge_index
+                let challenged_leaf = generate_leaf_challenge_inner(
+                    challenge_hasher.clone(),
+                    pub_params.sector_size,
+                    challenge_index,
                 );
 
                 let por_pub_inputs = por::PublicInputs {

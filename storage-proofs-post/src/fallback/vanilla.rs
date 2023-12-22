@@ -208,7 +208,7 @@ pub fn generate_sector_challenge<T: Domain>(
 
 /// Generates challenge, such that the range fits into the sector.
 pub fn generate_leaf_challenge<T: Domain>(
-    pub_params: &PublicParams,
+    sector_size: u64,
     randomness: T,
     sector_id: u64,
     leaf_challenge_index: u64,
@@ -217,12 +217,12 @@ pub fn generate_leaf_challenge<T: Domain>(
     hasher.update(AsRef::<[u8]>::as_ref(&randomness));
     hasher.update(&sector_id.to_le_bytes()[..]);
 
-    generate_leaf_challenge_inner::<T>(hasher, pub_params, leaf_challenge_index)
+    generate_leaf_challenge_inner(hasher, sector_size, leaf_challenge_index)
 }
 
-pub fn generate_leaf_challenge_inner<T: Domain>(
+pub(crate) fn generate_leaf_challenge_inner(
     mut hasher: Sha256,
-    pub_params: &PublicParams,
+    sector_size: u64,
     leaf_challenge_index: u64,
 ) -> u64 {
     hasher.update(&leaf_challenge_index.to_le_bytes()[..]);
@@ -230,7 +230,7 @@ pub fn generate_leaf_challenge_inner<T: Domain>(
 
     let leaf_challenge = LittleEndian::read_u64(&hash[..8]);
 
-    leaf_challenge % (pub_params.sector_size / NODE_SIZE as u64)
+    leaf_challenge % (sector_size / NODE_SIZE as u64)
 }
 
 // Generates a single vanilla proof, given the private inputs and sector challenges.
@@ -389,11 +389,9 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                                     pub_params.challenge_count,
                                     n,
                                 );
-                                let challenged_leaf = generate_leaf_challenge_inner::<
-                                    <Tree::Hasher as Hasher>::Domain,
-                                >(
+                                let challenged_leaf = generate_leaf_challenge_inner(
                                     challenge_hasher.clone(),
-                                    pub_params,
+                                    pub_params.sector_size,
                                     challenge_index,
                                 );
                                 let proof = tree.gen_cached_proof(
@@ -621,12 +619,11 @@ impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> 
                             pub_params.challenge_count,
                             n,
                         );
-                        let challenged_leaf =
-                            generate_leaf_challenge_inner::<<Tree::Hasher as Hasher>::Domain>(
-                                challenge_hasher.clone(),
-                                pub_params,
-                                challenge_index,
-                            );
+                        let challenged_leaf = generate_leaf_challenge_inner(
+                            challenge_hasher.clone(),
+                            pub_params.sector_size,
+                            challenge_index,
+                        );
 
                         // validate all comm_r_lasts match
                         if inclusion_proof.root() != comm_r_last {
