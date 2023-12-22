@@ -1,5 +1,5 @@
 use anyhow::{ensure, Result};
-use storage_proofs_core::{api_version::ApiFeature, proof::ProofScheme};
+use storage_proofs_core::{api_version::ApiFeature, proof::ProofScheme, util};
 use storage_proofs_porep::stacked::{self, Challenges, StackedDrg};
 use storage_proofs_post::fallback::{self, FallbackPoSt};
 
@@ -102,18 +102,12 @@ pub fn setup_params(porep_config: &PoRepConfig) -> Result<stacked::SetupParams> 
     })
 }
 
-/// Division of x by y, rounding up.
-/// x and y must be > 0
-const fn div_ceil(x: usize, y: usize) -> usize {
-    1 + ((x - 1) / y)
-}
-
 fn select_challenges(
     partitions: usize,
     minimum_total_challenges: usize,
     features: &[ApiFeature],
 ) -> Challenges {
-    let challenges = div_ceil(minimum_total_challenges, partitions);
+    let challenges = util::div_ceil(minimum_total_challenges, partitions);
     assert!(challenges <= usize::from(MAX_CHALLENGES_PER_PARTITION));
 
     if features.contains(&ApiFeature::SyntheticPoRep) {

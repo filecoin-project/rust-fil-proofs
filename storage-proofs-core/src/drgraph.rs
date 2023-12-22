@@ -16,7 +16,7 @@ use crate::{
     crypto::{derive_porep_domain_seed, DRSAMPLE_DST},
     error::Result,
     parameter_cache::ParameterSetMetadata,
-    util::{data_at_node_offset, NODE_SIZE},
+    util::{self, data_at_node_offset, NODE_SIZE},
     PoRepID,
 };
 
@@ -161,7 +161,7 @@ impl<H: Hasher> Graph<H> for BucketGraph<H> {
                 let m_prime = m - 1;
                 // Large sector sizes require that metagraph node indexes are `u64`.
                 let metagraph_node = node as u64 * m_prime as u64;
-                let n_buckets = (metagraph_node as f64).log2().ceil() as u64;
+                let n_buckets = util::log2_ceil(metagraph_node) as u64;
 
                 let (predecessor_index, other_drg_parents) = match self.api_version {
                     ApiVersion::V1_0_0 => (m_prime, &mut parents[..]),

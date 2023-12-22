@@ -181,6 +181,24 @@ pub fn default_rows_to_discard(leafs: usize, arity: usize) -> usize {
     }
 }
 
+/// Division of x by y, rounding up.
+/// x and y must be > 0
+/// TODO vmx 2023-12-22: use `usize::div_ceil()` instead once we upgrade to Rust 1.73.
+pub const fn div_ceil(x: usize, y: usize) -> usize {
+    1 + ((x - 1) / y)
+}
+
+/// Log2, rounding up.
+/// Number must be > 0, else it panics.
+pub const fn log2_ceil(x: u64) -> u32 {
+    let floored = x.ilog2();
+    if x.is_power_of_two() {
+        floored
+    } else {
+        floored + 1
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

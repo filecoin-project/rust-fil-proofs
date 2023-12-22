@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::{anyhow, ensure, Context, Result};
 use filecoin_hashers::Hasher;
 use log::{debug, info};
-use storage_proofs_core::{merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId};
+use storage_proofs_core::{merkle::MerkleTreeTrait, proof::ProofScheme, sector::SectorId, util};
 use storage_proofs_post::fallback::{
     self, generate_leaf_challenge, get_challenge_index, FallbackPoSt, SectorProof,
 };
@@ -218,7 +218,7 @@ pub(crate) fn get_partitions_for_window_post(
     total_sector_count: usize,
     post_config: &PoStConfig,
 ) -> Option<usize> {
-    let partitions = (total_sector_count as f32 / post_config.sector_count as f32).ceil() as usize;
+    let partitions = util::div_ceil(total_sector_count, post_config.sector_count);
 
     if partitions > 1 {
         Some(partitions)
@@ -353,7 +353,7 @@ pub fn merge_window_post_partition_proofs(
 pub fn get_num_partition_for_fallback_post(config: &PoStConfig, num_sectors: usize) -> usize {
     match config.typ {
         PoStType::Window => {
-            let partitions = (num_sectors as f32 / config.sector_count as f32).ceil() as usize;
+            let partitions = util::div_ceil(num_sectors, config.sector_count);
             if partitions > 1 {
                 partitions
             } else {

@@ -8,7 +8,7 @@ use merkletree::merkle::next_pow2;
 use crate::{
     error::{Error, Result},
     merkle::BinaryMerkleTree,
-    util::NODE_SIZE,
+    util::{self, NODE_SIZE},
 };
 
 /// `position`, `length` are in H::Domain units
@@ -55,7 +55,7 @@ pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
 
     let mut buf = [0; NODE_SIZE];
 
-    let parts = (padded_piece_size as f64 / NODE_SIZE as f64).ceil() as usize;
+    let parts = util::div_ceil(padded_piece_size, NODE_SIZE);
 
     let tree = BinaryMerkleTree::<H>::try_from_iter((0..parts).map(|_| {
         source.read_exact(&mut buf)?;
@@ -83,7 +83,7 @@ fn height_for_length(n: usize) -> usize {
     if n == 0 {
         0
     } else {
-        (n as f64).log2().ceil() as usize
+        util::log2_ceil(n as u64) as usize
     }
 }
 

@@ -354,7 +354,7 @@ mod tests {
     }
 
     fn validate_fr32(bytes: &[u8]) {
-        let chunks = (bytes.len() as f64 / 32_f64).ceil() as usize;
+        let chunks = div_ceil(bytes.len(), 32);
         for (i, chunk) in bytes.chunks(32).enumerate() {
             let _ = bytes_into_fr(chunk).unwrap_or_else(|_| {
                 panic!(

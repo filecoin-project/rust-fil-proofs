@@ -1,6 +1,7 @@
 use blstrs::Scalar as Fr;
 use ff::{PrimeField, PrimeFieldBits};
 use neptune::poseidon::Poseidon;
+use storage_proofs_core::util;
 
 use crate::constants::{
     challenge_count, partition_count, TreeRDomain, POSEIDON_CONSTANTS_GEN_RANDOMNESS,
@@ -46,8 +47,7 @@ impl Challenges {
         let partition_bits = (k << random_bits_per_challenge) as u32;
 
         let challenge_count = challenge_count(sector_nodes);
-        let digests_per_partition =
-            (challenge_count as f32 / challenges_per_digest as f32).ceil() as usize;
+        let digests_per_partition = util::div_ceil(challenge_count, challenges_per_digest);
         let digest_index_all_partitions = k * digests_per_partition;
 
         Challenges {

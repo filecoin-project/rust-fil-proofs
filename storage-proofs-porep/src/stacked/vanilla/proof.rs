@@ -32,7 +32,7 @@ use storage_proofs_core::{
         MerkleTreeTrait,
     },
     settings::SETTINGS,
-    util::{default_rows_to_discard, NODE_SIZE},
+    util::{self, default_rows_to_discard, NODE_SIZE},
 };
 use yastl::Pool;
 
@@ -1018,7 +1018,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     let num_chunks = if n > nodes_count * 2 { 1 } else { n };
 
                     // chunk into n chunks
-                    let chunk_size = (nodes_count as f64 / num_chunks as f64).ceil() as usize;
+                    let chunk_size = util::div_ceil(nodes_count, num_chunks);
 
                     // calculate all n chunks in parallel
                     for (chunk, hashes_chunk) in hashes.chunks_mut(chunk_size).enumerate() {

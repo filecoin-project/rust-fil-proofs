@@ -10,7 +10,7 @@ use blstrs::Scalar as Fr;
 use ff::{Field, PrimeField};
 use filecoin_hashers::{HashFunction, Hasher};
 use neptune::circuit::poseidon_hash;
-use storage_proofs_core::gadgets::por::por_no_challenge_input;
+use storage_proofs_core::{gadgets::por::por_no_challenge_input, util};
 
 use crate::constants::{TreeD, TreeDHasher, POSEIDON_CONSTANTS_GEN_RANDOMNESS};
 
@@ -100,7 +100,7 @@ pub fn gen_challenge_bits<CS: ConstraintSystem<Fr>>(
     let challenges_per_digest = Fr::CAPACITY as usize / bits_per_challenge;
 
     // The number of digests generated per partition.
-    let digests_per_partition = (challenges as f32 / challenges_per_digest as f32).ceil() as u64;
+    let digests_per_partition = util::div_ceil(challenges, challenges_per_digest) as u64;
 
     let mut generated_bits = Vec::with_capacity(challenges);
 
