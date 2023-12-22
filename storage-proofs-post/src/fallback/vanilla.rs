@@ -206,28 +206,6 @@ pub fn generate_sector_challenge<T: Domain>(
     Ok(sector_index)
 }
 
-/// Generate all challenged leaf ranges for a single sector, such that the range fits into the sector.
-pub fn generate_leaf_challenges<T: Domain>(
-    pub_params: &PublicParams,
-    randomness: T,
-    sector_id: u64,
-    challenge_count: usize,
-) -> Vec<u64> {
-    let mut challenges = Vec::with_capacity(challenge_count);
-
-    let mut hasher = Sha256::new();
-    hasher.update(AsRef::<[u8]>::as_ref(&randomness));
-    hasher.update(&sector_id.to_le_bytes()[..]);
-
-    for challenge_index in 0..challenge_count {
-        let challenge =
-            generate_leaf_challenge_inner::<T>(hasher.clone(), pub_params, challenge_index as u64);
-        challenges.push(challenge)
-    }
-
-    challenges
-}
-
 /// Generates challenge, such that the range fits into the sector.
 pub fn generate_leaf_challenge<T: Domain>(
     pub_params: &PublicParams,
