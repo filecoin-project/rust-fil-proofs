@@ -6,7 +6,10 @@ use filecoin_proofs::{constants, with_shape, PoRepConfig, PoRepProofPartitions};
 use log::info;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
-    api_version::ApiVersion, merkle::MerkleTreeTrait, parameter_cache, util::NODE_SIZE,
+    api_version::ApiVersion,
+    merkle::MerkleTreeTrait,
+    parameter_cache,
+    util::{self, NODE_SIZE},
 };
 use storage_proofs_porep::stacked::DEFAULT_SYNTH_CHALLENGE_COUNT;
 
@@ -26,12 +29,6 @@ struct DefaultValuesOutput {
     parameters_path: String,
     srs_key_path: String,
     verifying_key_path: String,
-}
-
-/// Division of x by y, rounding up.
-/// x and y must be > 0
-const fn div_ceil(x: usize, y: usize) -> usize {
-    1 + ((x - 1) / y)
 }
 
 /// Returns the parameters and verifying key path.
@@ -69,7 +66,7 @@ fn main() -> Result<()> {
         constants::get_porep_interactive_partitions(params.sector_size);
     let num_interactive_porep_minimum_challenges =
         constants::get_porep_interactive_minimum_challenges(params.sector_size);
-    let num_challenges_per_partition = div_ceil(
+    let num_challenges_per_partition = util::div_ceil(
         num_interactive_porep_minimum_challenges,
         num_interactive_porep_partitions.into(),
     );
