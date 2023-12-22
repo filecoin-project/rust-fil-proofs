@@ -2,7 +2,7 @@ use std::{cmp, path::PathBuf};
 
 use anyhow::Result;
 use fil_proofs_bin::cli;
-use filecoin_proofs::{constants, with_shape, PoRepConfig, PoRepProofPartitions};
+use filecoin_proofs::{constants, with_shape, PoRepConfig, PoRepProofPartitions, WINDOW_POST_CHALLENGE_COUNT};
 use log::info;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
@@ -25,6 +25,7 @@ struct DefaultValuesOutput {
     num_non_interactive_porep_partitions: u8,
     num_interactive_porep_partitions: u8,
     num_synth_porep_challenges: usize,
+    num_window_post_challenges: usize,
     num_window_post_sectors: usize,
     parameters_path: String,
     srs_key_path: String,
@@ -70,6 +71,7 @@ fn main() -> Result<()> {
         num_interactive_porep_minimum_challenges,
         num_interactive_porep_partitions.into(),
     );
+    let num_window_post_challenges = WINDOW_POST_CHALLENGE_COUNT;
     let num_window_post_sectors = constants::get_window_post_sector_count(params.sector_size);
     let sector_nodes = params.sector_size as usize / NODE_SIZE;
     let num_synth_porep_challenges = cmp::min(sector_nodes, DEFAULT_SYNTH_CHALLENGE_COUNT);
@@ -89,6 +91,7 @@ fn main() -> Result<()> {
         num_challenges_per_partition,
         num_non_interactive_porep_partitions,
         num_interactive_porep_partitions,
+        num_window_post_challenges,
         num_window_post_sectors,
         num_synth_porep_challenges,
         parameters_path: parameters_path.to_string_lossy().to_string(),
