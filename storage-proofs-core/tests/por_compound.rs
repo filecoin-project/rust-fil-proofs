@@ -57,7 +57,7 @@ fn por_compound<Tree: 'static + MerkleTreeTrait>() {
             leaves,
             private: false,
         },
-        partitions: None,
+        partitions: 1,
         priority: false,
     };
     let public_params = PoRCompound::<Tree>::setup(&setup_params).expect("setup failed");
@@ -168,7 +168,7 @@ fn por_compound_private_root<Tree: 'static + MerkleTreeTrait>() {
                 leaves,
                 private: true,
             },
-            partitions: None,
+            partitions: 1,
             priority: false,
         };
         let public_params =

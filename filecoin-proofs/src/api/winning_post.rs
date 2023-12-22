@@ -50,7 +50,7 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
 
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
-        partitions: None,
+        partitions: 1,
         priority: post_config.priority,
     };
     let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
@@ -72,12 +72,11 @@ pub fn generate_winning_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         k: None,
     };
 
-    let partitions = pub_params.partitions.unwrap_or(1);
     let partitioned_proofs = partition_vanilla_proofs(
         post_config,
         &pub_params.vanilla_params,
         &pub_inputs,
-        partitions,
+        pub_params.partitions,
         &vanilla_proofs,
     )?;
 
@@ -121,7 +120,7 @@ pub fn generate_winning_post<Tree: 'static + MerkleTreeTrait>(
 
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
-        partitions: None,
+        partitions: 1,
         priority: post_config.priority,
     };
     let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
@@ -248,7 +247,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
 
     let setup_params = compound_proof::SetupParams {
         vanilla_params,
-        partitions: None,
+        partitions: 1,
         priority: false,
     };
     let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
@@ -277,7 +276,7 @@ pub fn verify_winning_post<Tree: 'static + MerkleTreeTrait>(
     let is_valid = {
         let verifying_key = get_post_verifying_key::<Tree>(post_config)?;
 
-        let single_proof = MultiProof::new_from_reader(None, proof, &verifying_key)?;
+        let single_proof = MultiProof::new_from_reader(1, proof, &verifying_key)?;
         if single_proof.len() != 1 {
             return Ok(false);
         }

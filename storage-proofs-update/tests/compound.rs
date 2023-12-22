@@ -171,7 +171,7 @@ where
     let partition_count = partition_count(sector_nodes);
     let setup_params_compound = compound_proof::SetupParams {
         vanilla_params: SetupParams { sector_bytes },
-        partitions: Some(partition_count),
+        partitions: partition_count,
         priority: true,
     };
     let pub_params_compound =

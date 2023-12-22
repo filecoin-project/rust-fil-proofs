@@ -35,7 +35,8 @@ const MAX_GROTH16_BATCH_SIZE: usize = 10;
 #[derive(Clone)]
 pub struct SetupParams<'a, S: ProofScheme<'a>> {
     pub vanilla_params: <S as ProofScheme<'a>>::SetupParams,
-    pub partitions: Option<usize>,
+    /// There must always be at least one partition.
+    pub partitions: usize,
     /// High priority (always runs on GPU) == true
     pub priority: bool,
 }
@@ -43,7 +44,8 @@ pub struct SetupParams<'a, S: ProofScheme<'a>> {
 #[derive(Clone)]
 pub struct PublicParams<'a, S: ProofScheme<'a>> {
     pub vanilla_params: S::PublicParams,
-    pub partitions: Option<usize>,
+    /// There must always be at least one partition.
+    pub partitions: usize,
     pub priority: bool,
 }
 
@@ -76,14 +78,6 @@ where
         })
     }
 
-    fn partition_count(public_params: &PublicParams<'a, S>) -> usize {
-        match public_params.partitions {
-            None => 1,
-            Some(0) => panic!("cannot specify zero partitions"),
-            Some(k) => k,
-        }
-    }
-
     /// prove is equivalent to ProofScheme::prove.
     fn prove(
         pub_params: &PublicParams<'a, S>,
@@ -91,14 +85,16 @@ where
         priv_in: &S::PrivateInputs,
         groth_params: &Bls12GrothParams,
     ) -> Result<Vec<groth16::Proof<Bls12>>> {
-        let partition_count = Self::partition_count(pub_params);
-
         // This will always run at least once, since there cannot be zero partitions.
-        ensure!(partition_count > 0, "There must be partitions");
+        ensure!(pub_params.partitions > 0, "There must be partitions");
 
         info!("vanilla_proofs:start");
-        let vanilla_proofs =
-            S::prove_all_partitions(&pub_params.vanilla_params, pub_in, priv_in, partition_count)?;
+        let vanilla_proofs = S::prove_all_partitions(
+            &pub_params.vanilla_params,
+            pub_in,
+            priv_in,
+            pub_params.partitions,
+        )?;
 
         info!("vanilla_proofs:finish");
 
@@ -125,10 +121,8 @@ where
         vanilla_proofs: Vec<S::Proof>,
         groth_params: &Bls12GrothParams,
     ) -> Result<Vec<groth16::Proof<Bls12>>> {
-        let partition_count = Self::partition_count(pub_params);
-
         // This will always run at least once, since there cannot be zero partitions.
-        ensure!(partition_count > 0, "There must be partitions");
+        ensure!(pub_params.partitions > 0, "There must be partitions");
 
         info!("snark_proof:start");
         let groth_proofs = Self::circuit_proofs(
@@ -151,7 +145,7 @@ where
         requirements: &S::Requirements,
     ) -> Result<bool> {
         ensure!(
-            multi_proof.circuit_proofs.len() == Self::partition_count(public_params),
+            multi_proof.circuit_proofs.len() == public_params.partitions,
             "Inconsistent inputs"
         );
 
@@ -189,7 +183,7 @@ where
         );
         for proof in multi_proofs {
             ensure!(
-                proof.circuit_proofs.len() == Self::partition_count(public_params),
+                proof.circuit_proofs.len() == public_params.partitions,
                 "Inconsistent inputs"
             );
         }
@@ -434,17 +428,16 @@ where
         private_inputs: &S::PrivateInputs,
     ) -> Result<(C, Vec<Fr>)> {
         let vanilla_params = &public_parameters.vanilla_params;
-        let partition_count = Self::partition_count(public_parameters);
         let vanilla_proofs = S::prove_all_partitions(
             vanilla_params,
             public_inputs,
             private_inputs,
-            partition_count,
+            public_parameters.partitions,
         )
         .context("failed to generate partition proofs")?;
 
         ensure!(
-            vanilla_proofs.len() == partition_count,
+            vanilla_proofs.len() == public_parameters.partitions,
             "Vanilla proofs didn't match number of partitions."
         );
 
@@ -478,17 +471,16 @@ where
         private_inputs: &S::PrivateInputs,
     ) -> Result<Vec<(C, Vec<Fr>)>> {
         let vanilla_params = &public_parameters.vanilla_params;
-        let partition_count = Self::partition_count(public_parameters);
         let vanilla_proofs = S::prove_all_partitions(
             vanilla_params,
             public_inputs,
             private_inputs,
-            partition_count,
+            public_parameters.partitions,
         )
         .context("failed to generate partition proofs")?;
 
         ensure!(
-            vanilla_proofs.len() == partition_count,
+            vanilla_proofs.len() == public_parameters.partitions,
             "Vanilla proofs didn't match number of partitions."
         );
 
@@ -498,7 +490,7 @@ where
 
         ensure!(partitions_are_verified, "Vanilla proof didn't verify.");
 
-        let mut res = Vec::with_capacity(partition_count);
+        let mut res = Vec::with_capacity(public_parameters.partitions);
         for (partition, vanilla_proof) in vanilla_proofs.iter().enumerate() {
             let partition_pub_in = S::with_partition(public_inputs.clone(), Some(partition));
             let inputs =

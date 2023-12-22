@@ -34,7 +34,7 @@ fn test_rational_post_compound<Tree: 'static + MerkleTreeTrait>() {
             sector_size,
             challenges_count,
         },
-        partitions: None,
+        partitions: 1,
         priority: true,
     };
 

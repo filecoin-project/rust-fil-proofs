@@ -43,7 +43,7 @@ fn test_election_post_compound<Tree: 'static + MerkleTreeTrait>() {
             challenge_count: 20,
             challenged_nodes: 1,
         },
-        partitions: None,
+        partitions: 1,
         priority: true,
     };
 

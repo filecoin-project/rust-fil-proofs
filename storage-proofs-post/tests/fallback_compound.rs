@@ -87,7 +87,7 @@ fn fallback_post<Tree: 'static + MerkleTreeTrait>(
             sector_count,
             api_version,
         },
-        partitions: Some(partitions),
+        partitions,
         priority: false,
     };
 

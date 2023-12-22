@@ -55,8 +55,6 @@ pub fn generate_window_post_with_vanilla<Tree: 'static + MerkleTreeTrait>(
         priority: post_config.priority,
     };
 
-    let partitions = partitions.unwrap_or(1);
-
     let pub_params: compound_proof::PublicParams<'_, FallbackPoSt<'_, Tree>> =
         FallbackPoStCompound::setup(&setup_params)?;
     let groth_params = get_post_params::<Tree>(post_config)?;

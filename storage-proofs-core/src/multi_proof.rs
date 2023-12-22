@@ -25,13 +25,11 @@ impl<'a> MultiProof<'a> {
     }
 
     pub fn new_from_reader<R: Read>(
-        partitions: Option<usize>,
+        partitions: usize,
         mut reader: R,
         verifying_key: &'a PreparedVerifyingKey<Bls12>,
     ) -> Result<Self> {
-        let num_proofs = partitions.unwrap_or(1);
-
-        let mut proof_vec: Vec<u8> = Vec::with_capacity(num_proofs * GROTH_PROOF_SIZE);
+        let mut proof_vec: Vec<u8> = Vec::with_capacity(partitions * GROTH_PROOF_SIZE);
         reader.read_to_end(&mut proof_vec)?;
 
         Self::new_from_bytes(partitions, &proof_vec, verifying_key)
@@ -39,18 +37,16 @@ impl<'a> MultiProof<'a> {
 
     // Parallelizing reduces deserialization time for 10 proofs from 13ms to 2ms.
     pub fn new_from_bytes(
-        partitions: Option<usize>,
+        partitions: usize,
         proof_bytes: &[u8],
         verifying_key: &'a PreparedVerifyingKey<Bls12>,
     ) -> Result<Self> {
-        let num_proofs = partitions.unwrap_or(1);
-
-        let proofs = groth16::Proof::read_many(proof_bytes, num_proofs)?;
+        let proofs = groth16::Proof::read_many(proof_bytes, partitions)?;
 
         ensure!(
-            num_proofs == proofs.len(),
+            partitions == proofs.len(),
             "expected {} proofs but found only {}",
-            num_proofs,
+            partitions,
             proofs.len()
         );
 

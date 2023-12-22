@@ -94,7 +94,7 @@ fn snark_proof_verify<Tree: 'static + MerkleTreeTrait>(
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params,
-        partitions: Some(num_partitions),
+        partitions: num_partitions,
         priority: false,
     };
 

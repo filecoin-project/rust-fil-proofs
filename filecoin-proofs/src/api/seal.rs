@@ -130,7 +130,7 @@ where
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(porep_config)?,
-        partitions: Some(usize::from(porep_config.partitions)),
+        partitions: usize::from(porep_config.partitions),
         priority: false,
     };
 
@@ -276,7 +276,7 @@ where
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(porep_config)?,
-        partitions: Some(usize::from(porep_config.partitions)),
+        partitions: usize::from(porep_config.partitions),
         priority: false,
     };
 
@@ -452,7 +452,7 @@ pub fn seal_commit_phase1_inner<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(porep_config)?,
-        partitions: Some(usize::from(porep_config.partitions)),
+        partitions: usize::from(porep_config.partitions),
         priority: false,
     };
 
@@ -465,7 +465,7 @@ pub fn seal_commit_phase1_inner<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
         &compound_public_params.vanilla_params,
         &public_inputs,
         &private_inputs,
-        StackedCompound::partition_count(&compound_public_params),
+        compound_public_params.partitions,
     )?;
 
     let sanity_check = StackedDrg::<Tree, DefaultPieceHasher>::verify_all_partitions(
@@ -541,7 +541,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(porep_config)?,
-        partitions: Some(usize::from(porep_config.partitions)),
+        partitions: usize::from(porep_config.partitions),
         priority: false,
     };
 
@@ -648,9 +648,10 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
         seed: Some(seed),
     };
 
+    let partitions = usize::from(porep_config.partitions);
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(porep_config)?,
-        partitions: Some(usize::from(porep_config.partitions)),
+        partitions,
         priority: false,
     };
 
@@ -658,11 +659,6 @@ pub fn get_seal_inputs<Tree: 'static + MerkleTreeTrait>(
         StackedDrg<'_, Tree, DefaultPieceHasher>,
         _,
     >>::setup(&compound_setup_params)?;
-
-    let partitions = <StackedCompound<Tree, DefaultPieceHasher> as CompoundProof<
-        StackedDrg<'_, Tree, DefaultPieceHasher>,
-        _,
-    >>::partition_count(&compound_public_params);
 
     // These are returned for aggregated proof verification.
     let inputs: Vec<_> = (0..partitions)
@@ -712,7 +708,7 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
             .try_fold(Vec::new(), |mut acc, commit_output| -> Result<_> {
                 acc.extend(
                     MultiProof::new_from_reader(
-                        Some(partitions),
+                        partitions,
                         &commit_output.proof[..],
                         &verifying_key,
                     )?
@@ -940,7 +936,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(porep_config)?,
-        partitions: Some(usize::from(porep_config.partitions)),
+        partitions: usize::from(porep_config.partitions),
         priority: false,
     };
 
@@ -967,7 +963,7 @@ pub fn verify_seal<Tree: 'static + MerkleTreeTrait>(
         );
 
         let proof = MultiProof::new_from_reader(
-            Some(usize::from(porep_config.partitions)),
+            usize::from(porep_config.partitions),
             proof_vec,
             &verifying_key,
         )?;
@@ -1046,7 +1042,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
 
     let compound_setup_params = compound_proof::SetupParams {
         vanilla_params: setup_params(porep_config)?,
-        partitions: Some(usize::from(porep_config.partitions)),
+        partitions: usize::from(porep_config.partitions),
         priority: false,
     };
 
@@ -1080,7 +1076,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
             k: None,
         });
         proofs.push(MultiProof::new_from_reader(
-            Some(usize::from(porep_config.partitions)),
+            usize::from(porep_config.partitions),
             proof_vecs[i],
             &verifying_key,
         )?);

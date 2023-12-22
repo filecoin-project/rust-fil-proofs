@@ -541,7 +541,7 @@ pub fn generate_empty_sector_update_proof_with_vanilla<
         vanilla_params: SetupParams {
             sector_bytes: u64::from(config.sector_size),
         },
-        partitions: Some(partitions),
+        partitions,
         priority: false,
     };
     let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
@@ -609,7 +609,7 @@ pub fn generate_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher
         vanilla_params: SetupParams {
             sector_bytes: u64::from(config.sector_size),
         },
-        partitions: Some(partitions),
+        partitions,
         priority: false,
     };
     let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
@@ -655,13 +655,13 @@ pub fn verify_empty_sector_update_proof<Tree: 'static + MerkleTreeTrait<Hasher =
         vanilla_params: SetupParams {
             sector_bytes: u64::from(config.sector_size),
         },
-        partitions: Some(partitions),
+        partitions,
         priority: true,
     };
     let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;
 
     let verifying_key = get_empty_sector_update_verifying_key::<Tree>(porep_config)?;
-    let multi_proof = MultiProof::new_from_bytes(Some(partitions), proof_bytes, &verifying_key)?;
+    let multi_proof = MultiProof::new_from_bytes(partitions, proof_bytes, &verifying_key)?;
     let valid =
         EmptySectorUpdateCompound::verify(&pub_params_compound, &public_inputs, &multi_proof, &())?;
 
@@ -727,7 +727,7 @@ pub fn get_sector_update_inputs<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHa
         vanilla_params: SetupParams {
             sector_bytes: u64::from(config.sector_size),
         },
-        partitions: Some(partitions),
+        partitions,
         priority: false,
     };
     let pub_params_compound = EmptySectorUpdateCompound::<Tree>::setup(&setup_params_compound)?;

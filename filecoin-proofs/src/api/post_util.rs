@@ -45,9 +45,7 @@ pub fn generate_fallback_sector_challenges<Tree: 'static + MerkleTreeTrait>(
 
     let num_sectors_per_chunk = post_config.sector_count;
     let partitions = match post_config.typ {
-        PoStType::Window => {
-            get_partitions_for_window_post(pub_sectors.len(), post_config).unwrap_or(1)
-        }
+        PoStType::Window => get_partitions_for_window_post(pub_sectors.len(), post_config),
         PoStType::Winning => 1,
     };
 
@@ -217,14 +215,8 @@ pub fn partition_vanilla_proofs<Tree: MerkleTreeTrait>(
 pub(crate) fn get_partitions_for_window_post(
     total_sector_count: usize,
     post_config: &PoStConfig,
-) -> Option<usize> {
-    let partitions = util::div_ceil(total_sector_count, post_config.sector_count);
-
-    if partitions > 1 {
-        Some(partitions)
-    } else {
-        None
-    }
+) -> usize {
+    util::div_ceil(total_sector_count, post_config.sector_count)
 }
 
 pub fn single_partition_vanilla_proofs<Tree: MerkleTreeTrait>(

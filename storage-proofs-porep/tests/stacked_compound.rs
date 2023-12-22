@@ -73,7 +73,7 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
             api_version: ApiVersion::V1_1_0,
             api_features: vec![],
         },
-        partitions: Some(partition_count),
+        partitions: partition_count,
         priority: false,
     };
 
