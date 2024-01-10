@@ -2,7 +2,9 @@ use std::{cmp, path::PathBuf};
 
 use anyhow::Result;
 use fil_proofs_bin::cli;
-use filecoin_proofs::{constants, with_shape, PoRepConfig, PoRepProofPartitions, WINDOW_POST_CHALLENGE_COUNT};
+use filecoin_proofs::{
+    constants, with_shape, PoRepConfig, PoRepProofPartitions, WINDOW_POST_CHALLENGE_COUNT,
+};
 use log::info;
 use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
