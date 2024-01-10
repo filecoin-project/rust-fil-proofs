@@ -113,14 +113,15 @@ pub struct Proof<P: MerkleProofTrait> {
     pub sectors: Vec<SectorProof<P>>,
 }
 
+type MerkleProofs<Proof> = Vec<MerkleProof<<Proof as MerkleProofTrait>::Hasher, <Proof as MerkleProofTrait>::Arity, <Proof as MerkleProofTrait>::SubTreeArity, <Proof as MerkleProofTrait>::TopTreeArity>>;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SectorProof<Proof: MerkleProofTrait> {
     #[serde(bound(
         serialize = "MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>: Serialize",
         deserialize = "MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>: DeserializeOwned"
     ))]
-    pub inclusion_proofs:
-        Vec<MerkleProof<Proof::Hasher, Proof::Arity, Proof::SubTreeArity, Proof::TopTreeArity>>,
+    pub inclusion_proofs: MerkleProofs<Proof>,
     pub comm_c: <Proof::Hasher as Hasher>::Domain,
     pub comm_r_last: <Proof::Hasher as Hasher>::Domain,
 }
@@ -234,21 +235,18 @@ pub(crate) fn generate_leaf_challenge_inner(
 }
 
 // Generates a single vanilla proof, given the private inputs and sector challenges.
-pub fn vanilla_proof<Tree: MerkleTreeTrait>(
+pub fn inclusion_proofs<Tree: MerkleTreeTrait>(
     sector_id: SectorId,
-    priv_inputs: &PrivateInputs<'_, Tree>,
+    tree: &MerkleTreeWrapper<
+        Tree::Hasher,
+        Tree::Store,
+        Tree::Arity,
+        Tree::SubTreeArity,
+        Tree::TopTreeArity,
+    >,
     challenges: &[u64],
-) -> Result<Proof<Tree::Proof>> {
-    ensure!(
-        priv_inputs.sectors.len() == 1,
-        "vanilla_proof called with multiple sector proofs"
-    );
-
-    let priv_sector = &priv_inputs.sectors[0];
-    let comm_c = priv_sector.comm_c;
-    let comm_r_last = priv_sector.comm_r_last;
-    let tree = priv_sector.tree;
-
+    comm_r_last: <Tree::Hasher as Hasher>::Domain,
+) -> Result<MerkleProofs<Tree::Proof>> {
     let tree_leafs = tree.leafs();
     let rows_to_discard = default_rows_to_discard(tree_leafs, Tree::Arity::to_usize());
 
@@ -266,7 +264,7 @@ pub fn vanilla_proof<Tree: MerkleTreeTrait>(
             let proof = tree.gen_cached_proof(challenged_leaf as usize, Some(rows_to_discard))?;
 
             ensure!(
-                proof.validate(challenged_leaf as usize) && proof.root() == priv_sector.comm_r_last,
+                proof.validate(challenged_leaf as usize) && proof.root() == comm_r_last,
                 "Generated vanilla proof for sector {} is invalid",
                 sector_id
             );
@@ -275,13 +273,7 @@ pub fn vanilla_proof<Tree: MerkleTreeTrait>(
         })
         .collect::<Result<Vec<_>>>()?;
 
-    Ok(Proof {
-        sectors: vec![SectorProof {
-            inclusion_proofs,
-            comm_c,
-            comm_r_last,
-        }],
-    })
+    Ok(inclusion_proofs)
 }
 
 impl<'a, Tree: 'a + MerkleTreeTrait> ProofScheme<'a> for FallbackPoSt<'a, Tree> {

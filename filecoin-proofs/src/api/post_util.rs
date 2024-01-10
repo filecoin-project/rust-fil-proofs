@@ -114,23 +114,20 @@ pub fn generate_single_vanilla_proof<Tree: 'static + MerkleTreeTrait>(
     let comm_c = replica.safe_comm_c();
     let comm_r_last = replica.safe_comm_r_last();
 
-    let priv_sectors = vec![fallback::PrivateSector {
-        tree,
-        comm_c,
-        comm_r_last,
-    }];
-
-    let priv_inputs = fallback::PrivateInputs::<Tree> {
-        sectors: &priv_sectors,
-    };
-
-    let vanilla_proof =
-        fallback::vanilla_proof(sector_id, &priv_inputs, challenges).with_context(|| {
+    let inclusion_proofs =
+        fallback::inclusion_proofs::<Tree>(sector_id, tree, challenges, comm_r_last).with_context(|| {
             format!(
                 "generate_single_vanilla_proof: vanilla_proof failed: {:?}",
                 sector_id
             )
         })?;
+    let vanilla_proof = fallback::Proof {
+        sectors: vec![SectorProof {
+            inclusion_proofs,
+            comm_c,
+            comm_r_last,
+        }],
+    };
 
     info!("generate_single_vanilla_proof:finish: {:?}", sector_id);
 
