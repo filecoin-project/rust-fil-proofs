@@ -8,6 +8,9 @@ run:
     cp /tmp/filbin/sc-02-data-layer-3.dat /tmp/sealed
     echo '{"comm_d": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "num_layers": 3, "output_dir": "/tmp/filbin", "sector_size": 2048, "replica_path": "/tmp/sealed"}'|RUST_LOG=trace cargo run --bin pc2
 
+default_values_16kib:
+    echo '{"sector_size": 16384}'|RUST_LOG=trace cargo run --bin default-values
+
 pc1:
     fallocate --length 2048 /tmp/unsealed
     mkdir /tmp/filbin
@@ -163,3 +166,10 @@ snark_proof_16kib:
 
 snark_proof_32gib:
     jo -- -s comm_c=0xb59b73958d310335a3b43491e15221ed8f2d22c1b86e77ca53439ad5aed02e2e -s comm_d=0x077e5fde35c50a9303a55009e3498a4ebedff39c42b710b730d8ec7ac7afa63e -s comm_r=0xbf5a05f476c166d2b5a68b1b268d31719621bc536b1e46cebf0e94c3dd905532 -s comm_r_last=0x3c1d2b533e2d6d7a62abd5b39d9c21344e190cc7ac6bca08340a548f53554b19 num_challenges_per_partition=18 num_layers=11 num_partitions=10 output_path=/home/vmx/32gib/snark-proof.dat parameters_path=/var/tmp/filecoin-proof-parameters/v28-stacked-proof-of-replication-merkletree-poseidon_hasher-8-8-0-sha256_hasher-82a357d2f2ca81dc61bb45f4a762807aedee1b0a53fd6c4e77b46a01bfef7820.params porep_proofs_path=/home/vmx/32gib/orig-porep-vanilla-proofs.dat -s replica_id=0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00 sector_size=34359738368 | RUST_LOG=trace cargo run --release --bin snark-proof
+
+
+
+# PoSt
+
+challenges_window_post_16kib:
+    echo '{"num_challenges_per_sector": 10, "randomness": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddee00", "comm_r": "0xb98d4681bc5b1c2692dadc24d32b02bbb4b3f82aae928d57d8d008c11ed7c646", "sector_ids": [1, 2, 3, 4, 5], "sector_size": 16384}' | RUST_LOG=trace cargo run --bin challenges-window-post
