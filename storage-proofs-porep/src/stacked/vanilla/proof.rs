@@ -1,4 +1,3 @@
-use std::any::TypeId;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
 use std::marker::PhantomData;
@@ -10,8 +9,8 @@ use anyhow::{ensure, Context};
 use bincode::deserialize;
 use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
-use filecoin_hashers::{poseidon::PoseidonHasher, Domain, HashFunction, Hasher, PoseidonArity};
-use generic_array::typenum::{Unsigned, U0, U11, U2, U8};
+use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
+use generic_array::typenum::{Unsigned, U0, U11, U2};
 use lazy_static::lazy_static;
 use log::{error, info, trace};
 use merkletree::{
@@ -676,7 +675,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     // storage_proofs_core::merkle::create_base_merkle_tree, this
     // method requires the data on disk to be exactly the same size as
     // the tree length / NODE_SIZE.
-    pub fn build_binary_tree<K: Hasher>(
+    fn build_binary_tree<K: Hasher>(
         tree_data: &[u8],
         config: StoreConfig,
     ) -> Result<BinaryMerkleTree<K>> {
@@ -695,20 +694,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         Ok(tree)
     }
 
-    // Even if the column builder is enabled, the GPU column builder
-    // only supports Poseidon hashes.
-    pub fn use_gpu_column_builder() -> bool {
-        SETTINGS.use_gpu_column_builder
-            && TypeId::of::<Tree::Hasher>() == TypeId::of::<PoseidonHasher>()
-    }
-
-    // Even if the tree builder is enabled, the GPU tree builder
-    // only supports Poseidon hashes.
-    pub fn use_gpu_tree_builder() -> bool {
-        SETTINGS.use_gpu_tree_builder
-            && TypeId::of::<Tree::Hasher>() == TypeId::of::<PoseidonHasher>()
-    }
-
     #[cfg(any(feature = "cuda", feature = "opencl"))]
     pub fn generate_tree_c<ColumnArity, TreeArity>(
         nodes_count: usize,
@@ -720,7 +705,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         ColumnArity: 'static + PoseidonArity,
         TreeArity: PoseidonArity,
     {
-        if Self::use_gpu_column_builder() {
+        if SETTINGS.use_gpu_column_builder::<Tree>() {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
                 nodes_count,
                 tree_count,
@@ -1110,7 +1095,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         start: usize,
         end: usize,
     ) -> Result<TreeRElementData<Tree>> {
-        if Self::use_gpu_tree_builder() {
+        if SETTINGS.use_gpu_tree_builder::<Tree>() {
             use ff::PrimeField;
             use fr32::bytes_into_fr;
 
@@ -1218,7 +1203,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             None => Self::prepare_tree_r_data,
         };
 
-        if Self::use_gpu_tree_builder() {
+        if SETTINGS.use_gpu_tree_builder::<Tree>() {
             Self::generate_tree_r_last_gpu(
                 data,
                 nodes_count,
@@ -1606,15 +1591,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 )?;
                 tree_c.root()
             }
-            8 => {
-                let tree_c = Self::generate_tree_c::<U8, Tree::Arity>(
-                    nodes_count,
-                    tree_count,
-                    configs,
-                    &labels,
-                )?;
-                tree_c.root()
-            }
             11 => {
                 let tree_c = Self::generate_tree_c::<U11, Tree::Arity>(
                     nodes_count,
@@ -1775,7 +1751,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             tree_count,
         )?;
 
-        if Self::use_gpu_tree_builder() {
+        if SETTINGS.use_gpu_tree_builder::<Tree>() {
             info!("generating tree r last using the GPU");
             let max_gpu_tree_batch_size = SETTINGS.max_gpu_tree_batch_size as usize;
 

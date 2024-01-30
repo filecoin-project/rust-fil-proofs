@@ -2,9 +2,9 @@
 
 use std::fs::File;
 
+pub use filecoin_hashers::Hasher;
 pub use merkletree::store::{DiskStore, ExternalReader, Store};
 
-use filecoin_hashers::Hasher;
 use generic_array::typenum::{U0, U2};
 use merkletree::store::LevelCacheStore;
 

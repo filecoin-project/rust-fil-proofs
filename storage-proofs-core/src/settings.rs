@@ -1,8 +1,12 @@
+use std::any::TypeId;
 use std::env;
 
 use config::{Config, ConfigError, Environment, File};
+use filecoin_hashers::poseidon::PoseidonHasher;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+
+use crate::merkle::MerkleTreeTrait;
 
 lazy_static! {
     pub static ref SETTINGS: Settings = Settings::new().expect("invalid configuration");
@@ -98,5 +102,17 @@ impl Settings {
             .add_source(Environment::with_prefix(PREFIX))
             .build()?
             .try_deserialize()
+    }
+
+    // Even if the column builder is enabled, the GPU column builder
+    // only supports Poseidon hashes.
+    pub fn use_gpu_column_builder<Tree: MerkleTreeTrait>(&self) -> bool {
+        self.use_gpu_tree_builder && TypeId::of::<Tree::Hasher>() == TypeId::of::<PoseidonHasher>()
+    }
+
+    // Even if the tree builder is enabled, the GPU tree builder
+    // only supports Poseidon hashes.
+    pub fn use_gpu_tree_builder<Tree: MerkleTreeTrait>(&self) -> bool {
+        self.use_gpu_tree_builder && TypeId::of::<Tree::Hasher>() == TypeId::of::<PoseidonHasher>()
     }
 }
