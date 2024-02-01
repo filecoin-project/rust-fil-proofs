@@ -5,7 +5,7 @@ use std::str::FromStr;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
 use filecoin_proofs::{
     constants::{
-        DefaultPieceHasher, PUBLISHED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
+        DefaultPieceHasher, SUPPORTED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
         WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
     },
     parameters::{public_params, window_post_public_params, winning_post_public_params},
@@ -230,7 +230,7 @@ pub fn main() {
     // If no sector-sizes were given provided via. the CLI, display an interactive menu. Otherwise,
     // filter out invalid CLI sector-size arguments.
     if opts.sector_sizes.is_empty() {
-        let sector_size_strings: Vec<String> = PUBLISHED_SECTOR_SIZES
+        let sector_size_strings: Vec<String> = SUPPORTED_SECTOR_SIZES
             .iter()
             .map(|sector_size| {
                 let human_size = sector_size
@@ -250,11 +250,11 @@ pub fn main() {
             .interact()
             .expect("interaction failed")
             .into_iter()
-            .map(|i| PUBLISHED_SECTOR_SIZES[i])
+            .map(|i| SUPPORTED_SECTOR_SIZES[i])
             .collect();
     } else {
         opts.sector_sizes.retain(|size| {
-            if PUBLISHED_SECTOR_SIZES.contains(size) {
+            if SUPPORTED_SECTOR_SIZES.contains(size) {
                 true
             } else {
                 let human_size = size

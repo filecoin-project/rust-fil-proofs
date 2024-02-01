@@ -6,7 +6,7 @@ use dialoguer::{theme::ColorfulTheme, MultiSelect};
 use filecoin_proofs::{
     parameters::{public_params, window_post_public_params, winning_post_public_params},
     with_shape, DefaultPieceHasher, PoRepConfig, PoRepProofPartitions, PoStConfig, PoStType,
-    SectorSize, POREP_PARTITIONS, PUBLISHED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
+    SectorSize, POREP_PARTITIONS, SUPPORTED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
     WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use humansize::{file_size_opts, FileSize};
@@ -153,7 +153,7 @@ pub fn main() {
 
     // Display interactive menu if no sizes are given
     let sizes: Vec<u64> = if opts.constraints_for_sector_sizes.is_empty() {
-        let sector_sizes = PUBLISHED_SECTOR_SIZES
+        let sector_sizes = SUPPORTED_SECTOR_SIZES
             .iter()
             .map(|sector_size| {
                 // Right aligning the numbers makes them easier to read
@@ -173,7 +173,7 @@ pub fn main() {
             .expect("interaction failed");
 
         // Extract the selected sizes
-        PUBLISHED_SECTOR_SIZES
+        SUPPORTED_SECTOR_SIZES
             .iter()
             .enumerate()
             .filter_map(|(index, size)| {
@@ -188,7 +188,7 @@ pub fn main() {
         opts.constraints_for_sector_sizes
             .into_iter()
             .filter(|size| {
-                if PUBLISHED_SECTOR_SIZES.contains(size) {
+                if SUPPORTED_SECTOR_SIZES.contains(size) {
                     return true;
                 }
 

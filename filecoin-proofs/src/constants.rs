@@ -33,8 +33,8 @@ pub const WINDOW_POST_CHALLENGE_COUNT: usize = 10;
 
 pub const MAX_LEGACY_REGISTERED_SEAL_PROOF_ID: u64 = MAX_LEGACY_POREP_REGISTERED_PROOF_ID;
 
-/// Sector sizes for which parameters have been published.
-pub const PUBLISHED_SECTOR_SIZES: [u64; 10] = [
+/// Sector sizes for which parameters are supported.
+pub const SUPPORTED_SECTOR_SIZES: [u64; 10] = [
     SECTOR_SIZE_2_KIB,
     SECTOR_SIZE_4_KIB,
     SECTOR_SIZE_16_KIB,
@@ -43,6 +43,15 @@ pub const PUBLISHED_SECTOR_SIZES: [u64; 10] = [
     SECTOR_SIZE_16_MIB,
     SECTOR_SIZE_512_MIB,
     SECTOR_SIZE_1_GIB,
+    SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_64_GIB,
+];
+
+/// Sector sizes for which parameters have been published.
+pub const PUBLISHED_SECTOR_SIZES: [u64; 5] = [
+    SECTOR_SIZE_2_KIB,
+    SECTOR_SIZE_8_MIB,
+    SECTOR_SIZE_512_MIB,
     SECTOR_SIZE_32_GIB,
     SECTOR_SIZE_64_GIB,
 ];

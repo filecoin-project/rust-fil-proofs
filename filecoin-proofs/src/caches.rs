@@ -19,7 +19,7 @@ use storage_proofs_update::{
 };
 
 use crate::{
-    constants::{DefaultPieceHasher, PUBLISHED_SECTOR_SIZES},
+    constants::{DefaultPieceHasher, SUPPORTED_SECTOR_SIZES},
     parameters::{public_params, window_post_public_params, winning_post_public_params},
     types::{PoRepConfig, PoStConfig, PoStType},
 };
@@ -68,7 +68,7 @@ impl<G> SRSCache<G> {
         let mut num_proofs_to_aggregate = PROOFS_TESTS_MIN_SNARKS;
 
         loop {
-            for sector_size in &PUBLISHED_SECTOR_SIZES {
+            for sector_size in &SUPPORTED_SECTOR_SIZES {
                 let key = format!(
                     "STACKED[{}-{}]-{}",
                     sector_size, num_proofs_to_aggregate, identifier,
