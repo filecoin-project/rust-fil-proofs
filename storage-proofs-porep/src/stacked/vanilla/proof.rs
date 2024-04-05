@@ -3,9 +3,9 @@ use std::io::{BufReader, BufWriter};
 use std::marker::PhantomData;
 use std::panic::panic_any;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{mpsc::sync_channel as channel, Arc, Mutex, RwLock};
 
-use anyhow::{ensure, Context};
+use anyhow::{anyhow, ensure, Context};
 use bincode::deserialize;
 use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
@@ -264,6 +264,19 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 .collect()
         };
 
+        // Error propagation mechanism in scoped parallel verification.
+        struct InvalidEncodingProofCoordinate {
+            failure_detected: bool,
+            layer: usize,
+            challenge_index: usize,
+        }
+
+        let invalid_encoding_proof = Arc::new(Mutex::new(InvalidEncodingProofCoordinate {
+            failure_detected: false,
+            layer: 0,
+            challenge_index: 0,
+        }));
+
         THREAD_POOL.scoped(|scope| {
             // Stacked commitment specifics
             challenges
@@ -380,16 +393,31 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         );
 
                         {
+                            /*
+                            //FIXME: For testing, this adds a bug on purpose
+                            let labeled_node =
+                                *rcp.c_x.get_node_at_layer(if layer >= num_layers {
+                                    1
+                                } else {
+                                    layer + 1
+                        })?;
+                             */
                             let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
                             let replica_id = &pub_inputs.replica_id;
                             let proof_inner = proof.clone();
+                            let invalid_encoding_proof_inner = Arc::clone(&invalid_encoding_proof);
                             scope.execute(move || {
-                                assert!(
-                                    proof_inner.verify(replica_id, &labeled_node),
-                                    "Invalid encoding proof generated at layer {}",
-                                    layer,
-                                );
-                                trace!("Valid encoding proof generated at layer {}", layer);
+                                if !proof_inner.verify(replica_id, &labeled_node) {
+                                    let mut invalid = invalid_encoding_proof_inner.lock().expect("foo");
+                                    *invalid = InvalidEncodingProofCoordinate {
+                                        failure_detected: true,
+                                        layer,
+                                        challenge_index,
+                                    };
+                                    error!("Invalid encoding proof generated at layer {}, challenge index {}", layer, challenge_index);
+                                } else {
+                                    trace!("Valid encoding proof generated at layer {}", layer);
+                                }
                             });
                         }
 
@@ -401,6 +429,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 challenge as u64,
                                 parents_data_full,
                             ));
+                        }
+
+                        // Check if a proof was detected as invalid
+                        let invalid_encoding_proof_coordinate = invalid_encoding_proof.lock().expect("foo");
+                        if invalid_encoding_proof_coordinate.failure_detected {
+                            return Err(anyhow!(format!(
+                                "Invalid encoding proof generated at layer {}, challenge_index {}",
+                                invalid_encoding_proof_coordinate.layer, invalid_encoding_proof_coordinate.challenge_index)));
                         }
                     }
 
@@ -744,7 +780,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         TreeArity: PoseidonArity,
     {
         use std::cmp::min;
-        use std::sync::{mpsc::sync_channel as channel, Arc, RwLock};
 
         use fr32::fr_into_bytes;
         use generic_array::GenericArray;
@@ -1265,7 +1300,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use std::cmp::min;
         use std::fs::OpenOptions;
         use std::io::Write;
-        use std::sync::mpsc::sync_channel as channel;
 
         use fr32::fr_into_bytes;
         use log::warn;
