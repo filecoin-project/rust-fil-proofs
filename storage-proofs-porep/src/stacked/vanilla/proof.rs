@@ -265,7 +265,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 .collect()
         };
 
-        THREAD_POOL.scoped(|scope| {
+        //THREAD_POOL.scoped(|scope| {
             // Stacked commitment specifics
             challenges
                 .into_par_iter()
@@ -283,9 +283,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                     let comm_d_proof_inner = comm_d_proof.clone();
                     let challenge_inner = challenge;
-                    scope.execute(move || {
+                    //scope.execute(move || {
                         assert!(comm_d_proof_inner.validate(challenge_inner));
-                    });
+                    //});
 
                     // Stacked replica column openings
                     let rcp = {
@@ -330,9 +330,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     )?;
 
                     let comm_r_last_proof_inner = comm_r_last_proof.clone();
-                    scope.execute(move || {
+                    //scope.execute(move || {
                         debug_assert!(comm_r_last_proof_inner.validate(challenge));
-                    });
+                    //});
 
                     // Labeling Proofs Layer 1..l
                     let mut labeling_proofs = Vec::with_capacity(num_layers);
@@ -384,14 +384,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
                             let replica_id = &pub_inputs.replica_id;
                             let proof_inner = proof.clone();
-                            scope.execute(move || {
+                            //scope.execute(move || {
                                 assert!(
                                     proof_inner.verify(replica_id, &labeled_node),
                                     "Invalid encoding proof generated at layer {}",
                                     layer,
                                 );
                                 trace!("Valid encoding proof generated at layer {}", layer);
-                            });
+                            //});
                         }
 
                         labeling_proofs.push(proof);
@@ -414,7 +414,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     })
                 })
                 .collect()
-        })
+        //})
     }
 
     fn write_synth_proofs(
