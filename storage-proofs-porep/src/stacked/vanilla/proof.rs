@@ -284,7 +284,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     let comm_d_proof_inner = comm_d_proof.clone();
                     let challenge_inner = challenge;
                     //scope.execute(move || {
+                        info!("vmx: validate comm_d_proof_inner {}: start", challenge_index);
                         assert!(comm_d_proof_inner.validate(challenge_inner));
+                        info!("vmx: validate comm_d_proof_inner {}: stop", challenge_index);
                     //});
 
                     // Stacked replica column openings
@@ -385,11 +387,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             let replica_id = &pub_inputs.replica_id;
                             let proof_inner = proof.clone();
                             //scope.execute(move || {
+                                info!("vmx: validate proof_inner {}: start", challenge_index);
                                 assert!(
                                     proof_inner.verify(replica_id, &labeled_node),
                                     "Invalid encoding proof generated at layer {}",
                                     layer,
                                 );
+                                info!("vmx: validate proof_inner {}: stop", challenge_index);
                                 trace!("Valid encoding proof generated at layer {}", layer);
                             //});
                         }
