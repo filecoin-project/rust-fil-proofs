@@ -158,6 +158,8 @@ fn merkle_proofs<Tree: 'static + MerkleTreeTrait>(
     )
     .context("failed to generate partition proofs")?;
 
+    info!("vmx: generation done");
+
     let file = File::create(&output_path).with_context(|| {
         format!(
             "failed to create synth-porep vanilla proofs file: {:?}",
