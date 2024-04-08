@@ -3,7 +3,7 @@ use std::io::{BufReader, BufWriter};
 use std::marker::PhantomData;
 use std::panic::panic_any;
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc::sync_channel as channel, Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, ensure, Context};
 use bincode::deserialize;
@@ -31,7 +31,6 @@ use storage_proofs_core::{
         split_config_and_replica, BinaryMerkleTree, DiskTree, LCTree, MerkleProofTrait,
         MerkleTreeTrait,
     },
-    settings::SETTINGS,
     util::{default_rows_to_discard, NODE_SIZE},
 };
 use yastl::Pool;
@@ -699,6 +698,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         #[cfg(feature = "multicore-sdr")]
         {
+            use storage_proofs_core::settings::SETTINGS;
             if SETTINGS.use_multicore_sdr {
                 info!("multi core replication");
                 create_label::multi::create_labels_for_encoding(
@@ -744,6 +744,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         #[cfg(feature = "multicore-sdr")]
         {
+            use storage_proofs_core::settings::SETTINGS;
             if SETTINGS.use_multicore_sdr {
                 info!("multi core replication");
                 create_label::multi::create_labels_for_decoding(
@@ -812,6 +813,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         ColumnArity: 'static + PoseidonArity,
         TreeArity: PoseidonArity,
     {
+        use storage_proofs_core::settings::SETTINGS;
         if SETTINGS.use_gpu_column_builder::<Tree>() {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
                 nodes_count,
@@ -851,6 +853,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         TreeArity: PoseidonArity,
     {
         use std::cmp::min;
+        use std::sync::{mpsc::sync_channel as channel, RwLock};
 
         use fr32::fr_into_bytes;
         use generic_array::GenericArray;
@@ -859,6 +862,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             batch_hasher::Batcher,
             column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait},
         };
+        use storage_proofs_core::settings::SETTINGS;
 
         info!("generating tree c using the GPU");
         // Build the tree for CommC
@@ -1201,6 +1205,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         start: usize,
         end: usize,
     ) -> Result<TreeRElementData<Tree>> {
+        use storage_proofs_core::settings::SETTINGS;
         if SETTINGS.use_gpu_tree_builder::<Tree>() {
             use ff::PrimeField;
             use fr32::bytes_into_fr;
@@ -1309,6 +1314,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             None => Self::prepare_tree_r_data,
         };
 
+        use storage_proofs_core::settings::SETTINGS;
         if SETTINGS.use_gpu_tree_builder::<Tree>() {
             Self::generate_tree_r_last_gpu(
                 data,
@@ -1371,6 +1377,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use std::cmp::min;
         use std::fs::OpenOptions;
         use std::io::Write;
+        use std::sync::mpsc::sync_channel as channel;
 
         use fr32::fr_into_bytes;
         use log::warn;
@@ -1379,6 +1386,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
+        use storage_proofs_core::settings::SETTINGS;
 
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
@@ -1848,6 +1856,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
+        use storage_proofs_core::settings::SETTINGS;
 
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),

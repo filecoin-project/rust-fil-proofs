@@ -32,7 +32,6 @@ use storage_proofs_core::{
     },
     parameter_cache::ParameterSetMetadata,
     proof::ProofScheme,
-    settings::SETTINGS,
 };
 use storage_proofs_porep::stacked::{StackedDrg, TreeRElementData};
 
@@ -356,6 +355,7 @@ pub fn prepare_tree_r_data<Tree: 'static + MerkleTreeTrait>(
     start: usize,
     end: usize,
 ) -> Result<TreeRElementData<Tree>> {
+    use storage_proofs_core::settings::SETTINGS;
     let tree_data = source
         .read_range(start..end)
         .expect("failed to read from source");
