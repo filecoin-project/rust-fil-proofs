@@ -132,33 +132,75 @@ impl<Tree: 'static + MerkleTreeTrait> PrivateReplicaInfo<Tree> {
             Tree::TopTreeArity,
         >,
     > {
-        let base_tree_size = get_base_tree_size::<Tree>(sector_size)?;
-        let base_tree_leafs = get_base_tree_leafs::<Tree>(base_tree_size)?;
-        trace!(
-            "post: base tree size {}, base tree leafs {}, rows_to_discard {}, arities [{}, {}, {}]",
-            base_tree_size,
-            base_tree_leafs,
-            default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize()),
-            Tree::Arity::to_usize(),
-            Tree::SubTreeArity::to_usize(),
-            Tree::TopTreeArity::to_usize(),
-        );
-
-        let mut config = StoreConfig::new(
-            self.cache_dir_path(),
-            CacheKey::CommRLastTree.to_string(),
-            default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize()),
-        );
-        config.size = Some(base_tree_size);
-
-        let tree_count = get_base_tree_count::<Tree>();
-        let (configs, replica_config) = split_config_and_replica(
-            config,
-            self.replica_path().to_path_buf(),
-            base_tree_leafs,
-            tree_count,
-        )?;
-
-        create_tree::<Tree>(base_tree_size, &configs, Some(&replica_config))
+        merkle_tree::<Tree>(sector_size, self.cache_dir_path(), self.replica_path())
+        //let base_tree_size = get_base_tree_size::<Tree>(sector_size)?;
+        //let base_tree_leafs = get_base_tree_leafs::<Tree>(base_tree_size)?;
+        //trace!(
+        //    "post: base tree size {}, base tree leafs {}, rows_to_discard {}, arities [{}, {}, {}]",
+        //    base_tree_size,
+        //    base_tree_leafs,
+        //    default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize()),
+        //    Tree::Arity::to_usize(),
+        //    Tree::SubTreeArity::to_usize(),
+        //    Tree::TopTreeArity::to_usize(),
+        //);
+        //
+        //let mut config = StoreConfig::new(
+        //    self.cache_dir_path(),
+        //    CacheKey::CommRLastTree.to_string(),
+        //    default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize()),
+        //);
+        //config.size = Some(base_tree_size);
+        //
+        //let tree_count = get_base_tree_count::<Tree>();
+        //let (configs, replica_config) = split_config_and_replica(
+        //    config,
+        //    self.replica_path().to_path_buf(),
+        //    base_tree_leafs,
+        //    tree_count,
+        //)?;
+        //
+        //create_tree::<Tree>(base_tree_size, &configs, Some(&replica_config))
     }
+}
+
+#[cfg_attr(feature = "tooling", visibility::make(pub))]
+fn merkle_tree<Tree: 'static + MerkleTreeTrait>(sector_size: SectorSize, cache_dir: &Path, replica_path: &Path
+    ) -> Result<
+        MerkleTreeWrapper<
+            Tree::Hasher,
+            Tree::Store,
+            Tree::Arity,
+            Tree::SubTreeArity,
+            Tree::TopTreeArity,
+        >,
+    > {
+    let base_tree_size = get_base_tree_size::<Tree>(sector_size)?;
+    let base_tree_leafs = get_base_tree_leafs::<Tree>(base_tree_size)?;
+    trace!(
+        "post: base tree size {}, base tree leafs {}, rows_to_discard {}, arities [{}, {}, {}]",
+        base_tree_size,
+        base_tree_leafs,
+        default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize()),
+        Tree::Arity::to_usize(),
+        Tree::SubTreeArity::to_usize(),
+        Tree::TopTreeArity::to_usize(),
+    );
+
+    let mut config = StoreConfig::new(
+        cache_dir,
+        CacheKey::CommRLastTree.to_string(),
+        default_rows_to_discard(base_tree_leafs, Tree::Arity::to_usize()),
+    );
+    config.size = Some(base_tree_size);
+
+    let tree_count = get_base_tree_count::<Tree>();
+    let (configs, replica_config) = split_config_and_replica(
+        config,
+        replica_path.to_path_buf(),
+        base_tree_leafs,
+        tree_count,
+    )?;
+
+    create_tree::<Tree>(base_tree_size, &configs, Some(&replica_config))
 }
