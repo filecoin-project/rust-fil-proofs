@@ -12,7 +12,7 @@ use fdlimit::raise_fd_limit;
 use filecoin_hashers::{Domain, HashFunction, Hasher, PoseidonArity};
 use generic_array::typenum::{Unsigned, U0, U11, U2};
 use lazy_static::lazy_static;
-use log::{error, info, trace};
+use log::{debug, error, info, trace};
 use merkletree::{
     merkle::{get_merkle_tree_len, is_merkle_tree_size_valid},
     store::{DiskStore, Store, StoreConfig},
@@ -284,9 +284,9 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     let comm_d_proof_inner = comm_d_proof.clone();
                     let challenge_inner = challenge;
                     //scope.execute(move || {
-                        info!("vmx: validate comm_d_proof_inner {}: start", challenge_index);
+                        debug!("vmx: validate comm_d_proof_inner {}: start", challenge_index);
                         assert!(comm_d_proof_inner.validate(challenge_inner));
-                        info!("vmx: validate comm_d_proof_inner {}: stop", challenge_index);
+                        debug!("vmx: validate comm_d_proof_inner {}: stop", challenge_index);
                     //});
 
                     // Stacked replica column openings
@@ -387,13 +387,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             let replica_id = &pub_inputs.replica_id;
                             let proof_inner = proof.clone();
                             //scope.execute(move || {
-                                info!("vmx: validate proof_inner {}: start", challenge_index);
+                                debug!("vmx: validate proof_inner {}: start", challenge_index);
                                 assert!(
                                     proof_inner.verify(replica_id, &labeled_node),
                                     "Invalid encoding proof generated at layer {}",
                                     layer,
                                 );
-                                info!("vmx: validate proof_inner {}: stop", challenge_index);
+                                debug!("vmx: validate proof_inner {}: stop", challenge_index);
                                 trace!("Valid encoding proof generated at layer {}", layer);
                             //});
                         }
