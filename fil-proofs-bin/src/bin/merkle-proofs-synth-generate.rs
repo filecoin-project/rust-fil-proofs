@@ -148,6 +148,8 @@ fn merkle_proofs<Tree: 'static + MerkleTreeTrait>(
     );
     let t_aux_cache = TemporaryAuxCache::new(&t_aux, replica_path.into(), false)?;
 
+    info!("vmx: generation start");
+
     let synth_proofs = StackedDrg::<Tree, DefaultPieceHasher>::prove_layers_generate(
         &graph,
         &public_inputs,
