@@ -421,15 +421,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         );
 
                         {
-                            /*
-                            //FIXME: For testing, this adds a bug on purpose
-                            let labeled_node =
-                                *rcp.c_x.get_node_at_layer(if layer >= num_layers {
-                                    1
-                                } else {
-                                    layer + 1
-                        })?;
-                             */
                             let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
                             let replica_id = &pub_inputs.replica_id;
                             let proof_inner = proof.clone();
