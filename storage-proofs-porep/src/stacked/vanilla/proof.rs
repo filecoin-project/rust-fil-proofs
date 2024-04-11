@@ -142,6 +142,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 if pub_inputs.seed.is_none() {
                     info!("generating synthetic vanilla proofs in a single partition");
 
+info!("vmx: derive challenges");
                     let comm_r = pub_inputs.tau.as_ref().expect("tau is set").comm_r;
                     // Derive the set of challenges we are proving over.
                     let challenge_positions = SynthChallenges::derive_synthetic(
@@ -150,6 +151,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         &comm_r,
                     );
 
+info!("vmx: generate proofs");
                     let synth_proofs = Self::prove_layers_generate(
                         graph,
                         pub_inputs,
@@ -159,6 +161,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         num_layers,
                     )?;
 
+info!("vmx: write proofs");
                     Self::write_synth_proofs(
                         &synth_proofs,
                         pub_inputs,
@@ -167,6 +170,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         num_layers,
                         t_aux.synth_proofs_path(),
                     )?;
+info!("vmx: generation done");
                     Ok(vec![vec![]; partition_count])
                 }
                 // Else the synthetic vanilla proofs are stored on disk, read and return the proofs
