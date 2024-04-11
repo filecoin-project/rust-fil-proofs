@@ -131,8 +131,18 @@ The main benchmarking tool is called `benchy`.  `benchy` has several subcommands
 > cargo run --release --bin benchy -- window-post --size 2KiB
 > cargo run --release --bin benchy -- window-post-fake --size 2KiB --fake
 > cargo run --release --bin benchy -- prodbench
-# After a preserved cache is generated, this command tests *only* synthetic proof generation
-> cargo run --release --bin benchy -- porep --size 2KiB --synthetic --cache /d1/nemo/tmp/cache-2k --skip-precommit-phase1 --skip-precommit-phase2 --skip-commit-phase1 --skip-commit-phase2
+#
+# Synthetic PoRep examples (for both 2KiB test and 32GiB production sector sizes)
+#
+# Preserve a cache using synthetic-porep (2KiB sectors)
+> cargo run --release --bin benchy -- porep --size 2KiB --cache /tmp/cache-2k-synthetic --preserve-cache --api-features synthetic-porep
+# Preserve a cache using synthetic-porep (32GiB sectors)
+> cargo run --release --bin benchy -- porep --size 32GiB --cache /tmp/cache-32g-synthetic --preserve-cache --api-features synthetic-porep
+#
+# After a preserved cache is generated, this command tests *only* synthetic proof generation (2KiB sectors)
+> cargo run --release --bin benchy -- porep --size 2KiB --cache /tmp/cache-2k-synthetic --api-features synthetic-porep --skip-precommit-phase1 --skip-precommit-phase2 --skip-commit-phase1 --skip-commit-phase2
+# After a preserved cache is generated, this command tests *only* synthetic proof generation (32GiB sectors)
+> cargo run --release --bin benchy -- porep --size 32GiB --cache /tmp/cache-32g-synthetic --api-features synthetic-porep --skip-precommit-phase1 --skip-precommit-phase2 --skip-commit-phase1 --skip-commit-phase2
 ```
 
 ### Window PoSt Bench usages

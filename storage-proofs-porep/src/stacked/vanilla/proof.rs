@@ -3,7 +3,7 @@ use std::io::{BufReader, BufWriter};
 use std::marker::PhantomData;
 use std::panic::panic_any;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{ensure, Context};
 use bincode::deserialize;
@@ -20,6 +20,8 @@ use merkletree::{
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSliceMut,
 };
+#[cfg(any(feature = "cuda", feature = "multicore-sdr", feature = "opencl"))]
+use storage_proofs_core::settings::SETTINGS;
 use storage_proofs_core::{
     cache_key::CacheKey,
     data::Data,
@@ -31,7 +33,6 @@ use storage_proofs_core::{
         split_config_and_replica, BinaryMerkleTree, DiskTree, LCTree, MerkleProofTrait,
         MerkleTreeTrait,
     },
-    settings::SETTINGS,
     util::{default_rows_to_discard, NODE_SIZE},
 };
 use yastl::Pool;
@@ -54,6 +55,17 @@ use crate::{
 };
 
 pub const TOTAL_PARENTS: usize = 37;
+
+struct InvalidEncodingProofCoordinate {
+    failure_detected: bool,
+    layer: usize,
+    challenge_index: usize,
+}
+
+struct InvalidChallengeCoordinate {
+    failure_detected: bool,
+    challenge_index: usize,
+}
 
 lazy_static! {
     /// Ensure that only one `TreeBuilder` or `ColumnTreeBuilder` uses the GPU at a time.
@@ -140,8 +152,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             Challenges::Synth(synth_challenges) => {
                 // If there are no synthetic vanilla proofs stored on disk yet, generate them.
                 if pub_inputs.seed.is_none() {
-                    info!("generating synthetic vanilla proofs in a single partition");
-                    assert_eq!(partition_count, 1);
+                    info!("generating all required synthetic vanilla proofs");
 
                     let comm_r = pub_inputs.tau.as_ref().expect("tau is set").comm_r;
                     // Derive the set of challenges we are proving over.
@@ -264,6 +275,21 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 .collect()
         };
 
+        // Error propagation mechanism for scoped parallel verification.
+        let invalid_encoding_proof = Arc::new(Mutex::new(InvalidEncodingProofCoordinate {
+            failure_detected: false,
+            layer: 0,
+            challenge_index: 0,
+        }));
+        let invalid_comm_d = Arc::new(Mutex::new(InvalidChallengeCoordinate {
+            failure_detected: false,
+            challenge_index: 0,
+        }));
+        let invalid_comm_r = Arc::new(Mutex::new(InvalidChallengeCoordinate {
+            failure_detected: false,
+            challenge_index: 0,
+        }));
+
         THREAD_POOL.scoped(|scope| {
             // Stacked commitment specifics
             challenges
@@ -280,10 +306,18 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         .expect("failed to get tree_d")
                         .gen_proof(challenge)?;
 
-                    let comm_d_proof_inner = comm_d_proof.clone();
                     let challenge_inner = challenge;
+                    let comm_d_proof_inner = comm_d_proof.clone();
+                    let invalid_comm_d_inner = Arc::clone(&invalid_comm_d);
                     scope.execute(move || {
-                        assert!(comm_d_proof_inner.validate(challenge_inner));
+                        if !comm_d_proof_inner.validate(challenge_inner) {
+                            let mut invalid = invalid_comm_d_inner.lock().expect("failed to get lock on invalid_comm_d_inner");
+                            *invalid = InvalidChallengeCoordinate {
+                                failure_detected: true,
+                                challenge_index,
+                            };
+                            error!("Invalid comm_d detected at challenge index {}", challenge_index);
+                        }
                     });
 
                     // Stacked replica column openings
@@ -329,8 +363,16 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     )?;
 
                     let comm_r_last_proof_inner = comm_r_last_proof.clone();
+                    let invalid_comm_r_inner = Arc::clone(&invalid_comm_r);
                     scope.execute(move || {
-                        debug_assert!(comm_r_last_proof_inner.validate(challenge));
+                        if !comm_r_last_proof_inner.validate(challenge) {
+                            let mut invalid = invalid_comm_r_inner.lock().expect("failed to get lock on invalid_comm_r_inner");
+                            *invalid = InvalidChallengeCoordinate {
+                                failure_detected: true,
+                                challenge_index: challenge,
+                            };
+                            error!("Invalid comm_r detected at challenge index {}", challenge);
+                        }
                     });
 
                     // Labeling Proofs Layer 1..l
@@ -383,13 +425,19 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
                             let replica_id = &pub_inputs.replica_id;
                             let proof_inner = proof.clone();
+                            let invalid_encoding_proof_inner = Arc::clone(&invalid_encoding_proof);
                             scope.execute(move || {
-                                assert!(
-                                    proof_inner.verify(replica_id, &labeled_node),
-                                    "Invalid encoding proof generated at layer {}",
-                                    layer,
-                                );
-                                trace!("Valid encoding proof generated at layer {}", layer);
+                                if !proof_inner.verify(replica_id, &labeled_node) {
+                                    let mut invalid = invalid_encoding_proof_inner.lock().expect("failed to get lock on invalid_encoding_proof_inner");
+                                    *invalid = InvalidEncodingProofCoordinate {
+                                        failure_detected: true,
+                                        layer,
+                                        challenge_index,
+                                    };
+                                    error!("Invalid encoding proof generated at layer {}, challenge index {}", layer, challenge_index);
+                                } else {
+                                    trace!("Valid encoding proof generated at layer {}", layer);
+                                }
                             });
                         }
 
@@ -402,6 +450,17 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                                 parents_data_full,
                             ));
                         }
+
+                        // Check if a proof was detected as invalid
+                        let invalid_comm_d_coordinate = invalid_comm_d.lock().expect("failed to get lock on invalid_comm_d");
+                        ensure!(!invalid_comm_d_coordinate.failure_detected, "Invalid comm_d detected at challenge_index {}",
+                                invalid_comm_d_coordinate.challenge_index);
+                        let invalid_comm_r_coordinate = invalid_comm_r.lock().expect("failed to get lock on invalid_comm_r");
+                        ensure!(!invalid_comm_r_coordinate.failure_detected, "Invalid comm_r detected at challenge_index {}",
+                                invalid_comm_r_coordinate.challenge_index);
+                        let invalid_encoding_proof_coordinate = invalid_encoding_proof.lock().expect("failed to get lock on invalid_encoding_proof");
+                        ensure!(!invalid_encoding_proof_coordinate.failure_detected, "Invalid encoding proof generated at layer {}, challenge_index {}",
+                                invalid_encoding_proof_coordinate.layer, invalid_encoding_proof_coordinate.challenge_index);
                     }
 
                     Ok(Proof {
@@ -431,40 +490,69 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             "comm_r must be set prior to generating synthetic challenges",
         );
 
+        let invalid_synth_porep_proof = Arc::new(Mutex::new(InvalidChallengeCoordinate {
+            failure_detected: false,
+            challenge_index: 0,
+        }));
+
+        // Verify synth proofs prior to writing because `ProofScheme`'s verification API is not
+        // amenable to prover-only verification (i.e. the API uses public values, whereas synthetic
+        // proofs are known only to the prover).
+        let pub_params = PublicParams::<Tree>::new(
+            graph.clone(),
+            Challenges::Synth(challenges.clone()),
+            num_layers,
+        );
+        let replica_id: Fr = pub_inputs.replica_id.into();
+        let comm_r: Fr = pub_inputs
+            .tau
+            .as_ref()
+            .map(|tau| tau.comm_r.into())
+            .expect("unwrapping should not fail");
+        let synth_challenges = SynthChallengeGenerator::default(graph.size(), &replica_id, &comm_r);
+        ensure!(
+            synth_proofs.len() == synth_challenges.num_synth_challenges,
+            "Mismatched synth porep proofs for the required challenge set"
+        );
+
         THREAD_POOL.scoped(|scope| {
-            // Verify synth proofs prior to writing because `ProofScheme`'s verification API is not
-            // amenable to prover-only verification (i.e. the API uses public values, whereas synthetic
-            // proofs are known only to the prover).
-            let pub_params = PublicParams::<Tree>::new(
-                graph.clone(),
-                Challenges::Synth(challenges.clone()),
-                num_layers,
-            );
-            let replica_id: Fr = pub_inputs.replica_id.into();
-            let comm_r: Fr = pub_inputs
-                .tau
-                .as_ref()
-                .map(|tau| tau.comm_r.into())
-                .expect("unwrapping should not fail");
-            let synth_challenges =
-                SynthChallengeGenerator::default(graph.size(), &replica_id, &comm_r);
-            assert_eq!(synth_proofs.len(), synth_challenges.num_synth_challenges);
             for (challenge, proof) in synth_challenges.zip(synth_proofs) {
                 let proof_inner = proof.clone();
                 let challenge_inner = challenge;
                 let pub_params_inner = pub_params.clone();
                 let pub_inputs_inner = pub_inputs.clone();
+                let invalid_synth_porep_proof_inner = Arc::clone(&invalid_synth_porep_proof);
                 scope.execute(move || {
-                    assert!(proof_inner.verify(
+                    if !proof_inner.verify(
                         &pub_params_inner,
                         &pub_inputs_inner,
                         challenge_inner,
-                        graph
-                    ));
+                        graph,
+                    ) {
+                        let mut invalid = invalid_synth_porep_proof_inner
+                            .lock()
+                            .expect("failed to get lock on invalid_synth_porep_proof_inner");
+                        *invalid = InvalidChallengeCoordinate {
+                            failure_detected: true,
+                            challenge_index: challenge_inner,
+                        };
+                        error!(
+                            "Invalid synth porep proof generated at challenge index {}",
+                            challenge_inner
+                        );
+                    }
                 });
             }
         });
 
+        let invalid_synth_porep_proof_coordinate = invalid_synth_porep_proof
+            .lock()
+            .expect("failed to get lock on invalid_synth_porep_proof");
+        ensure!(
+            !invalid_synth_porep_proof_coordinate.failure_detected,
+            "Invalid synth_porep proof generated at challenge_index {}",
+            invalid_synth_porep_proof_coordinate.challenge_index
+        );
         info!("writing synth-porep vanilla proofs to file: {:?}", path);
         let file = File::create(&path).map(BufWriter::new).with_context(|| {
             format!(
@@ -744,7 +832,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         TreeArity: PoseidonArity,
     {
         use std::cmp::min;
-        use std::sync::{mpsc::sync_channel as channel, Arc, RwLock};
+        use std::sync::{mpsc::sync_channel as channel, RwLock};
 
         use fr32::fr_into_bytes;
         use generic_array::GenericArray;
