@@ -5,7 +5,7 @@ use std::panic::panic_any;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use anyhow::{ensure, Context};
+use anyhow::{anyhow, ensure, Context};
 use bincode::deserialize;
 use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
@@ -284,7 +284,8 @@ info!("vmx: generation done");
 
                 let comm_d_proof_inner = comm_d_proof.clone();
                 let challenge_inner = challenge;
-                assert!(comm_d_proof_inner.validate(challenge_inner));
+                ensure!(comm_d_proof_inner.validate(challenge_inner),
+                    "Invalid comm_d detected at challenge_index {}", challenge_index);
 
                 // Stacked replica column openings
                 let rcp = {
@@ -328,7 +329,9 @@ info!("vmx: generation done");
                     .gen_cached_proof(challenge, Some(t_aux.tree_r_last_config_rows_to_discard))?;
 
                 let comm_r_last_proof_inner = comm_r_last_proof.clone();
-                debug_assert!(comm_r_last_proof_inner.validate(challenge));
+                //debug_assert!(comm_r_last_proof_inner.validate(challenge));
+                ensure!(comm_r_last_proof_inner.validate(challenge),
+                    "Invalid comm_r detected at challenge index {}", challenge);
 
                 // Labeling Proofs Layer 1..l
                 let mut labeling_proofs = Vec::with_capacity(num_layers);
@@ -380,10 +383,10 @@ info!("vmx: generation done");
                         let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
                         let replica_id = &pub_inputs.replica_id;
                         let proof_inner = proof.clone();
-                        assert!(
+                        ensure!(
                             proof_inner.verify(replica_id, &labeled_node),
-                            "Invalid encoding proof generated at layer {}",
-                            layer,
+                            "Invalid encoding proof generated at layer {}, challenge index {}",
+                            layer, challenge_index
                         );
                         trace!("Valid encoding proof generated at layer {}", layer);
                     }
@@ -461,7 +464,7 @@ info!("vmx: generation done");
             //for (challenge, proof) in synth_challenges.par_iter().zip(synth_proofs) {
             //for (challenge, proof) in challenges.into_par_iter().zip_eq(proofs.into_par_iter()) {
             //challenges.into_par_iter().zip_eq(synth_proofs).map(|(challenge, proof)| {
-            let verified = challenges.into_par_iter().zip_eq(synth_proofs).map(|(challenge, proof)| {
+            let verified = challenges.clone().into_par_iter().zip_eq(synth_proofs).map(|(challenge, proof)| {
                 //let proof_inner = proof.clone();
                 let proof_inner = proof;
                 let challenge_inner = challenge;
@@ -476,8 +479,15 @@ info!("vmx: generation done");
                         graph
                     )
                 //});
-            });
-            assert!(verified.all(|x| x));
+            }).collect::<Vec<_>>();
+            for (challenge_pos, valid) in verified.iter().enumerate() {
+                if !valid {
+                    return Err(anyhow!(
+                            "Invalid synth_porep proof generated at challenge_index {}",
+                            challenges[challenge_pos]))
+                }
+            }
+        //);
 
         //});
 
