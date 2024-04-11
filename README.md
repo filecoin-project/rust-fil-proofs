@@ -132,7 +132,7 @@ The main benchmarking tool is called `benchy`.  `benchy` has several subcommands
 > cargo run --release --bin benchy -- window-post-fake --size 2KiB --fake
 > cargo run --release --bin benchy -- prodbench
 # After a preserved cache is generated, this command tests *only* synthetic proof generation
-> cargo run --release --bin benchy -- porep --size 2KiB --synthetic --cache /d1/nemo/tmp/cache-2k --skip-precommit-phase1 --skip-precommit-phase2 --skip-commit-phase1 --skip-commit-phase2
+> cargo run --release --bin benchy -- porep --size 2KiB -api-features=synthetic-porep --cache /d1/nemo/tmp/cache-2k --skip-precommit-phase1 --skip-precommit-phase2 --skip-commit-phase1 --skip-commit-phase2
 ```
 
 ### Window PoSt Bench usages
