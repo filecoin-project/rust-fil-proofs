@@ -5,7 +5,7 @@ use std::panic::panic_any;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use anyhow::{anyhow, ensure, Context};
+use anyhow::{ensure, Context};
 use bincode::deserialize;
 use blstrs::Scalar as Fr;
 use fdlimit::raise_fd_limit;
@@ -548,12 +548,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let invalid_synth_porep_proof_coordinate = invalid_synth_porep_proof
             .lock()
             .expect("failed to get lock on invalid_synth_porep_proof");
-        if invalid_synth_porep_proof_coordinate.failure_detected {
-            return Err(anyhow!(
-                "Invalid synth_porep proof generated at challenge_index {}",
-                invalid_synth_porep_proof_coordinate.challenge_index
-            ));
-        }
+        ensure!(
+            !invalid_synth_porep_proof_coordinate.failure_detected,
+            "Invalid synth_porep proof generated at challenge_index {}",
+            invalid_synth_porep_proof_coordinate.challenge_index
+        );
         info!("writing synth-porep vanilla proofs to file: {:?}", path);
         let file = File::create(&path).map(BufWriter::new).with_context(|| {
             format!(
