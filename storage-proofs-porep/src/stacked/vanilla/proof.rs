@@ -141,7 +141,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 // If there are no synthetic vanilla proofs stored on disk yet, generate them.
                 if pub_inputs.seed.is_none() {
                     info!("generating synthetic vanilla proofs in a single partition");
-                    assert_eq!(partition_count, 1);
 
                     let comm_r = pub_inputs.tau.as_ref().expect("tau is set").comm_r;
                     // Derive the set of challenges we are proving over.
