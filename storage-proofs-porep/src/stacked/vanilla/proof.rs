@@ -20,6 +20,8 @@ use merkletree::{
 use rayon::prelude::{
     IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSliceMut,
 };
+#[cfg(any(feature = "cuda", feature = "multicore-sdr", feature = "opencl"))]
+use storage_proofs_core::settings::SETTINGS;
 use storage_proofs_core::{
     cache_key::CacheKey,
     data::Data,
@@ -451,23 +453,14 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                         // Check if a proof was detected as invalid
                         let invalid_comm_d_coordinate = invalid_comm_d.lock().expect("failed to get lock on invalid_comm_d");
-                        if invalid_comm_d_coordinate.failure_detected {
-                            return Err(anyhow!(
-                                "Invalid comm_d detected at challenge_index {}",
-                                invalid_comm_d_coordinate.challenge_index));
-                        }
+                        ensure!(!invalid_comm_d_coordinate.failure_detected, "Invalid comm_d detected at challenge_index {}",
+                                invalid_comm_d_coordinate.challenge_index);
                         let invalid_comm_r_coordinate = invalid_comm_r.lock().expect("failed to get lock on invalid_comm_r");
-                        if invalid_comm_r_coordinate.failure_detected {
-                            return Err(anyhow!(
-                                "Invalid comm_r detected at challenge_index {}",
-                                invalid_comm_r_coordinate.challenge_index));
-                        }
+                        ensure!(!invalid_comm_r_coordinate.failure_detected, "Invalid comm_r detected at challenge_index {}",
+                                invalid_comm_r_coordinate.challenge_index);
                         let invalid_encoding_proof_coordinate = invalid_encoding_proof.lock().expect("failed to get lock on invalid_encoding_proof");
-                        if invalid_encoding_proof_coordinate.failure_detected {
-                            return Err(anyhow!(
-                                "Invalid encoding proof generated at layer {}, challenge_index {}",
-                                invalid_encoding_proof_coordinate.layer, invalid_encoding_proof_coordinate.challenge_index));
-                        }
+                        ensure!(!invalid_encoding_proof_coordinate.failure_detected, "Invalid encoding proof generated at layer {}, challenge_index {}",
+                                invalid_encoding_proof_coordinate.layer, invalid_encoding_proof_coordinate.challenge_index);
                     }
 
                     Ok(Proof {
@@ -688,7 +681,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         #[cfg(feature = "multicore-sdr")]
         {
-            use storage_proofs_core::settings::SETTINGS;
             if SETTINGS.use_multicore_sdr {
                 info!("multi core replication");
                 create_label::multi::create_labels_for_encoding(
@@ -734,7 +726,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
         #[cfg(feature = "multicore-sdr")]
         {
-            use storage_proofs_core::settings::SETTINGS;
             if SETTINGS.use_multicore_sdr {
                 info!("multi core replication");
                 create_label::multi::create_labels_for_decoding(
@@ -803,7 +794,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         ColumnArity: 'static + PoseidonArity,
         TreeArity: PoseidonArity,
     {
-        use storage_proofs_core::settings::SETTINGS;
         if SETTINGS.use_gpu_column_builder::<Tree>() {
             Self::generate_tree_c_gpu::<ColumnArity, TreeArity>(
                 nodes_count,
@@ -852,7 +842,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             batch_hasher::Batcher,
             column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait},
         };
-        use storage_proofs_core::settings::SETTINGS;
 
         info!("generating tree c using the GPU");
         // Build the tree for CommC
@@ -1195,7 +1184,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         start: usize,
         end: usize,
     ) -> Result<TreeRElementData<Tree>> {
-        use storage_proofs_core::settings::SETTINGS;
         if SETTINGS.use_gpu_tree_builder::<Tree>() {
             use ff::PrimeField;
             use fr32::bytes_into_fr;
@@ -1304,7 +1292,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             None => Self::prepare_tree_r_data,
         };
 
-        use storage_proofs_core::settings::SETTINGS;
         if SETTINGS.use_gpu_tree_builder::<Tree>() {
             Self::generate_tree_r_last_gpu(
                 data,
@@ -1376,7 +1363,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
-        use storage_proofs_core::settings::SETTINGS;
 
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
@@ -1846,7 +1832,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
-        use storage_proofs_core::settings::SETTINGS;
 
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
