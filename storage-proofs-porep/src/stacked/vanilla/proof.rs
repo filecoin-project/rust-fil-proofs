@@ -438,7 +438,7 @@ info!("vmx: generation done");
             "comm_r must be set prior to generating synthetic challenges",
         );
 
-        THREAD_POOL.scoped(|scope| {
+        //THREAD_POOL.scoped(|scope| {
             // Verify synth proofs prior to writing because `ProofScheme`'s verification API is not
             // amenable to prover-only verification (i.e. the API uses public values, whereas synthetic
             // proofs are known only to the prover).
@@ -455,22 +455,28 @@ info!("vmx: generation done");
                 .expect("unwrapping should not fail");
             let synth_challenges =
                 SynthChallengeGenerator::default(graph.size(), &replica_id, &comm_r);
-            assert_eq!(synth_proofs.len(), synth_challenges.num_synth_challenges);
-            for (challenge, proof) in synth_challenges.zip(synth_proofs) {
-                let proof_inner = proof.clone();
+            let challenges = synth_challenges.take(synth_proofs.len()).collect::<Vec<_>>();
+            //let proofs = synth_proofs.to_vec();
+            //assert_eq!(synth_proofs.len(), synth_challenges.num_synth_challenges);
+            //for (challenge, proof) in synth_challenges.par_iter().zip(synth_proofs) {
+            //for (challenge, proof) in challenges.into_par_iter().zip_eq(proofs.into_par_iter()) {
+            //challenges.into_par_iter().zip_eq(synth_proofs).map(|(challenge, proof)| {
+            let _ = challenges.into_par_iter().zip_eq(synth_proofs).map(|(challenge, proof)| {
+                //let proof_inner = proof.clone();
+                let proof_inner = proof;
                 let challenge_inner = challenge;
                 let pub_params_inner = pub_params.clone();
                 let pub_inputs_inner = pub_inputs.clone();
-                scope.execute(move || {
+                //scope.execute(move || {
                     assert!(proof_inner.verify(
                         &pub_params_inner,
                         &pub_inputs_inner,
                         challenge_inner,
                         graph
                     ));
-                });
-            }
-        });
+                //});
+            });
+        //});
 
         info!("writing synth-porep vanilla proofs to file: {:?}", path);
         let file = File::create(&path).map(BufWriter::new).with_context(|| {
