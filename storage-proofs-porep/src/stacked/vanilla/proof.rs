@@ -461,21 +461,24 @@ info!("vmx: generation done");
             //for (challenge, proof) in synth_challenges.par_iter().zip(synth_proofs) {
             //for (challenge, proof) in challenges.into_par_iter().zip_eq(proofs.into_par_iter()) {
             //challenges.into_par_iter().zip_eq(synth_proofs).map(|(challenge, proof)| {
-            let _ = challenges.into_par_iter().zip_eq(synth_proofs).map(|(challenge, proof)| {
+            let verified = challenges.into_par_iter().zip_eq(synth_proofs).map(|(challenge, proof)| {
                 //let proof_inner = proof.clone();
                 let proof_inner = proof;
                 let challenge_inner = challenge;
                 let pub_params_inner = pub_params.clone();
                 let pub_inputs_inner = pub_inputs.clone();
                 //scope.execute(move || {
-                    assert!(proof_inner.verify(
+                    //assert!(proof_inner.verify(
+                    proof_inner.verify(
                         &pub_params_inner,
                         &pub_inputs_inner,
                         challenge_inner,
                         graph
-                    ));
+                    )
                 //});
             });
+            assert!(verified.all(|x| x));
+
         //});
 
         info!("writing synth-porep vanilla proofs to file: {:?}", path);
