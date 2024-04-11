@@ -376,17 +376,17 @@ info!("vmx: generation done");
                         parents_data_full.clone(),
                     );
 
-                    //{
-                    //    let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
-                    //    let replica_id = &pub_inputs.replica_id;
-                    //    let proof_inner = proof.clone();
-                    //    assert!(
-                    //        proof_inner.verify(replica_id, &labeled_node),
-                    //        "Invalid encoding proof generated at layer {}",
-                    //        layer,
-                    //    );
-                    //    trace!("Valid encoding proof generated at layer {}", layer);
-                    //}
+                    {
+                        let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
+                        let replica_id = &pub_inputs.replica_id;
+                        let proof_inner = proof.clone();
+                        assert!(
+                            proof_inner.verify(replica_id, &labeled_node),
+                            "Invalid encoding proof generated at layer {}",
+                            layer,
+                        );
+                        trace!("Valid encoding proof generated at layer {}", layer);
+                    }
 
                     labeling_proofs.push(proof);
 
@@ -399,18 +399,18 @@ info!("vmx: generation done");
                     }
                 }
 
-                let mut layer = 1;
-                for proof in &labeling_proofs {
-                    let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
-                    let replica_id = &pub_inputs.replica_id;
-                    assert!(
-                        proof.verify(replica_id, &labeled_node),
-                        "Invalid encoding proof generated at layer {}",
-                        layer,
-                    );
-                    trace!("Valid encoding proof generated at layer {}", layer);
-                    layer += 1
-                }
+                //let mut layer = 1;
+                //for proof in &labeling_proofs {
+                //    let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
+                //    let replica_id = &pub_inputs.replica_id;
+                //    assert!(
+                //        proof.verify(replica_id, &labeled_node),
+                //        "Invalid encoding proof generated at layer {}",
+                //        layer,
+                //    );
+                //    trace!("Valid encoding proof generated at layer {}", layer);
+                //    layer += 1
+                //}
 
                 Ok(Proof {
                     comm_d_proofs: comm_d_proof,
