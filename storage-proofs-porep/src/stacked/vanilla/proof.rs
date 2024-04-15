@@ -3,7 +3,7 @@ use std::io::{BufReader, BufWriter};
 use std::marker::PhantomData;
 use std::panic::panic_any;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use anyhow::{ensure, Context};
 use bincode::deserialize;
@@ -55,17 +55,6 @@ use crate::{
 };
 
 pub const TOTAL_PARENTS: usize = 37;
-
-struct InvalidEncodingProofCoordinate {
-    failure_detected: bool,
-    layer: usize,
-    challenge_index: usize,
-}
-
-struct InvalidChallengeCoordinate {
-    failure_detected: bool,
-    challenge_index: usize,
-}
 
 lazy_static! {
     /// Ensure that only one `TreeBuilder` or `ColumnTreeBuilder` uses the GPU at a time.
@@ -275,204 +264,150 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 .collect()
         };
 
-        // Error propagation mechanism for scoped parallel verification.
-        let invalid_encoding_proof = Arc::new(Mutex::new(InvalidEncodingProofCoordinate {
-            failure_detected: false,
-            layer: 0,
-            challenge_index: 0,
-        }));
-        let invalid_comm_d = Arc::new(Mutex::new(InvalidChallengeCoordinate {
-            failure_detected: false,
-            challenge_index: 0,
-        }));
-        let invalid_comm_r = Arc::new(Mutex::new(InvalidChallengeCoordinate {
-            failure_detected: false,
-            challenge_index: 0,
-        }));
+        // Stacked commitment specifics
+        challenges
+            .into_par_iter()
+            .enumerate()
+            .map(|(challenge_index, challenge)| {
+                trace!(" challenge {} ({})", challenge, challenge_index);
+                assert!(challenge < graph.size(), "Invalid challenge");
+                assert!(challenge > 0, "Invalid challenge");
 
-        THREAD_POOL.scoped(|scope| {
-            // Stacked commitment specifics
-            challenges
-                .into_par_iter()
-                .enumerate()
-                .map(|(challenge_index, challenge)| {
-                    trace!(" challenge {} ({})", challenge, challenge_index);
-                    assert!(challenge < graph.size(), "Invalid challenge");
-                    assert!(challenge > 0, "Invalid challenge");
+                let comm_d_proof = t_aux
+                    .tree_d
+                    .as_ref()
+                    .expect("failed to get tree_d")
+                    .gen_proof(challenge)?;
 
-                    let comm_d_proof = t_aux
-                        .tree_d
-                        .as_ref()
-                        .expect("failed to get tree_d")
-                        .gen_proof(challenge)?;
+                assert!(
+                    comm_d_proof.validate(challenge),
+                    "Invalid comm_d detected at challenge_index {}",
+                    challenge_index
+                );
 
-                    let challenge_inner = challenge;
-                    let comm_d_proof_inner = comm_d_proof.clone();
-                    let invalid_comm_d_inner = Arc::clone(&invalid_comm_d);
-                    scope.execute(move || {
-                        if !comm_d_proof_inner.validate(challenge_inner) {
-                            let mut invalid = invalid_comm_d_inner.lock().expect("failed to get lock on invalid_comm_d_inner");
-                            *invalid = InvalidChallengeCoordinate {
-                                failure_detected: true,
-                                challenge_index,
-                            };
-                            error!("Invalid comm_d detected at challenge index {}", challenge_index);
-                        }
-                    });
+                // Stacked replica column openings
+                let rcp = {
+                    let (c_x, drg_parents, exp_parents) = {
+                        assert!(t_aux.tree_c.is_some());
+                        let tree_c = t_aux.tree_c.as_ref().expect("failed to get tree_c");
+                        assert_eq!(comm_c, tree_c.root());
 
-                    // Stacked replica column openings
-                    let rcp = {
-                        let (c_x, drg_parents, exp_parents) = {
-                            assert!(t_aux.tree_c.is_some());
-                            let tree_c = t_aux.tree_c.as_ref().expect("failed to get tree_c");
-                            assert_eq!(comm_c, tree_c.root());
+                        // All labels in C_X
+                        trace!("  c_x");
+                        let c_x = t_aux.column(challenge as u32)?.into_proof(tree_c)?;
 
-                            // All labels in C_X
-                            trace!("  c_x");
-                            let c_x = t_aux.column(challenge as u32)?.into_proof(tree_c)?;
+                        // All labels in the DRG parents.
+                        trace!("  drg_parents");
+                        let drg_parents = get_drg_parents_columns(challenge)?
+                            .into_iter()
+                            .map(|column| column.into_proof(tree_c))
+                            .collect::<Result<_>>()?;
 
-                            // All labels in the DRG parents.
-                            trace!("  drg_parents");
-                            let drg_parents = get_drg_parents_columns(challenge)?
-                                .into_iter()
-                                .map(|column| column.into_proof(tree_c))
-                                .collect::<Result<_>>()?;
+                        // Labels for the expander parents
+                        trace!("  exp_parents");
+                        let exp_parents = get_exp_parents_columns(challenge)?
+                            .into_iter()
+                            .map(|column| column.into_proof(tree_c))
+                            .collect::<Result<_>>()?;
 
-                            // Labels for the expander parents
-                            trace!("  exp_parents");
-                            let exp_parents = get_exp_parents_columns(challenge)?
-                                .into_iter()
-                                .map(|column| column.into_proof(tree_c))
-                                .collect::<Result<_>>()?;
-
-                            (c_x, drg_parents, exp_parents)
-                        };
-
-                        ReplicaColumnProof {
-                            c_x,
-                            drg_parents,
-                            exp_parents,
-                        }
+                        (c_x, drg_parents, exp_parents)
                     };
 
-                    // Final replica layer openings
-                    trace!("final replica layer openings");
-                    let comm_r_last_proof = t_aux.tree_r_last.gen_cached_proof(
-                        challenge,
-                        Some(t_aux.tree_r_last_config_rows_to_discard),
-                    )?;
+                    ReplicaColumnProof {
+                        c_x,
+                        drg_parents,
+                        exp_parents,
+                    }
+                };
 
-                    let comm_r_last_proof_inner = comm_r_last_proof.clone();
-                    let invalid_comm_r_inner = Arc::clone(&invalid_comm_r);
-                    scope.execute(move || {
-                        if !comm_r_last_proof_inner.validate(challenge) {
-                            let mut invalid = invalid_comm_r_inner.lock().expect("failed to get lock on invalid_comm_r_inner");
-                            *invalid = InvalidChallengeCoordinate {
-                                failure_detected: true,
-                                challenge_index: challenge,
-                            };
-                            error!("Invalid comm_r detected at challenge index {}", challenge);
-                        }
-                    });
+                // Final replica layer openings
+                trace!("final replica layer openings");
+                let comm_r_last_proof = t_aux
+                    .tree_r_last
+                    .gen_cached_proof(challenge, Some(t_aux.tree_r_last_config_rows_to_discard))?;
+                debug_assert!(
+                    comm_r_last_proof.validate(challenge),
+                    "Invalid comm_r detected at challenge index {}",
+                    challenge
+                );
 
-                    // Labeling Proofs Layer 1..l
-                    let mut labeling_proofs = Vec::with_capacity(num_layers);
-                    let mut encoding_proof = None;
+                // Labeling Proofs Layer 1..l
+                let mut labeling_proofs = Vec::with_capacity(num_layers);
+                let mut encoding_proof = None;
 
-                    for layer in 1..=num_layers {
-                        trace!("  encoding proof layer {}", layer,);
-                        let parents_data: Vec<<Tree::Hasher as Hasher>::Domain> = if layer == 1 {
-                            let mut parents = vec![0; graph.base_graph().degree()];
-                            graph.base_parents(challenge, &mut parents)?;
+                for layer in 1..=num_layers {
+                    trace!("  encoding proof layer {}", layer,);
+                    let parents_data: Vec<<Tree::Hasher as Hasher>::Domain> = if layer == 1 {
+                        let mut parents = vec![0; graph.base_graph().degree()];
+                        graph.base_parents(challenge, &mut parents)?;
 
-                            parents
-                                .into_par_iter()
-                                .map(|parent| t_aux.domain_node_at_layer(layer, parent))
-                                .collect::<Result<_>>()?
-                        } else {
-                            let mut parents = vec![0; graph.degree()];
-                            graph.parents(challenge, &mut parents)?;
-                            let base_parents_count = graph.base_graph().degree();
+                        parents
+                            .into_par_iter()
+                            .map(|parent| t_aux.domain_node_at_layer(layer, parent))
+                            .collect::<Result<_>>()?
+                    } else {
+                        let mut parents = vec![0; graph.degree()];
+                        graph.parents(challenge, &mut parents)?;
+                        let base_parents_count = graph.base_graph().degree();
 
-                            parents
-                                .into_par_iter()
-                                .enumerate()
-                                .map(|(i, parent)| {
-                                    if i < base_parents_count {
-                                        // parents data for base parents is from the current layer
-                                        t_aux.domain_node_at_layer(layer, parent)
-                                    } else {
-                                        // parents data for exp parents is from the previous layer
-                                        t_aux.domain_node_at_layer(layer - 1, parent)
-                                    }
-                                })
-                                .collect::<Result<_>>()?
-                        };
-
-                        // repeat parents
-                        let mut parents_data_full = vec![Default::default(); TOTAL_PARENTS];
-                        for chunk in parents_data_full.chunks_mut(parents_data.len()) {
-                            chunk.copy_from_slice(&parents_data[..chunk.len()]);
-                        }
-
-                        let proof = LabelingProof::<Tree::Hasher>::new(
-                            layer as u32,
-                            challenge as u64,
-                            parents_data_full.clone(),
-                        );
-
-                        {
-                            let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
-                            let replica_id = &pub_inputs.replica_id;
-                            let proof_inner = proof.clone();
-                            let invalid_encoding_proof_inner = Arc::clone(&invalid_encoding_proof);
-                            scope.execute(move || {
-                                if !proof_inner.verify(replica_id, &labeled_node) {
-                                    let mut invalid = invalid_encoding_proof_inner.lock().expect("failed to get lock on invalid_encoding_proof_inner");
-                                    *invalid = InvalidEncodingProofCoordinate {
-                                        failure_detected: true,
-                                        layer,
-                                        challenge_index,
-                                    };
-                                    error!("Invalid encoding proof generated at layer {}, challenge index {}", layer, challenge_index);
+                        parents
+                            .into_par_iter()
+                            .enumerate()
+                            .map(|(i, parent)| {
+                                if i < base_parents_count {
+                                    // parents data for base parents is from the current layer
+                                    t_aux.domain_node_at_layer(layer, parent)
                                 } else {
-                                    trace!("Valid encoding proof generated at layer {}", layer);
+                                    // parents data for exp parents is from the previous layer
+                                    t_aux.domain_node_at_layer(layer - 1, parent)
                                 }
-                            });
-                        }
+                            })
+                            .collect::<Result<_>>()?
+                    };
 
-                        labeling_proofs.push(proof);
-
-                        if layer == num_layers {
-                            encoding_proof = Some(EncodingProof::new(
-                                layer as u32,
-                                challenge as u64,
-                                parents_data_full,
-                            ));
-                        }
-
-                        // Check if a proof was detected as invalid
-                        let invalid_comm_d_coordinate = invalid_comm_d.lock().expect("failed to get lock on invalid_comm_d");
-                        ensure!(!invalid_comm_d_coordinate.failure_detected, "Invalid comm_d detected at challenge_index {}",
-                                invalid_comm_d_coordinate.challenge_index);
-                        let invalid_comm_r_coordinate = invalid_comm_r.lock().expect("failed to get lock on invalid_comm_r");
-                        ensure!(!invalid_comm_r_coordinate.failure_detected, "Invalid comm_r detected at challenge_index {}",
-                                invalid_comm_r_coordinate.challenge_index);
-                        let invalid_encoding_proof_coordinate = invalid_encoding_proof.lock().expect("failed to get lock on invalid_encoding_proof");
-                        ensure!(!invalid_encoding_proof_coordinate.failure_detected, "Invalid encoding proof generated at layer {}, challenge_index {}",
-                                invalid_encoding_proof_coordinate.layer, invalid_encoding_proof_coordinate.challenge_index);
+                    // repeat parents
+                    let mut parents_data_full = vec![Default::default(); TOTAL_PARENTS];
+                    for chunk in parents_data_full.chunks_mut(parents_data.len()) {
+                        chunk.copy_from_slice(&parents_data[..chunk.len()]);
                     }
 
-                    Ok(Proof {
-                        comm_d_proofs: comm_d_proof,
-                        replica_column_proofs: rcp,
-                        comm_r_last_proof,
-                        labeling_proofs,
-                        encoding_proof: encoding_proof.expect("invalid tapering"),
-                    })
+                    let proof = LabelingProof::<Tree::Hasher>::new(
+                        layer as u32,
+                        challenge as u64,
+                        parents_data_full.clone(),
+                    );
+
+                    {
+                        let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
+                        assert!(
+                            proof.verify(&pub_inputs.replica_id, &labeled_node),
+                            "Invalid encoding proof generated at layer {}, challenge index {}",
+                            layer,
+                            challenge_index
+                        );
+                        trace!("Valid encoding proof generated at layer {}", layer);
+                    }
+
+                    labeling_proofs.push(proof);
+
+                    if layer == num_layers {
+                        encoding_proof = Some(EncodingProof::new(
+                            layer as u32,
+                            challenge as u64,
+                            parents_data_full,
+                        ));
+                    }
+                }
+
+                Ok(Proof {
+                    comm_d_proofs: comm_d_proof,
+                    replica_column_proofs: rcp,
+                    comm_r_last_proof,
+                    labeling_proofs,
+                    encoding_proof: encoding_proof.expect("invalid tapering"),
                 })
-                .collect()
-        })
+            })
+            .collect()
     }
 
     fn write_synth_proofs(
@@ -490,11 +425,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             "comm_r must be set prior to generating synthetic challenges",
         );
 
-        let invalid_synth_porep_proof = Arc::new(Mutex::new(InvalidChallengeCoordinate {
-            failure_detected: false,
-            challenge_index: 0,
-        }));
-
         // Verify synth proofs prior to writing because `ProofScheme`'s verification API is not
         // amenable to prover-only verification (i.e. the API uses public values, whereas synthetic
         // proofs are known only to the prover).
@@ -510,49 +440,21 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
             .map(|tau| tau.comm_r.into())
             .expect("unwrapping should not fail");
         let synth_challenges = SynthChallengeGenerator::default(graph.size(), &replica_id, &comm_r);
-        ensure!(
-            synth_proofs.len() == synth_challenges.num_synth_challenges,
-            "Mismatched synth porep proofs for the required challenge set"
-        );
+        // Create a vector, so that we can iterate with a parallel iterator.
+        let challenges = synth_challenges
+            .take(synth_proofs.len())
+            .collect::<Vec<_>>();
+        challenges
+            .into_par_iter()
+            .zip_eq(synth_proofs)
+            .for_each(|(challenge, proof)| {
+                assert!(
+                    proof.verify(&pub_params, pub_inputs, challenge, graph),
+                    "Invalid synth_porep proof generated at challenge_index {}",
+                    challenge
+                );
+            });
 
-        THREAD_POOL.scoped(|scope| {
-            for (challenge, proof) in synth_challenges.zip(synth_proofs) {
-                let proof_inner = proof.clone();
-                let challenge_inner = challenge;
-                let pub_params_inner = pub_params.clone();
-                let pub_inputs_inner = pub_inputs.clone();
-                let invalid_synth_porep_proof_inner = Arc::clone(&invalid_synth_porep_proof);
-                scope.execute(move || {
-                    if !proof_inner.verify(
-                        &pub_params_inner,
-                        &pub_inputs_inner,
-                        challenge_inner,
-                        graph,
-                    ) {
-                        let mut invalid = invalid_synth_porep_proof_inner
-                            .lock()
-                            .expect("failed to get lock on invalid_synth_porep_proof_inner");
-                        *invalid = InvalidChallengeCoordinate {
-                            failure_detected: true,
-                            challenge_index: challenge_inner,
-                        };
-                        error!(
-                            "Invalid synth porep proof generated at challenge index {}",
-                            challenge_inner
-                        );
-                    }
-                });
-            }
-        });
-
-        let invalid_synth_porep_proof_coordinate = invalid_synth_porep_proof
-            .lock()
-            .expect("failed to get lock on invalid_synth_porep_proof");
-        ensure!(
-            !invalid_synth_porep_proof_coordinate.failure_detected,
-            "Invalid synth_porep proof generated at challenge_index {}",
-            invalid_synth_porep_proof_coordinate.challenge_index
-        );
         info!("writing synth-porep vanilla proofs to file: {:?}", path);
         let file = File::create(&path).map(BufWriter::new).with_context(|| {
             format!(
@@ -832,7 +734,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         TreeArity: PoseidonArity,
     {
         use std::cmp::min;
-        use std::sync::{mpsc::sync_channel as channel, RwLock};
+        use std::sync::{mpsc::sync_channel as channel, Arc, RwLock};
 
         use fr32::fr_into_bytes;
         use generic_array::GenericArray;
