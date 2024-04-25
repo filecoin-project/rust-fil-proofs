@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [17.0.0] - 2024-04-25
+
+- Improve error handling for threaded verification errors [#1748](https://github.com/filecoin-project/rust-fil-proofs/pull/1748)
+- Remove historical but unused PoSt code [#1744](https://github.com/filecoin-project/rust-fil-proofs/pull/1744)
+- Separate published and supported sector sizes [#1747](https://github.com/filecoin-project/rust-fil-proofs/pull/1747)
+- Misc re-factors [#1745](https://github.com/filecoin-project/rust-fil-proofs/pull/1745)
+- Add API features flag to benchy [#1743](https://github.com/filecoin-project/rust-fil-proofs/pull/1743)
+- Add NI-PoRep functionality with tests [#1734](https://github.com/filecoin-project/rust-fil-proofs/pull/1734)
+- Use newer internal testing API [#1742](https://github.com/filecoin-project/rust-fil-proofs/pull/1742)
+- Change rust version [#1741](https://github.com/filecoin-project/rust-fil-proofs/pull/1741)
+- Add SuperSnaps functionality with tests [#1729](https://github.com/filecoin-project/rust-fil-proofs/pull/1729)
+- Re-factor challenge type to enum [#1739](https://github.com/filecoin-project/rust-fil-proofs/pull/1739)
+- Simplify testing of API features [#1740](https://github.com/filecoin-project/rust-fil-proofs/pull/1740)
+- Re-factor layer retrieval [#1735](https://github.com/filecoin-project/rust-fil-proofs/pull/1735)
+- Re-factor StackedCircuit API [#1732](https://github.com/filecoin-project/rust-fil-proofs/pull/1732)
+- Re-factor challenges selection [#1731](https://github.com/filecoin-project/rust-fil-proofs/pull/1731)
+- Remove optional internal API [#1733](https://github.com/filecoin-project/rust-fil-proofs/pull/1733)
+- Re-factor SynthPoRep [#1720](https://github.com/filecoin-project/rust-fil-proofs/pull/1720)
+- Fix typo in README [#1738](https://github.com/filecoin-project/rust-fil-proofs/pull/1738)
+
 ## [16.1.0] - 2023-11-08
 
 - Update lifecycle upgrade 'big-tests' [#1737](https://github.com/filecoin-project/rust-fil-proofs/pull/1737)
@@ -419,7 +439,8 @@ mainnet ready and will be replaced in a future version.  This release is intende
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v16.1.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v17.0.0...HEAD
+[17.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v17.0.0
 [16.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v16.1.0
 [16.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v16.0.0
 [15.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v15.0.0
