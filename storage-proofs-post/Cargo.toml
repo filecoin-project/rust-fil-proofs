@@ -10,7 +10,7 @@ readme = "README.md"
 
 [dependencies]
 storage-proofs-core = { path = "../storage-proofs-core", version = "~16.1.0", default-features = false}
-filecoin-hashers = { path = "../filecoin-hashers", version = "~11.1.0", default-features = false, features = ["poseidon", "sha256"]}
+filecoin-hashers = { path = "../filecoin-hashers", version = "~12.0.0", default-features = false, features = ["poseidon", "sha256"]}
 byteorder = "1"
 sha2 = "0.10.2"
 rayon = "1.0.0"
