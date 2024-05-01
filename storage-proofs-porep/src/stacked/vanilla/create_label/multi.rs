@@ -129,7 +129,7 @@ fn fill_buffer(
 //                  hashing thread
 // - cur_producer - The next node to be filled in by producer threads. The
 //                  hashing thread can not yet work on this node.
-// - cur_awaiting - The first not not currently being filled by any producer
+// - cur_awaiting - The first not currently being filled by any producer
 //                  thread.
 // - stride       - Each producer fills in this many nodes at a time. Setting
 //                  this too small with cause a lot of time to be spent in
