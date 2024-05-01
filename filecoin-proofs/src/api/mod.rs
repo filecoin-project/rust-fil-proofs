@@ -351,7 +351,7 @@ where
 
     // If the call to `extract_range` was successful, the `unsealed` vector must
     // have a length which equals `num_bytes_padded`. The byte at its 0-index
-    // byte will be the the byte at index `offset_padded` in the sealed sector.
+    // byte will be the byte at index `offset_padded` in the sealed sector.
     let written = write_unpadded(unsealed, &mut unsealed_output, 0, num_bytes.into())
         .context("write_unpadded failed")?;
 
