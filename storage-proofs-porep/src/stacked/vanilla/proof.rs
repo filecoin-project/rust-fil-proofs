@@ -117,6 +117,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         assert!(num_layers > 0);
         // Sanity checks on restored trees.
         assert!(pub_inputs.tau.is_some());
+        // Check that the public inputs match the stored data.
+        assert_eq!(
+            pub_inputs.tau.as_ref().expect("as_ref failure").comm_d,
+            t_aux.tree_d.as_ref().expect("failed to get tree_d").root()
+        );
 
         match challenges {
             Challenges::Interactive(interactive_challenges) => {
@@ -140,7 +145,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                         Self::prove_layers_generate(
                             graph,
-                            pub_inputs,
+                            &pub_inputs.replica_id,
                             p_aux.comm_c,
                             t_aux,
                             challenge_positions,
@@ -164,7 +169,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                     let synth_proofs = Self::prove_layers_generate(
                         graph,
-                        pub_inputs,
+                        &pub_inputs.replica_id,
                         p_aux.comm_c,
                         t_aux,
                         challenge_positions,
@@ -219,7 +224,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                         Self::prove_layers_generate(
                             graph,
-                            pub_inputs,
+                            &pub_inputs.replica_id,
                             p_aux.comm_c,
                             t_aux,
                             challenge_positions,
@@ -233,17 +238,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
     fn prove_layers_generate(
         graph: &StackedBucketGraph<Tree::Hasher>,
-        pub_inputs: &PublicInputs<<Tree::Hasher as Hasher>::Domain, <G as Hasher>::Domain>,
+        replica_id: &<Tree::Hasher as Hasher>::Domain,
         comm_c: <Tree::Hasher as Hasher>::Domain,
         t_aux: &TemporaryAuxCache<Tree, G>,
         challenges: Vec<usize>,
         num_layers: usize,
     ) -> Result<Vec<Proof<Tree, G>>> {
         assert_eq!(t_aux.labels.len(), num_layers);
-        assert_eq!(
-            pub_inputs.tau.as_ref().expect("as_ref failure").comm_d,
-            t_aux.tree_d.as_ref().expect("failed to get tree_d").root()
-        );
 
         let get_drg_parents_columns = |x: usize| -> Result<Vec<Column<Tree::Hasher>>> {
             let base_degree = graph.base_graph().degree();
@@ -423,7 +424,6 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
 
                         {
                             let labeled_node = *rcp.c_x.get_node_at_layer(layer)?;
-                            let replica_id = &pub_inputs.replica_id;
                             let proof_inner = proof.clone();
                             let invalid_encoding_proof_inner = Arc::clone(&invalid_encoding_proof);
                             scope.execute(move || {
