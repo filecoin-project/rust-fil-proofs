@@ -740,13 +740,22 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     // If we're not at the pow2 target, duplicate the last proof until we are.
     pad_proofs_to_target(&mut proofs, target_proofs_len)?;
 
-    // Hash all of the seeds and comm_r's pair-wise into a digest for the aggregate proof method.
+    // For standard PoRep, the SnarkPack transcript should include a hash of each aggregated PoRep's
+    // challenge seed and comm_r (pair-wise); however since NI-PoRep does not use a seed to generate
+    // it's challenges, any challenge seeds provided as arguments to this function should be ignored
+    // (and thus not be included in an NI-PoRep's SnarkPack transcript).
     let hashed_seeds_and_comm_rs: [u8; 32] = {
         let mut hasher = Sha256::new();
-        for cur in seeds.iter().zip(comm_rs.iter()) {
-            let (seed, comm_r) = cur;
-            hasher.update(seed);
-            hasher.update(comm_r);
+        if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) {
+            for comm_r in comm_rs.iter() {
+                hasher.update(comm_r);
+            }
+        } else {
+            for cur in seeds.iter().zip(comm_rs.iter()) {
+                let (seed, comm_r) = cur;
+                hasher.update(seed);
+                hasher.update(comm_r);
+            }
         }
         hasher.finalize().into()
     };
@@ -834,13 +843,21 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     let srs_verifier_key =
         get_stacked_srs_verifier_key::<Tree>(porep_config, aggregated_proofs_len)?;
 
-    // Hash all of the seeds and comm_r's pair-wise into a digest for the aggregate proof method.
+    // For standard PoRep, the SnarkPack transcript should include a hash of each aggregated PoRep's
+    // challenge seed and comm_r (pair-wise); however NI-PoRep's transcript should only include
+    // comm_r (as NI-PoRep does not use a seed to generate its challenges).
     let hashed_seeds_and_comm_rs: [u8; 32] = {
         let mut hasher = Sha256::new();
-        for cur in seeds.iter().zip(comm_rs.iter()) {
-            let (seed, comm_r) = cur;
-            hasher.update(seed);
-            hasher.update(comm_r);
+        if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) {
+            for comm_r in comm_rs.iter() {
+                hasher.update(comm_r);
+            }
+        } else {
+            for cur in seeds.iter().zip(comm_rs.iter()) {
+                let (seed, comm_r) = cur;
+                hasher.update(seed);
+                hasher.update(comm_r);
+            }
         }
         hasher.finalize().into()
     };
