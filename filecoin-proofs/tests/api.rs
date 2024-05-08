@@ -30,10 +30,10 @@ use filecoin_proofs::{
     PoRepConfig, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
     SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
     SectorShape2KiB, SectorShape32GiB, SectorShape32KiB, SectorShape4KiB, SectorUpdateConfig,
-    SectorUpdateProofInputs, UnpaddedByteIndex, UnpaddedBytesAmount, SECTOR_SIZE_16_KIB,
-    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
-    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
-    WINNING_POST_SECTOR_COUNT,
+    SectorUpdateProofInputs, UnpaddedByteIndex, UnpaddedBytesAmount,
+    POREP_NON_INTERACTIVE_FIXED_SEED, SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
+    SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+    WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use fr32::bytes_into_fr;
 use log::{info, trace};
@@ -2099,7 +2099,11 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     let cache_dir = tempdir().expect("failed to create temp dir");
 
     let ticket = rng.gen();
-    let seed = rng.gen();
+    let seed = if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) {
+        POREP_NON_INTERACTIVE_FIXED_SEED
+    } else {
+        rng.gen()
+    };
     let sector_id = rng.gen::<u64>().into();
 
     let (piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(

@@ -41,7 +41,8 @@ use crate::{
         get_stacked_verifying_key,
     },
     constants::{
-        DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, SINGLE_PARTITION_PROOF_LEN,
+        DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher,
+        POREP_NON_INTERACTIVE_FIXED_SEED, SINGLE_PARTITION_PROOF_LEN,
     },
     parameters::setup_params,
     pieces::{self, verify_pieces},
@@ -358,6 +359,13 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
 ) -> Result<SealCommitPhase1Output<Tree>> {
     info!("seal_commit_phase1:start: {:?}", sector_id);
 
+    if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) {
+        ensure!(
+            seed == POREP_NON_INTERACTIVE_FIXED_SEED,
+            "The seed for Non-Interactive PoRep is fixed"
+        );
+    }
+
     let skip_labels = porep_config.feature_enabled(ApiFeature::SyntheticPoRep);
     let out = seal_commit_phase1_inner::<T, Tree>(
         porep_config,
@@ -510,7 +518,6 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
     ensure!(comm_r != [0; 32], "Invalid all zero commitment (comm_r)");
-    ensure!(seed != [0; 32], "Invalid porep challenge seed");
     ensure!(
         !vanilla_proofs.is_empty()
             && vanilla_proofs
@@ -704,6 +711,17 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
         "cannot aggregate with empty outputs"
     );
 
+    if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) {
+        ensure!(
+            comm_rs.len() == 1,
+            "For Non-interactive PoRep there must be a single comm_r only"
+        );
+        ensure!(
+            seeds == [POREP_NON_INTERACTIVE_FIXED_SEED],
+            "For Non-Interactive PoRep the seed is fixed"
+        );
+    }
+
     let partitions = usize::from(porep_config.partitions);
     let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
     let mut proofs: Vec<_> =
@@ -797,6 +815,16 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
         comm_rs.len() == seeds.len(),
         "invalid comm_rs and seeds len mismatch"
     );
+    if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) {
+        ensure!(
+            comm_rs.len() == 1,
+            "For Non-interactive PoRep there must be a single comm_r only"
+        );
+        ensure!(
+            seeds == [POREP_NON_INTERACTIVE_FIXED_SEED],
+            "For Non-Interactive PoRep the seed is fixed"
+        );
+    }
 
     trace!(
         "verify_aggregate_seal_commit_proofs called with len {}",

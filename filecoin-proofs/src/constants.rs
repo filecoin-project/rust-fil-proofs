@@ -56,6 +56,9 @@ pub const PUBLISHED_SECTOR_SIZES: [u64; 5] = [
     SECTOR_SIZE_64_GIB,
 ];
 
+/// The seed that is used to generate the Non-interactive PoRep proof.
+pub const POREP_NON_INTERACTIVE_FIXED_SEED: [u8; 32] = [0; 32];
+
 lazy_static! {
     pub static ref POREP_PARTITIONS: RwLock<HashMap<u64, u8>> = RwLock::new(
         [
