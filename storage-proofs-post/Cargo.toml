@@ -24,6 +24,7 @@ generic-array = "0.14.4"
 anyhow = "1.0.23"
 fr32 = { path = "../fr32", version = "~9.1.0", default-features = false }
 blstrs = "0.7.0"
+visibility = "0.1.0"
 
 [dev-dependencies]
 tempfile = "3"
@@ -39,3 +40,6 @@ opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl"]
 # This feature enables a fixed number of discarded rows for TreeR. The `FIL_PROOFS_ROWS_TO_DISCARD`
 # setting is ignored, no `TemporaryAux` file will be written.
 fixed-rows-to-discard = ["storage-proofs-core/fixed-rows-to-discard"]
+# This feature is for things like changing the visibility of functions/modules for tooling purpose.
+# This way functionality is accessible for those cases, while not being part of the public API.
+tooling = []

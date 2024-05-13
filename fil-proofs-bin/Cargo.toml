@@ -30,7 +30,7 @@ serde_json = "1.0.95"
 sha2 = "0.10.2"
 storage-proofs-core = { path = "../storage-proofs-core", version = "~16.1.0", default-features = false, features = ["tooling"] }
 storage-proofs-porep = { path = "../storage-proofs-porep", version = "~16.1.0", default-features = false, features = ["tooling"] }
-storage-proofs-post = { path = "../storage-proofs-post", version = "~16.1.0", default-features = false }
+storage-proofs-post = { path = "../storage-proofs-post", version = "~16.1.0", default-features = false, features = ["tooling"] }
 storage-proofs-update = { path = "../storage-proofs-update", version = "~16.1.0", default-features = false }
 
 [features]

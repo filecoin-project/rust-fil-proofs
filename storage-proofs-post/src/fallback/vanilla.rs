@@ -113,6 +113,7 @@ pub struct Proof<P: MerkleProofTrait> {
     pub sectors: Vec<SectorProof<P>>,
 }
 
+#[cfg_attr(feature = "tooling", visibility::make(pub))]
 type MerkleProofs<Proof> = Vec<MerkleProof<<Proof as MerkleProofTrait>::Hasher, <Proof as MerkleProofTrait>::Arity, <Proof as MerkleProofTrait>::SubTreeArity, <Proof as MerkleProofTrait>::TopTreeArity>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
