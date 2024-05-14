@@ -352,6 +352,8 @@ pub fn seal_commit_phase1<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>(
     prover_id: ProverId,
     sector_id: SectorId,
     ticket: Ticket,
+    // Note: when using NI-PoRep the PoRep challenge generation seed is ignored, thus any value can
+    // be passed in here for `seed`.
     seed: Ticket,
     pre_commit: SealPreCommitOutput,
     piece_infos: &[PieceInfo],
