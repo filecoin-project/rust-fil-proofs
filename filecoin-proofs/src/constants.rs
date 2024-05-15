@@ -125,11 +125,11 @@ pub(crate) const fn get_porep_interactive_minimum_challenges(sector_size: u64) -
 }
 
 /// Returns the minimum number of challenges used for the non-interactive PoRep fo a certain sector
-/// size.
+/// size, i.e. `ceil(12.8 * interactive_porep_min_challenges)`.
 pub(crate) const fn get_porep_non_interactive_minimum_challenges(sector_size: u64) -> usize {
     match sector_size {
         SECTOR_SIZE_2_KIB | SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB
-        | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 4,
+        | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 26,
         SECTOR_SIZE_32_GIB | SECTOR_SIZE_64_GIB => 2253,
         _ => panic!("invalid sector size"),
     }
@@ -144,7 +144,7 @@ pub const fn get_porep_non_interactive_partitions(sector_size: u64) -> u8 {
         // sizes. The number of challenges per partition for test sizes is 2, for production
         // parameters it's 18.
         SECTOR_SIZE_2_KIB | SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB
-        | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 2,
+        | SECTOR_SIZE_8_MIB | SECTOR_SIZE_16_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB => 13,
         SECTOR_SIZE_32_GIB | SECTOR_SIZE_64_GIB => 126,
         _ => panic!("invalid sector size"),
     }
