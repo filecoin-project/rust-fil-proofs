@@ -41,7 +41,9 @@ use crate::{
         get_stacked_verifying_key,
     },
     constants::{
-        DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, SINGLE_PARTITION_PROOF_LEN,
+        DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher,
+        FIP90_MAX_NI_POREP_AGGREGATION_PROOFS, FIP90_MIN_NI_POREP_AGGREGATION_PROOFS,
+        SINGLE_PARTITION_PROOF_LEN,
     },
     parameters::setup_params,
     pieces::{self, verify_pieces},
@@ -749,6 +751,20 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
         "cannot aggregate with empty outputs"
     );
 
+    // Note that the 'normal' case of generating a single
+    // (non-aggregated) NI-PoRep proof will pass in a single
+    // commit_output.  FIP-0090 aggregation is only considered when
+    // there are multiple NI-PoRep commit_outputs that are to be
+    // aggregated together.
+    if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) && commit_outputs.len() > 1 {
+        ensure!(
+            commit_outputs.len() >= FIP90_MIN_NI_POREP_AGGREGATION_PROOFS
+                && commit_outputs.len() <= FIP90_MAX_NI_POREP_AGGREGATION_PROOFS,
+            "{} proofs is outside of FIP-0090 specified NI-PoRep aggregation bounds",
+            commit_outputs.len()
+        );
+    }
+
     let partitions = usize::from(porep_config.partitions);
     let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
     let mut proofs: Vec<_> =
@@ -777,6 +793,7 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
         target_proofs_len > 1,
         "cannot aggregate less than two proofs"
     );
+
     trace!(
         "aggregate_seal_commit_proofs will pad proofs to target_len {}",
         target_proofs_len

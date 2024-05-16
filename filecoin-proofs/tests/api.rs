@@ -624,7 +624,7 @@ fn test_seal_proof_aggregation_2kib() -> Result<()> {
         (1, 5, ApiVersion::V1_1_0, vec![]),
         (5, 5, ApiVersion::V1_2_0, vec![ApiFeature::SyntheticPoRep]),
         (
-            257,
+            65,
             5,
             ApiVersion::V1_2_0,
             vec![ApiFeature::NonInteractivePoRep],
@@ -653,7 +653,7 @@ fn test_seal_proof_aggregation_4kib() -> Result<()> {
         (7, 5, ApiVersion::V1_1_0, vec![]),
         (24, 5, ApiVersion::V1_2_0, vec![ApiFeature::SyntheticPoRep]),
         (
-            123,
+            17,
             5,
             ApiVersion::V1_2_0,
             vec![ApiFeature::NonInteractivePoRep],
@@ -682,7 +682,7 @@ fn test_seal_proof_aggregation_32kib() -> Result<()> {
         (220, 5, ApiVersion::V1_1_0, vec![]),
         (500, 5, ApiVersion::V1_2_0, vec![ApiFeature::SyntheticPoRep]),
         (
-            818,
+            5,
             5,
             ApiVersion::V1_2_0,
             vec![ApiFeature::NonInteractivePoRep],
