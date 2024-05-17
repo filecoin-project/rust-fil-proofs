@@ -12,7 +12,7 @@ readme = "README.md"
 crossbeam = "0.8"
 storage-proofs-core = { path = "../storage-proofs-core", version = "~18.0.0", default-features = false}
 sha2raw = { path = "../sha2raw", version = "~13.0.0" }
-filecoin-hashers = { path = "../filecoin-hashers", version = "~12.0.0", default-features = false, features = ["poseidon", "sha256"]}
+filecoin-hashers = { path = "../filecoin-hashers", version = "~13.0.0", default-features = false, features = ["poseidon", "sha256"]}
 merkletree = "0.23.0"
 memmap2 = "0.5.6"
 num-bigint = "0.4.3"
@@ -36,7 +36,7 @@ byte-slice-cast = "1.0.0"
 hwloc = { version = "0.5.0", optional = true }
 libc = "0.2"
 fdlimit = "0.2.0"
-fr32 = { path = "../fr32", version = "~10.0.0", default-features = false }
+fr32 = { path = "../fr32", version = "~11.0.0", default-features = false }
 yastl = "0.1.2"
 blstrs = "0.7.0"
 chacha20 = "0.9.0"
@@ -56,7 +56,7 @@ tempfile = "3"
 rand = "0.8"
 rand_xorshift = "0.3.0"
 criterion = "0.3.2"
-filecoin-hashers = { path = "../filecoin-hashers", version = "~12.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
+filecoin-hashers = { path = "../filecoin-hashers", version = "~13.0.0", default-features = false, features = ["poseidon", "sha256", "blake2s"]}
 fil_logger = "0.1.6"
 
 [features]
