@@ -41,7 +41,9 @@ use crate::{
         get_stacked_verifying_key,
     },
     constants::{
-        DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher, SINGLE_PARTITION_PROOF_LEN,
+        DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher,
+        FIP90_MAX_NI_POREP_AGGREGATION_PROOFS, FIP90_MIN_NI_POREP_AGGREGATION_PROOFS,
+        SINGLE_PARTITION_PROOF_LEN,
     },
     parameters::setup_params,
     pieces::{self, verify_pieces},
@@ -492,14 +494,22 @@ pub fn seal_commit_phase1_inner<T: AsRef<Path>, Tree: 'static + MerkleTreeTrait>
     Ok(out)
 }
 
+/// This new API is added and made public specifically for generating
+/// NonInteractive PoRep proofs that will later be aggregated using
+/// the existing `aggregate_seal_commit_proofs` method.  It is also
+/// used internally outside of the NonInteractivePoRep use-case to
+/// avoid code duplication.
+///
+/// Note that if `seal_commit_phase2` is used for NonInteractivePoRep
+/// and it's later decided that multiple NI-PoRep proofs should be
+/// aggregated, it will fail.
 #[allow(clippy::too_many_arguments)]
-pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
+pub fn seal_commit_phase2_circuit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: &PoRepConfig,
     phase1_output: SealCommitPhase1Output<Tree>,
-    prover_id: ProverId,
     sector_id: SectorId,
 ) -> Result<SealCommitOutput> {
-    info!("seal_commit_phase2:start: {:?}", sector_id);
+    info!("seal_commit_phase2_circuit_proofs:start: {:?}", sector_id);
 
     let SealCommitPhase1Output {
         vanilla_proofs,
@@ -507,7 +517,7 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
         comm_r,
         replica_id,
         seed,
-        ticket,
+        ticket: _,
     } = phase1_output;
 
     ensure!(comm_d != [0; 32], "Invalid all zero commitment (comm_d)");
@@ -562,6 +572,9 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
     )?;
     trace!("snark_proof:finish");
 
+    // By returning the groth proofs wrapped in the SealCommitOutput
+    // type as normal, we minimize exported types across the API and
+    // allow re-use of existing aggregation/verification APIs
     let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
     let proof = MultiProof::new(groth_proofs, &verifying_key);
     let mut buf =
@@ -569,16 +582,48 @@ pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
 
     proof.write(&mut buf)?;
 
+    info!("seal_commit_phase2_circuit_proofs:finish: {:?}", sector_id);
+    Ok(SealCommitOutput { proof: buf })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn seal_commit_phase2<Tree: 'static + MerkleTreeTrait>(
+    porep_config: &PoRepConfig,
+    phase1_output: SealCommitPhase1Output<Tree>,
+    prover_id: ProverId,
+    sector_id: SectorId,
+) -> Result<SealCommitOutput> {
+    info!("seal_commit_phase2:start: {:?}", sector_id);
+
+    let SealCommitPhase1Output {
+        vanilla_proofs: _,
+        comm_d,
+        comm_r,
+        replica_id: _,
+        seed,
+        ticket,
+    } = phase1_output;
+
+    let seal_commit_output =
+        seal_commit_phase2_circuit_proofs::<Tree>(porep_config, phase1_output, sector_id)?;
+
     // Non-interactive PoRep is an aggregated proof, hence we use that as the returned buffer.
-    if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) {
-        buf = aggregate_seal_commit_proofs::<Tree>(
+    let buf = if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) {
+        ensure!(
+            porep_config.api_version >= ApiFeature::NonInteractivePoRep.first_supported_version(),
+            "API version does not support NonInteractivePoRep"
+        );
+
+        aggregate_seal_commit_proofs::<Tree>(
             porep_config,
             &[comm_r],
             &[seed],
-            &[SealCommitOutput { proof: buf }],
+            &[seal_commit_output],
             groth16::aggregate::AggregateVersion::V2,
-        )?;
-    }
+        )?
+    } else {
+        seal_commit_output.proof
+    };
 
     // Verification is cheap when parameters are cached,
     // and it is never correct to return a proof which does not verify.
@@ -706,6 +751,20 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
         "cannot aggregate with empty outputs"
     );
 
+    // Note that the 'normal' case of generating a single
+    // (non-aggregated) NI-PoRep proof will pass in a single
+    // commit_output.  FIP-0090 aggregation is only considered when
+    // there are multiple NI-PoRep commit_outputs that are to be
+    // aggregated together.
+    if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) && commit_outputs.len() > 1 {
+        ensure!(
+            commit_outputs.len() >= FIP90_MIN_NI_POREP_AGGREGATION_PROOFS
+                && commit_outputs.len() <= FIP90_MAX_NI_POREP_AGGREGATION_PROOFS,
+            "{} proofs is outside of FIP-0090 specified NI-PoRep aggregation bounds",
+            commit_outputs.len()
+        );
+    }
+
     let partitions = usize::from(porep_config.partitions);
     let verifying_key = get_stacked_verifying_key::<Tree>(porep_config)?;
     let mut proofs: Vec<_> =
@@ -734,6 +793,7 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
         target_proofs_len > 1,
         "cannot aggregate less than two proofs"
     );
+
     trace!(
         "aggregate_seal_commit_proofs will pad proofs to target_len {}",
         target_proofs_len

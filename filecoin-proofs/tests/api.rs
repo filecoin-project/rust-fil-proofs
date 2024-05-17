@@ -21,19 +21,19 @@ use filecoin_proofs::{
     generate_winning_post_with_vanilla, get_num_partition_for_fallback_post, get_seal_inputs,
     get_sector_update_h_select_from_porep_config, get_sector_update_inputs,
     merge_window_post_partition_proofs, remove_encoded_data, seal_commit_phase1,
-    seal_commit_phase2, seal_pre_commit_phase1, seal_pre_commit_phase2, unseal_range,
-    validate_cache_for_commit, validate_cache_for_precommit_phase2,
-    verify_aggregate_seal_commit_proofs, verify_aggregate_sector_update_proofs,
-    verify_empty_sector_update_proof, verify_partition_proofs, verify_seal,
-    verify_single_partition_proof, verify_window_post, verify_winning_post, Commitment,
-    DefaultTreeDomain, EmptySectorUpdateProof, MerkleTreeTrait, PaddedBytesAmount, PieceInfo,
-    PoRepConfig, PoStConfig, PoStType, PrivateReplicaInfo, ProverId, PublicReplicaInfo,
-    SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output, SectorShape16KiB,
-    SectorShape2KiB, SectorShape32GiB, SectorShape32KiB, SectorShape4KiB, SectorUpdateConfig,
-    SectorUpdateProofInputs, UnpaddedByteIndex, UnpaddedBytesAmount, SECTOR_SIZE_16_KIB,
-    SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB,
-    WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT,
-    WINNING_POST_SECTOR_COUNT,
+    seal_commit_phase2, seal_commit_phase2_circuit_proofs, seal_pre_commit_phase1,
+    seal_pre_commit_phase2, unseal_range, validate_cache_for_commit,
+    validate_cache_for_precommit_phase2, verify_aggregate_seal_commit_proofs,
+    verify_aggregate_sector_update_proofs, verify_empty_sector_update_proof,
+    verify_partition_proofs, verify_seal, verify_single_partition_proof, verify_window_post,
+    verify_winning_post, Commitment, DefaultTreeDomain, EmptySectorUpdateProof, MerkleTreeTrait,
+    PaddedBytesAmount, PieceInfo, PoRepConfig, PoStConfig, PoStType, PrivateReplicaInfo, ProverId,
+    PublicReplicaInfo, SealCommitOutput, SealPreCommitOutput, SealPreCommitPhase1Output,
+    SectorShape16KiB, SectorShape2KiB, SectorShape32GiB, SectorShape32KiB, SectorShape4KiB,
+    SectorUpdateConfig, SectorUpdateProofInputs, UnpaddedByteIndex, UnpaddedBytesAmount,
+    SECTOR_SIZE_16_KIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_32_KIB,
+    SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
+    WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
 use fr32::bytes_into_fr;
 use log::{info, trace};
@@ -164,6 +164,11 @@ fn test_seal_lifecycle_2kib_base_8() -> Result<()> {
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
             ApiVersion::V1_2_0,
             vec![ApiFeature::SyntheticPoRep],
+        ),
+        (
+            MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::NonInteractivePoRep],
         ),
     ];
 
@@ -614,75 +619,89 @@ fn seal_lifecycle_upgrade<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>
 
 #[test]
 #[ignore]
-fn test_seal_proof_aggregation_1_2kib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 1; // Requires auto-padding
+fn test_seal_proof_aggregation_2kib() -> Result<()> {
+    let test_inputs = vec![
+        (1, 5, ApiVersion::V1_1_0, vec![]),
+        (5, 5, ApiVersion::V1_2_0, vec![ApiFeature::SyntheticPoRep]),
+        (
+            65,
+            5,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::NonInteractivePoRep],
+        ),
+    ];
 
-    let porep_id_v1_1: u64 = 5; // This is a RegisteredSealProof value
+    for (proofs_to_aggregate, porep_id_num, api_version, api_features) in test_inputs {
+        let porep_id = to_porep_id_verified(porep_id_num, api_version);
+        let porep_config = PoRepConfig::new_groth16_with_features(
+            SECTOR_SIZE_2_KIB,
+            porep_id,
+            api_version,
+            api_features,
+        )?;
 
-    let mut porep_id = [0u8; 32];
-    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-    assert!(!is_legacy_porep_id(porep_id));
-    aggregate_seal_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
+        aggregate_seal_proofs::<SectorShape2KiB>(&porep_config, proofs_to_aggregate)?;
+    }
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
-fn test_seal_proof_aggregation_3_2kib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 3; // Requires auto-padding
+fn test_seal_proof_aggregation_4kib() -> Result<()> {
+    let test_inputs = vec![
+        (7, 5, ApiVersion::V1_1_0, vec![]),
+        (24, 5, ApiVersion::V1_2_0, vec![ApiFeature::SyntheticPoRep]),
+        (
+            17,
+            5,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::NonInteractivePoRep],
+        ),
+    ];
 
-    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
-    assert!(!is_legacy_porep_id(porep_id));
-    aggregate_seal_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
+    for (proofs_to_aggregate, porep_id_num, api_version, api_features) in test_inputs {
+        let porep_id = to_porep_id_verified(porep_id_num, api_version);
+        let porep_config = PoRepConfig::new_groth16_with_features(
+            SECTOR_SIZE_4_KIB,
+            porep_id,
+            api_version,
+            api_features,
+        )?;
+
+        aggregate_seal_proofs::<SectorShape4KiB>(&porep_config, proofs_to_aggregate)?;
+    }
+
+    Ok(())
 }
 
 #[test]
 #[ignore]
-fn test_seal_proof_aggregation_5_2kib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 5; // Requires auto-padding
+fn test_seal_proof_aggregation_32kib() -> Result<()> {
+    let test_inputs = vec![
+        (220, 5, ApiVersion::V1_1_0, vec![]),
+        (500, 5, ApiVersion::V1_2_0, vec![ApiFeature::SyntheticPoRep]),
+        (
+            5,
+            5,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::NonInteractivePoRep],
+        ),
+    ];
 
-    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
-    assert!(!is_legacy_porep_id(porep_id));
-    aggregate_seal_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
-}
+    for (proofs_to_aggregate, porep_id_num, api_version, api_features) in test_inputs {
+        let porep_id = to_porep_id_verified(porep_id_num, api_version);
+        let porep_config = PoRepConfig::new_groth16_with_features(
+            SECTOR_SIZE_32_KIB,
+            porep_id,
+            api_version,
+            api_features,
+        )?;
 
-#[test]
-#[ignore]
-fn test_seal_proof_aggregation_257_2kib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 257; // Requires auto-padding
+        aggregate_seal_proofs::<SectorShape32KiB>(&porep_config, proofs_to_aggregate)?;
+    }
 
-    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
-    assert!(!is_legacy_porep_id(porep_id));
-    aggregate_seal_proofs::<SectorShape2KiB>(SECTOR_SIZE_2_KIB, &porep_id, proofs_to_aggregate)
-}
-
-#[test]
-#[ignore]
-fn test_seal_proof_aggregation_2_4kib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 2;
-
-    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
-    assert!(!is_legacy_porep_id(porep_id));
-    aggregate_seal_proofs::<SectorShape4KiB>(SECTOR_SIZE_4_KIB, &porep_id, proofs_to_aggregate)
-}
-
-#[test]
-#[ignore]
-fn test_seal_proof_aggregation_1_32kib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 1; // Requires auto-padding
-
-    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
-    assert!(!is_legacy_porep_id(porep_id));
-    aggregate_seal_proofs::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &porep_id, proofs_to_aggregate)
-}
-
-#[test]
-#[ignore]
-fn test_seal_proof_aggregation_818_32kib_porep_id_v1_1_base_8() -> Result<()> {
-    let proofs_to_aggregate = 818; // Requires auto-padding
-
-    let porep_id = ARBITRARY_POREP_ID_V1_1_0;
-    assert!(!is_legacy_porep_id(porep_id));
-    aggregate_seal_proofs::<SectorShape32KiB>(SECTOR_SIZE_32_KIB, &porep_id, proofs_to_aggregate)
+    Ok(())
 }
 
 //#[test]
@@ -813,33 +832,36 @@ fn test_sector_update_proof_aggregation_3_64gib() -> Result<()> {
 }
 
 fn aggregate_seal_proofs<Tree: 'static + MerkleTreeTrait>(
-    sector_size: u64,
-    porep_id: &[u8; 32],
+    porep_config: &PoRepConfig,
     num_proofs_to_aggregate: usize,
 ) -> Result<()> {
+    fil_logger::maybe_init();
+
     let mut rng = XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
-    let api_version = ApiVersion::V1_1_0;
     let aggregate_versions = vec![
         groth16::aggregate::AggregateVersion::V1,
         groth16::aggregate::AggregateVersion::V2,
     ];
+    info!(
+        "Aggregating {} seal proof with ApiVersion {}, Features {:?}, and PoRep ID {:?}",
+        num_proofs_to_aggregate,
+        porep_config.api_version,
+        porep_config.api_features,
+        porep_config.porep_id
+    );
+
     for aggregate_version in aggregate_versions {
         let mut commit_outputs = Vec::with_capacity(num_proofs_to_aggregate);
         let mut commit_inputs = Vec::with_capacity(num_proofs_to_aggregate);
         let mut seeds = Vec::with_capacity(num_proofs_to_aggregate);
         let mut comm_rs = Vec::with_capacity(num_proofs_to_aggregate);
 
-        let (commit_output, commit_input, seed, comm_r) = create_seal_for_aggregation::<_, Tree>(
-            &mut rng,
-            sector_size,
-            prover_id,
-            porep_id,
-            api_version,
-        )?;
+        let (commit_output, commit_input, seed, comm_r) =
+            create_seal_for_aggregation::<_, Tree>(&mut rng, porep_config, prover_id)?;
 
         for _ in 0..num_proofs_to_aggregate {
             commit_outputs.push(commit_output.clone());
@@ -848,16 +870,15 @@ fn aggregate_seal_proofs<Tree: 'static + MerkleTreeTrait>(
             comm_rs.push(comm_r);
         }
 
-        let config = porep_config(sector_size, *porep_id, api_version);
         let aggregate_proof = aggregate_seal_commit_proofs::<Tree>(
-            &config,
+            porep_config,
             &comm_rs,
             &seeds,
             commit_outputs.as_slice(),
             aggregate_version,
         )?;
         assert!(verify_aggregate_seal_commit_proofs::<Tree>(
-            &config,
+            porep_config,
             aggregate_proof.clone(),
             &comm_rs,
             &seeds,
@@ -872,7 +893,7 @@ fn aggregate_seal_proofs<Tree: 'static + MerkleTreeTrait>(
             groth16::aggregate::AggregateVersion::V2 => groth16::aggregate::AggregateVersion::V1,
         };
         assert!(!verify_aggregate_seal_commit_proofs::<Tree>(
-            &config,
+            porep_config,
             aggregate_proof,
             &comm_rs,
             &seeds,
@@ -888,6 +909,8 @@ fn aggregate_sector_update_proofs<Tree: 'static + MerkleTreeTrait<Hasher = TreeR
     porep_config: &PoRepConfig,
     num_proofs_to_aggregate: usize,
 ) -> Result<()> {
+    fil_logger::maybe_init();
+
     let mut rng = &mut XorShiftRng::from_seed(TEST_SEED);
     let prover_fr: DefaultTreeDomain = Fr::random(&mut rng).into();
     let mut prover_id = [0u8; 32];
@@ -1923,7 +1946,9 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
     seed: [u8; 32],
     pre_commit_output: &SealPreCommitOutput,
     piece_infos: &[PieceInfo],
+    aggregation_enabled: bool,
 ) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])> {
+    info!("Generating Proof with features {:?}", config.api_features);
     if config.feature_enabled(ApiFeature::SyntheticPoRep) {
         info!("SyntheticPoRep is enabled");
         generate_synth_proofs::<_, Tree>(
@@ -1979,7 +2004,25 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
         phase1_output.ticket,
         phase1_output.seed,
     )?;
-    let result = seal_commit_phase2(config, phase1_output, prover_id, sector_id)?;
+
+    // This part of the test is demonstrating that if you want to use
+    // NI-PoRep AND aggregate the NI-PoRep proofs, you MUST generate
+    // the circuit proofs for each NI-PoRep proof, rather than the
+    // full seal commit proof.  If you are NOT aggregating multiple
+    // NI-PoRep proofs, you use the existing API as normal.
+    //
+    // The way the API is contructed, the generation is the ONLY
+    // difference in this case, as the aggregation and verification
+    // APIs remain the same.
+
+    let result = if config.feature_enabled(ApiFeature::NonInteractivePoRep) && aggregation_enabled {
+        info!("NonInteractivePoRep is enabled for aggregation");
+        seal_commit_phase2_circuit_proofs(config, phase1_output, sector_id)?
+    } else {
+        // We don't need to do anything special for aggregating
+        // InteractivePoRep seal proofs
+        seal_commit_phase2(config, phase1_output, prover_id, sector_id)?
+    };
 
     Ok((result, inputs, seed, comm_r))
 }
@@ -2059,6 +2102,7 @@ fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
     piece_infos: &[PieceInfo],
     piece_bytes: &[u8],
 ) -> Result<()> {
+    let aggregation_enabled = false;
     let (commit_output, _commit_inputs, _seed, _comm_r) = generate_proof::<Tree>(
         config,
         cache_dir_path,
@@ -2069,6 +2113,7 @@ fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
         seed,
         &pre_commit_output,
         piece_infos,
+        aggregation_enabled,
     )?;
 
     unseal::<Tree>(
@@ -2169,24 +2214,22 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
 
 fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
     rng: &mut R,
-    sector_size: u64,
+    porep_config: &PoRepConfig,
     prover_id: ProverId,
-    porep_id: &[u8; 32],
-    api_version: ApiVersion,
 ) -> Result<(SealCommitOutput, Vec<Vec<Fr>>, [u8; 32], [u8; 32])> {
     fil_logger::maybe_init();
 
+    let sector_size = porep_config.sector_size.into();
     let (mut piece_file, _piece_bytes) = generate_piece_file(sector_size)?;
     let sealed_sector_file = NamedTempFile::new()?;
     let cache_dir = tempfile::tempdir().expect("failed to create temp dir");
 
-    let config = porep_config(sector_size, *porep_id, api_version);
     let ticket = rng.gen();
     let seed = rng.gen();
     let sector_id = rng.gen::<u64>().into();
 
     let (piece_infos, phase1_output) = run_seal_pre_commit_phase1::<Tree>(
-        &config,
+        porep_config,
         prover_id,
         sector_id,
         ticket,
@@ -2196,7 +2239,7 @@ fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
     )?;
 
     let pre_commit_output = seal_pre_commit_phase2(
-        &config,
+        porep_config,
         phase1_output,
         cache_dir.path(),
         sealed_sector_file.path(),
@@ -2204,8 +2247,9 @@ fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
 
     validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
 
+    let aggregation_enabled = true;
     generate_proof::<Tree>(
-        &config,
+        porep_config,
         cache_dir.path(),
         &sealed_sector_file,
         prover_id,
@@ -2214,6 +2258,7 @@ fn create_seal_for_aggregation<R: Rng, Tree: 'static + MerkleTreeTrait>(
         seed,
         &pre_commit_output,
         &piece_infos,
+        aggregation_enabled,
     )
 }
 
