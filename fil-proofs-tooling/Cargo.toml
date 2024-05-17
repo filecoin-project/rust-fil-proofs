@@ -1,7 +1,7 @@
 [package]
 name = "fil-proofs-tooling"
 description = "Tooling for rust-fil-proofs"
-version = "17.0.0"
+version = "18.0.0"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 license = "MIT OR Apache-2.0"
 publish = false
@@ -10,10 +10,10 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../storage-proofs-core", version = "~17.0.0", default-features = false}
-storage-proofs-porep = { path = "../storage-proofs-porep", version = "~17.0.0", default-features = false }
-storage-proofs-post = { path = "../storage-proofs-post", version = "~17.0.0", default-features = false }
-filecoin-proofs = { path = "../filecoin-proofs", version = "~17.0.0", default-features = false }
+storage-proofs-core = { path = "../storage-proofs-core", version = "~18.0.0", default-features = false}
+storage-proofs-porep = { path = "../storage-proofs-porep", version = "~18.0.0", default-features = false }
+storage-proofs-post = { path = "../storage-proofs-post", version = "~18.0.0", default-features = false }
+filecoin-proofs = { path = "../filecoin-proofs", version = "~18.0.0", default-features = false }
 filecoin-hashers = { path = "../filecoin-hashers", version = "~12.0.0", default-features = false, features = ["poseidon", "blake2s", "sha256"] }
 clap = { version = "3.1.6", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }

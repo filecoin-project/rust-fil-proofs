@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-post"
-version = "17.0.0"
+version = "18.0.0"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 license = "MIT OR Apache-2.0"
 description = "Proofs of Space Time"
@@ -9,7 +9,7 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../storage-proofs-core", version = "~17.0.0", default-features = false}
+storage-proofs-core = { path = "../storage-proofs-core", version = "~18.0.0", default-features = false}
 filecoin-hashers = { path = "../filecoin-hashers", version = "~12.0.0", default-features = false, features = ["poseidon", "sha256"]}
 byteorder = "1"
 sha2 = "0.10.2"

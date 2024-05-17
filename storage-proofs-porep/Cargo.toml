@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-porep"
-version = "17.0.0"
+version = "18.0.0"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 description = "Proofs of replication"
 license = "MIT OR Apache-2.0"
@@ -10,7 +10,7 @@ readme = "README.md"
 
 [dependencies]
 crossbeam = "0.8"
-storage-proofs-core = { path = "../storage-proofs-core", version = "~17.0.0", default-features = false}
+storage-proofs-core = { path = "../storage-proofs-core", version = "~18.0.0", default-features = false}
 sha2raw = { path = "../sha2raw", version = "~13.0.0" }
 filecoin-hashers = { path = "../filecoin-hashers", version = "~12.0.0", default-features = false, features = ["poseidon", "sha256"]}
 merkletree = "0.23.0"
