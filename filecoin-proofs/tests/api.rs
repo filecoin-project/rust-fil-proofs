@@ -621,18 +621,17 @@ fn seal_lifecycle_upgrade<Tree: 'static + MerkleTreeTrait<Hasher = TreeRHasher>>
 #[ignore]
 fn test_seal_proof_aggregation_2kib() -> Result<()> {
     let test_inputs = vec![
-        (1, 5, ApiVersion::V1_1_0, vec![]),
-        (5, 5, ApiVersion::V1_2_0, vec![ApiFeature::SyntheticPoRep]),
+        (1, ApiVersion::V1_1_0, vec![]),
+        (5, ApiVersion::V1_2_0, vec![ApiFeature::SyntheticPoRep]),
         (
             65,
-            5,
             ApiVersion::V1_2_0,
             vec![ApiFeature::NonInteractivePoRep],
         ),
     ];
 
-    for (proofs_to_aggregate, porep_id_num, api_version, api_features) in test_inputs {
-        let porep_id = to_porep_id_verified(porep_id_num, api_version);
+    for (proofs_to_aggregate, api_version, api_features) in test_inputs {
+        let porep_id = to_porep_id_verified(MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, api_version);
         let porep_config = PoRepConfig::new_groth16_with_features(
             SECTOR_SIZE_2_KIB,
             porep_id,
@@ -650,18 +649,17 @@ fn test_seal_proof_aggregation_2kib() -> Result<()> {
 #[ignore]
 fn test_seal_proof_aggregation_4kib() -> Result<()> {
     let test_inputs = vec![
-        (7, 5, ApiVersion::V1_1_0, vec![]),
-        (24, 5, ApiVersion::V1_2_0, vec![ApiFeature::SyntheticPoRep]),
+        (7, ApiVersion::V1_1_0, vec![]),
+        (24, ApiVersion::V1_2_0, vec![ApiFeature::SyntheticPoRep]),
         (
             17,
-            5,
             ApiVersion::V1_2_0,
             vec![ApiFeature::NonInteractivePoRep],
         ),
     ];
 
-    for (proofs_to_aggregate, porep_id_num, api_version, api_features) in test_inputs {
-        let porep_id = to_porep_id_verified(porep_id_num, api_version);
+    for (proofs_to_aggregate, api_version, api_features) in test_inputs {
+        let porep_id = to_porep_id_verified(MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, api_version);
         let porep_config = PoRepConfig::new_groth16_with_features(
             SECTOR_SIZE_4_KIB,
             porep_id,
@@ -679,18 +677,13 @@ fn test_seal_proof_aggregation_4kib() -> Result<()> {
 #[ignore]
 fn test_seal_proof_aggregation_32kib() -> Result<()> {
     let test_inputs = vec![
-        (220, 5, ApiVersion::V1_1_0, vec![]),
-        (500, 5, ApiVersion::V1_2_0, vec![ApiFeature::SyntheticPoRep]),
-        (
-            5,
-            5,
-            ApiVersion::V1_2_0,
-            vec![ApiFeature::NonInteractivePoRep],
-        ),
+        (220, ApiVersion::V1_1_0, vec![]),
+        (500, ApiVersion::V1_2_0, vec![ApiFeature::SyntheticPoRep]),
+        (5, ApiVersion::V1_2_0, vec![ApiFeature::NonInteractivePoRep]),
     ];
 
-    for (proofs_to_aggregate, porep_id_num, api_version, api_features) in test_inputs {
-        let porep_id = to_porep_id_verified(porep_id_num, api_version);
+    for (proofs_to_aggregate, api_version, api_features) in test_inputs {
+        let porep_id = to_porep_id_verified(MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1, api_version);
         let porep_config = PoRepConfig::new_groth16_with_features(
             SECTOR_SIZE_32_KIB,
             porep_id,
