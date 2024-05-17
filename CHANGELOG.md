@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [18.0.0] - 2024-05-17
+
+- Expose an API suitable for NI-PoRep proof aggregation [#1757](https://github.com/filecoin-project/rust-fil-proofs/pull/1757)
+- Increase NI-PoRep min challenges for test sectors [#1756](https://github.com/filecoin-project/rust-fil-proofs/pull/1756)
+- Remove challenge seed from NI-PoRep SnarkPack transcript [#1755](https://github.com/filecoin-project/rust-fil-proofs/pull/1755)
+- Remove repetitive words [#1753](https://github.com/filecoin-project/rust-fil-proofs/pull/1753)
+
 ## [17.0.0] - 2024-04-25
 
 - Improve error handling for threaded verification errors [#1748](https://github.com/filecoin-project/rust-fil-proofs/pull/1748)
@@ -439,7 +446,8 @@ mainnet ready and will be replaced in a future version.  This release is intende
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v17.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v18.0.0...HEAD
+[18.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v18.0.0
 [17.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v17.0.0
 [16.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v16.1.0
 [16.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v16.0.0
