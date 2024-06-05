@@ -704,7 +704,7 @@ fn test_seal_proof_aggregation_2kib_failures() -> Result<()> {
 
         ensure!(
             aggregate_seal_proofs::<SectorShape2KiB>(&porep_config, proofs_to_aggregate).is_err(),
-            "test cause failure passed unexpectedly"
+            "test case failure passed unexpectedly"
         );
     }
 
