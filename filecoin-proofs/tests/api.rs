@@ -520,6 +520,22 @@ fn test_max_ni_seal_proof_aggregation_32gib() -> Result<()> {
 
 #[cfg(feature = "big-tests")]
 #[test]
+fn test_max_ni_seal_proof_aggregation_64gib() -> Result<()> {
+    let porep_id_v1_2: u64 = 9; // This is a RegisteredSealProof value
+
+    let porep_id = to_porep_id_verified(porep_id_v1_2, ApiVersion::V1_2_0);
+    let porep_config = PoRepConfig::new_groth16_with_features(
+        SECTOR_SIZE_64_GIB,
+        porep_id,
+        ApiVersion::V1_2_0,
+        vec![ApiFeature::NonInteractivePoRep],
+    )?;
+
+    aggregate_seal_proofs::<SectorShape64GiB>(&porep_config, FIP90_MAX_NI_POREP_AGGREGATION_PROOFS)
+}
+
+#[cfg(feature = "big-tests")]
+#[test]
 fn test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_2() -> Result<()> {
     let porep_config = PoRepConfig::new_groth16(
         SECTOR_SIZE_32_GIB,
