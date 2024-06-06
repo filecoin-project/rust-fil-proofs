@@ -54,7 +54,7 @@ use storage_proofs_update::constants::TreeRHasher;
 use tempfile::{tempdir, NamedTempFile, TempDir};
 
 use filecoin_proofs::constants::{
-    FIP90_MAX_NI_POREP_AGGREGATION_PROOFS, FIP90_MIN_NI_POREP_AGGREGATION_PROOFS,
+    FIP92_MAX_NI_POREP_AGGREGATION_PROOFS, FIP92_MIN_NI_POREP_AGGREGATION_PROOFS,
     MAX_LEGACY_REGISTERED_SEAL_PROOF_ID,
 };
 
@@ -515,7 +515,7 @@ fn test_max_ni_seal_proof_aggregation_32gib() -> Result<()> {
         vec![ApiFeature::NonInteractivePoRep],
     )?;
 
-    aggregate_seal_proofs::<SectorShape32GiB>(&porep_config, FIP90_MAX_NI_POREP_AGGREGATION_PROOFS)
+    aggregate_seal_proofs::<SectorShape32GiB>(&porep_config, FIP92_MAX_NI_POREP_AGGREGATION_PROOFS)
 }
 
 #[cfg(feature = "big-tests")]
@@ -531,7 +531,7 @@ fn test_max_ni_seal_proof_aggregation_64gib() -> Result<()> {
         vec![ApiFeature::NonInteractivePoRep],
     )?;
 
-    aggregate_seal_proofs::<SectorShape64GiB>(&porep_config, FIP90_MAX_NI_POREP_AGGREGATION_PROOFS)
+    aggregate_seal_proofs::<SectorShape64GiB>(&porep_config, FIP92_MAX_NI_POREP_AGGREGATION_PROOFS)
 }
 
 #[cfg(feature = "big-tests")]
@@ -669,7 +669,7 @@ fn test_seal_proof_aggregation_2kib() -> Result<()> {
             vec![ApiFeature::SyntheticPoRep],
         ),
         (
-            FIP90_MAX_NI_POREP_AGGREGATION_PROOFS,
+            FIP92_MAX_NI_POREP_AGGREGATION_PROOFS,
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
             ApiVersion::V1_2_0,
             vec![ApiFeature::NonInteractivePoRep],
@@ -696,13 +696,13 @@ fn test_seal_proof_aggregation_2kib() -> Result<()> {
 fn test_seal_proof_aggregation_2kib_failures() -> Result<()> {
     let test_inputs = vec![
         (
-            FIP90_MIN_NI_POREP_AGGREGATION_PROOFS - 1,
+            FIP92_MIN_NI_POREP_AGGREGATION_PROOFS - 1,
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
             ApiVersion::V1_2_0,
             vec![ApiFeature::NonInteractivePoRep],
         ),
         (
-            FIP90_MAX_NI_POREP_AGGREGATION_PROOFS + 1,
+            FIP92_MAX_NI_POREP_AGGREGATION_PROOFS + 1,
             MAX_LEGACY_REGISTERED_SEAL_PROOF_ID + 1,
             ApiVersion::V1_2_0,
             vec![ApiFeature::NonInteractivePoRep],

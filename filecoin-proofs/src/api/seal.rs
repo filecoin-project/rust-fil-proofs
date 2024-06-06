@@ -42,7 +42,7 @@ use crate::{
     },
     constants::{
         DefaultBinaryTree, DefaultPieceDomain, DefaultPieceHasher,
-        FIP90_MAX_NI_POREP_AGGREGATION_PROOFS, FIP90_MIN_NI_POREP_AGGREGATION_PROOFS,
+        FIP92_MAX_NI_POREP_AGGREGATION_PROOFS, FIP92_MIN_NI_POREP_AGGREGATION_PROOFS,
         SINGLE_PARTITION_PROOF_LEN,
     },
     parameters::setup_params,
@@ -758,8 +758,8 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     // aggregated together.
     if porep_config.feature_enabled(ApiFeature::NonInteractivePoRep) && commit_outputs.len() > 1 {
         ensure!(
-            commit_outputs.len() >= FIP90_MIN_NI_POREP_AGGREGATION_PROOFS
-                && commit_outputs.len() <= FIP90_MAX_NI_POREP_AGGREGATION_PROOFS,
+            commit_outputs.len() >= FIP92_MIN_NI_POREP_AGGREGATION_PROOFS
+                && commit_outputs.len() <= FIP92_MAX_NI_POREP_AGGREGATION_PROOFS,
             "{} proofs is outside of FIP-0090 specified NI-PoRep aggregation bounds",
             commit_outputs.len()
         );
