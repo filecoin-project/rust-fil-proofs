@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [18.1.0] - 2024-06-18
+
+- Change FIP92 min value to updated value [#1758](https://github.com/filecoin-project/rust-fil-proofs/pull/1758)
+
 ## [18.0.0] - 2024-05-17
 
 - Expose an API suitable for NI-PoRep proof aggregation [#1757](https://github.com/filecoin-project/rust-fil-proofs/pull/1757)
@@ -446,7 +450,8 @@ mainnet ready and will be replaced in a future version.  This release is intende
 
 - Initial stable release
 
-[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v18.0.0...HEAD
+[Unreleased]: https://github.com/filecoin-project/rust-fil-proofs/compare/v18.1.0...HEAD
+[18.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v18.1.0
 [18.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v18.0.0
 [17.0.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v17.0.0
 [16.1.0]: https://github.com/filecoin-project/rust-fil-proofs/tree/releases/v16.1.0
