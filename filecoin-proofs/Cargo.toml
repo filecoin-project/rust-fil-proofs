@@ -11,7 +11,7 @@ readme = "README.md"
 [dependencies]
 storage-proofs-core = { path = "../storage-proofs-core", version = "~18.1.0", default-features = false}
 storage-proofs-porep = { path = "../storage-proofs-porep", version = "~18.1.0", default-features = false }
-storage-proofs-post = { path = "../storage-proofs-post", version = "~18.0.0", default-features = false }
+storage-proofs-post = { path = "../storage-proofs-post", version = "~18.1.0", default-features = false }
 storage-proofs-update = { path = "../storage-proofs-update", version = "~18.0.0", default-features = false }
 filecoin-hashers = { version = "~13.1.0", path = "../filecoin-hashers", default-features = false, features = ["poseidon", "sha256"] }
 rand = "0.8"
