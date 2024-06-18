@@ -13,7 +13,7 @@ readme = "README.md"
 storage-proofs-core = { path = "../storage-proofs-core", version = "~18.1.0", default-features = false}
 storage-proofs-porep = { path = "../storage-proofs-porep", version = "~18.1.0", default-features = false }
 storage-proofs-post = { path = "../storage-proofs-post", version = "~18.1.0", default-features = false }
-filecoin-proofs = { path = "../filecoin-proofs", version = "~18.0.0", default-features = false }
+filecoin-proofs = { path = "../filecoin-proofs", version = "~18.1.0", default-features = false }
 filecoin-hashers = { path = "../filecoin-hashers", version = "~13.1.0", default-features = false, features = ["poseidon", "blake2s", "sha256"] }
 clap = { version = "3.1.6", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
