@@ -12,7 +12,7 @@ readme = "README.md"
 storage-proofs-core = { path = "../storage-proofs-core", version = "~18.1.0", default-features = false}
 storage-proofs-porep = { path = "../storage-proofs-porep", version = "~18.1.0", default-features = false }
 storage-proofs-post = { path = "../storage-proofs-post", version = "~18.1.0", default-features = false }
-storage-proofs-update = { path = "../storage-proofs-update", version = "~18.0.0", default-features = false }
+storage-proofs-update = { path = "../storage-proofs-update", version = "~18.1.0", default-features = false }
 filecoin-proofs = { version = "~18.0.0", path = "../filecoin-proofs", default-features = false }
 rand = "0.8"
 lazy_static = "1.2"
