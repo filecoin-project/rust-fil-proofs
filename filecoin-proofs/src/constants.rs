@@ -33,9 +33,10 @@ pub const WINDOW_POST_CHALLENGE_COUNT: usize = 10;
 
 pub const MAX_LEGACY_REGISTERED_SEAL_PROOF_ID: u64 = MAX_LEGACY_POREP_REGISTERED_PROOF_ID;
 
-// Constant NI-PoRep aggregation bounds specified in FIP-0090
-pub const FIP90_MIN_NI_POREP_AGGREGATION_PROOFS: usize = 2;
-pub const FIP90_MAX_NI_POREP_AGGREGATION_PROOFS: usize = 65;
+/// Constant NI-PoRep aggregation bounds specified in FIP-0090, but
+/// superseded by FIP-0092
+pub const FIP92_MIN_NI_POREP_AGGREGATION_PROOFS: usize = 1;
+pub const FIP92_MAX_NI_POREP_AGGREGATION_PROOFS: usize = 65;
 
 /// Sector sizes for which parameters are supported.
 pub const SUPPORTED_SECTOR_SIZES: [u64; 10] = [
