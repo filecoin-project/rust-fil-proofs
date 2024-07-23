@@ -9,14 +9,14 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-filecoin-hashers = { workspace = true, features = ["poseidon", "sha256"]}
+filecoin-hashers = { workspace = true, features = ["poseidon", "sha256"] }
 fr32.workspace = true
 storage-proofs-core.workspace = true
 storage-proofs-porep.workspace = true
 # Sorted alphabetically
 merkletree.workspace = true
 rayon.workspace = true
-serde = { version = "1.0", features = ["derive"]}
+serde = { workspace = true, features = ["derive"] }
 ff.workspace = true
 bellperson.workspace = true
 blstrs.workspace = true
