@@ -12,45 +12,47 @@ readme = "README.md"
 bench = false
 
 [dependencies]
-filecoin-hashers = { path = "../filecoin-hashers", version = "~13.1.0", default-features = false, features = ["sha256", "poseidon"] }
-rand = "0.8"
-merkletree = "0.23.0"
-byteorder = "1"
-config = { version = "0.12.0", default-features = false, features = ["toml"] }
-itertools = "0.10.3"
-lazy_static = "1.2"
-memmap2 = "0.5.6"
+filecoin-hashers = { workspace = true, features = ["sha256", "poseidon"] }
+fr32.workspace = true
+# Sorted alphabetically
 aes = "0.8.1"
-sha2 = "0.10.2"
-fs2 = "0.4"
-rayon = "1.0.0"
-serde = { version = "1.0", features = ["derive"]}
-blake2b_simd = "1.0.0"
-ff = "0.13.0"
-bellperson = "0.26.0"
-serde_json = "1.0"
-log = "0.4.7"
-rand_chacha = "0.3"
-generic-array = "0.14.4"
-anyhow = "1.0.23"
-thiserror = "1.0.6"
-cpu-time = { version = "1.0", optional = true }
-gperftools = { version = "0.2", optional = true }
-num_cpus = "1.10.1"
-semver = "1.0.6"
-fr32 = { path = "../fr32", version = "~11.1.0"}
-blstrs = "0.7.0"
+anyhow.workspace = true
+bellperson.workspace = true
+blake2b_simd.workspace = true
+blstrs.workspace = true
+byteorder.workspace = true
 cbc = { version = "0.1.2", features = ["std"] }
+config = { version = "0.12.0", default-features = false, features = ["toml"] }
+cpu-time = { workspace = true, optional = true }
+ff.workspace = true
+fs2 = "0.4"
+generic-array.workspace = true
+gperftools = { workspace = true, optional = true }
+itertools.workspace = true
+lazy_static.workspace = true
+log.workspace = true
+memmap2.workspace = true
+merkletree.workspace = true
+num_cpus.workspace = true
+rand.workspace = true
+rand_chacha = "0.3"
+rayon.workspace = true
+semver = "1.0.6"
+serde = { workspace = true, features = ["derive"]}
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
+sha2raw.workspace = true
+filecoin-hashers = { workspace = true, features = ["blake2s", "sha256", "poseidon"] }
+# Sorted alphabetically
+blake2s_simd.workspace = true
+criterion.workspace = true
+pretty_assertions.workspace = true
 proptest = "1.0.0"
-criterion = "0.3"
-rand_xorshift = "0.3.0"
-pretty_assertions = "1.2.0"
-sha2raw = { path = "../sha2raw", version = "~13.1.0"}
-filecoin-hashers = { path = "../filecoin-hashers", version = "~13.1.0", default-features = false, features = ["blake2s", "sha256", "poseidon"] }
-tempfile = "3"
-blake2s_simd = "1.0.0"
+rand_xorshift.workspace = true
+tempfile.workspace = true
 
 [features]
 default = ["opencl"]

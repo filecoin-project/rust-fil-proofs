@@ -9,38 +9,36 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../storage-proofs-core", version = "~18.1.0", default-features = false}
-storage-proofs-porep = { path = "../storage-proofs-porep", version = "~18.1.0", default-features = false }
-storage-proofs-post = { path = "../storage-proofs-post", version = "~18.1.0", default-features = false }
-storage-proofs-update = { path = "../storage-proofs-update", version = "~18.1.0", default-features = false }
-filecoin-proofs = { version = "~18.1.0", path = "../filecoin-proofs", default-features = false }
-rand = "0.8"
-lazy_static = "1.2"
-pbr = "1.0"
-itertools = "0.10.3"
-serde_json = "1.0"
-blake2b_simd = "1.0.0"
-log = "0.4.7"
-fil_logger = "0.1.6"
+filecoin-proofs.workspace = true
+storage-proofs-core.workspace = true
+storage-proofs-porep.workspace = true
+storage-proofs-post.workspace = true
+storage-proofs-update.workspace = true
+# Sorted alphabetically
+anyhow.workspace = true
+blake2b_simd.workspace = true
+dialoguer.workspace = true
 env_proxy = "0.4"
-flate2 = { version = "1.0.9", features = ["rust_backend"]}
-tar = "0.4.26"
-anyhow = "1.0.23"
-gperftools = { version = "0.2", optional = true }
-structopt = "0.3.12"
-humansize = "1.1.0"
+fil_logger.workspace = true
+flate2 = { version = "1.0.9", features = ["rust_backend"] }
+gperftools = { workspace = true, optional = true }
+humansize.workspace = true
 indicatif = "0.16.2"
-dialoguer = "0.10.0"
-
-[dependencies.reqwest]
-version = "0.11.10"
-default-features = false
-features = ["blocking", "native-tls-vendored"]
+itertools.workspace = true
+lazy_static.workspace = true
+log.workspace = true
+pbr = "1.0"
+rand.workspace = true
+reqwest = { version = "0.11.10", default-features = false, features = ["blocking", "native-tls-vendored"] }
+serde_json.workspace = true
+structopt.workspace = true
+tar = "0.4.26"
 
 [dev-dependencies]
-rexpect = "0.4.0"
+# Sorted alphabetically
+tempfile.workspace = true
 failure = "0.1.7"
-tempfile = "3"
+rexpect = "0.4.0"
 
 [features]
 default = ["opencl"]

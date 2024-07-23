@@ -9,24 +9,26 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-storage-proofs-core = { path = "../storage-proofs-core", version = "~18.1.0", default-features = false}
-filecoin-hashers = { path = "../filecoin-hashers", version = "~13.1.0", default-features = false, features = ["poseidon", "sha256"]}
-byteorder = "1"
-sha2 = "0.10.2"
-rayon = "1.0.0"
-serde = { version = "1.0", features = ["derive"]}
-ff = "0.13.0"
-bellperson = "0.26.0"
-log = "0.4.7"
-generic-array = "0.14.4"
-anyhow = "1.0.23"
-blstrs = "0.7.0"
+storage-proofs-core.workspace = true
+filecoin-hashers = { workspace = true, features = ["poseidon", "sha256"]}
+# Sorted alphabetically
+anyhow.workspace = true
+bellperson.workspace = true
+blstrs.workspace = true
+byteorder.workspace = true
+ff.workspace = true
+generic-array.workspace = true
+log.workspace = true
+rayon.workspace = true
+serde = { workspace = true, features = ["derive"]}
+sha2.workspace = true
 
 [dev-dependencies]
-tempfile = "3"
-pretty_assertions = "1.2.0"
-rand = "0.8"
-rand_xorshift = "0.3.0"
+# Sorted alphabetically
+pretty_assertions.workspace = true
+rand.workspace = true
+rand_xorshift.workspace = true
+tempfile.workspace = true
 
 [features]
 default = ["opencl"]
