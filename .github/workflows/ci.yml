@@ -201,6 +201,6 @@ jobs:
         merge-multiple: true
         #repository: ${{ github.action_repository }}
         run-id: ${{ github.event.workflow_run.id }}
-        github-token: ${{ secrets.GITHUB_TOKEN }}
+        #github-token: ${{ secrets.GITHUB_TOKEN }}
         #github-token: ${{ github.token }}
     - run: ls -R my-artifact
