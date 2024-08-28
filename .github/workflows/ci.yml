@@ -157,7 +157,7 @@ jobs:
           path: /var/tmp/filecoin-proof-parameters/
           merge-multiple: true
           #github-token: ${{ github.token }}
-          repository: ${{ github.action_repository }}
+          #repository: ${{ github.action_repository }}
           #run-id: ${{ github.event.workflow_run.id }}
           #github-token: ${{ secrets.GITHUB_TOKEN }}
           github-token: ${{ github.token }}
@@ -200,5 +200,5 @@ jobs:
         merge-multiple: true
         #repository: ${{ github.action_repository }}
         run-id: ${{ github.event.workflow_run.id }}
-        github-token: ${{ secrets.GITHUB_TOKEN }}
+        #github-token: ${{ secrets.GITHUB_TOKEN }}
     - run: ls -R my-artifact
