@@ -64,10 +64,10 @@ jobs:
         size: [2048, 4096]
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{needs.set-msrv.outputs.msrv}}
+      #- uses: actions/checkout@v4
+      #- uses: dtolnay/rust-toolchain@master
+      #  with:
+      #    toolchain: ${{needs.set-msrv.outputs.msrv}}
       #- name: Install required packages
       #  run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev libhwloc-dev
 
@@ -96,9 +96,9 @@ jobs:
     name: Test in release mode
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{needs.set-msrv.outputs.msrv}}
+      #- uses: dtolnay/rust-toolchain@master
+      #  with:
+      #    toolchain: ${{needs.set-msrv.outputs.msrv}}
       #- name: Install required packages
       #  run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev libhwloc-dev
 
@@ -157,8 +157,8 @@ jobs:
           path: /var/tmp/filecoin-proof-parameters/
           merge-multiple: true
           #github-token: ${{ github.token }}
-          #repository: ${{ github.action_repository }}
-          run-id: ${{ github.event.workflow_run.id }}
+          repository: ${{ github.action_repository }}
+          #run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Display structure of downloaded files
         run: ls -lR /var/tmp/filecoin-proof-parameters/
@@ -171,3 +171,30 @@ jobs:
       #      ## Some `storage-proofs-update` tests need to run sequentially due
       #      ## to their high memory usage.
       #      #cargo test -p storage-proofs-update --features isolated-testing --release << parameters.cargo-args >> -- --test-threads=1
+
+
+
+  upload:
+    strategy:
+      matrix:
+        runs-on: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+    - name: Create a File
+      run: echo "hello from ${{ matrix.runs-on }}" > file-${{ matrix.runs-on }}.txt
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: my-artifact-${{ matrix.runs-on }}
+        path: file-${{ matrix.runs-on }}.txt
+  download:
+    needs: upload
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download All Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: my-artifact
+        pattern: my-artifact-*
+        merge-multiple: true
+    - run: ls -R my-artifact
