@@ -161,6 +161,7 @@ jobs:
           #run-id: ${{ github.event.workflow_run.id }}
           #github-token: ${{ secrets.GITHUB_TOKEN }}
           #github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
       - name: Display structure of downloaded files
         run: ls -lR /var/tmp/filecoin-proof-parameters/
 
@@ -200,6 +201,6 @@ jobs:
         merge-multiple: true
         #repository: ${{ github.action_repository }}
         run-id: ${{ github.event.workflow_run.id }}
-        #github-token: ${{ secrets.GITHUB_TOKEN }}
-        github-token: ${{ github.token }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        #github-token: ${{ github.token }}
     - run: ls -R my-artifact
