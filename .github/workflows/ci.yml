@@ -27,47 +27,49 @@ jobs:
           MSRV=$(cat ./rust-toolchain)
           echo "MSRV=$MSRV" | tee --append "$GITHUB_OUTPUT"
 
-  #linux:
+  #check_clippy:
   #  needs: set-msrv
   #  runs-on: ubuntu-latest
-  #  name: Build and test
+  #  name: Clippy
   #  steps:
   #    - uses: actions/checkout@v4
   #    - uses: dtolnay/rust-toolchain@master
   #      with:
-  #        toolchain: ${{needs.set-msrv.outputs.msrv}}
+  #        toolchain: ${{ needs.set-msrv.outputs.msrv }}
+  #        components: clippy
   #    - name: Install required packages
-  #      run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev nvidia-cuda-toolkit
-  #    - name: Build with default features
-  #      run: cargo build --workspace
-  #    # Machine has no GPU installed, hence run without the `cuda` or `opencl` feature.
-  #    - name: Run tests without default features
-  #      run: cargo test --workspace --no-default-features -- --nocapture
+  #      run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev libhwloc-dev
+  #    - name: Run cargo clippy
+  #      run: cargo clippy --all-targets --workspace -- -D warnings
+  #
+  #check_fmt:
+  #  needs: set-msrv
+  #  runs-on: ubuntu-latest
+  #  name: Checking fmt
+  #  steps:
+  #    - uses: actions/checkout@v4
+  #    - uses: dtolnay/rust-toolchain@master
+  #      with:
+  #        toolchain: ${{ needs.set-msrv.outputs.msrv }}
+  #        components: rustfmt
+  #    - name: Run cargo fmt
+  #      run: cargo fmt --all -- --check
 
-  check_clippy:
+  test_release:
     needs: set-msrv
     runs-on: ubuntu-latest
-    name: Clippy
+    name: Build and test
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ needs.set-msrv.outputs.msrv }}
-          components: clippy
+          toolchain: ${{needs.set-msrv.outputs.msrv}}
       - name: Install required packages
         run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev libhwloc-dev
-      - name: Run cargo clippy
-        run: cargo clippy --all-targets --workspace -- -D warnings
-
-  check_fmt:
-    needs: set-msrv
-    runs-on: ubuntu-latest
-    name: Checking fmt
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ needs.set-msrv.outputs.msrv }}
-          components: rustfmt
-      - name: Run cargo fmt
-        run: cargo fmt --all -- --check
+      - name: Build with default features
+        run: cargo build --workspace
+      - name: Test in release profile
+        run: cargo test --verbose --release --workspace --all-targets
+            ## Some `storage-proofs-update` tests need to run sequentially due
+            ## to their high memory usage.
+            #cargo test -p storage-proofs-update --features isolated-testing --release << parameters.cargo-args >> -- --test-threads=1
