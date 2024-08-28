@@ -74,13 +74,20 @@ jobs:
       - name: Generate proof parameters
         run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes=${{ matrix.size }}
 
-      - name: Cache proof parameters
-        id: cache-parameters
-        uses: actions/cache/save@v4
-        with:
-          path: /var/tmp/filecoin-proof-parameters/
-          key: proof-params-v28-n-${{ matrix.size }}-${{ hashFiles('filecoin-proofs/parameters.json') }}
+      #- name: Cache proof parameters
+      #  id: cache-parameters
+      #  uses: actions/cache/save@v4
+      #  with:
+      #    path: /var/tmp/filecoin-proof-parameters/
+      #    key: proof-params-v28-n-${{ matrix.size }}-${{ hashFiles('filecoin-proofs/parameters.json') }}
 
+      - name: Upload proof parameters as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: proof-params-v28-n-${{ matrix.size }}-${{ hashFiles('filecoin-proofs/parameters.json') }}
+          path: /var/tmp/filecoin-proof-parameters/
+          compression-level: 0
+          if-no-files-found: error
 
   test_release:
     needs: [set-msrv, proof-params]
@@ -106,29 +113,54 @@ jobs:
       #  #run: cargo build --release --no-default-features --bin paramcache --sector-sizes='2048,4096,16384,32768'
       #  run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes='2048'
 
-      - name: Restore proof parameters cache 2KiB
-        id: cache-parameters-2048
-        uses: actions/cache/restore@v4
+      #- name: Restore proof parameters cache 2KiB
+      #  id: cache-parameters-2048
+      #  uses: actions/cache/restore@v4
+      #  with:
+      #    path: /var/tmp/filecoin-proof-parameters/
+      #    #key: proof-params-v28-n-${{ runner.os }}-${{ hashFiles('filecoin-proofs/parameters.json') }}
+      #    key: proof-params-v28-n-2048-${{ hashFiles('filecoin-proofs/parameters.json') }}
+
+
+
+      #- name: Get proof parameters 2KiB
+      #  uses: actions/cache/restore@v4
+      #  with:
+      #    path: /var/tmp/filecoin-proof-parameters/
+      #    #key: proof-params-v28-n-${{ runner.os }}-${{ hashFiles('filecoin-proofs/parameters.json') }}
+      #    key: proof-params-v28-n-2048-${{ hashFiles('filecoin-proofs/parameters.json') }}
+      #
+      #
+      #- name: List parameter files
+      #  run: ls -al /var/tmp/filecoin-proof-parameters/
+      #
+      #- name: Restore proof parameters cache 4KiB
+      #  id: cache-parameters-4096
+      #  uses: actions/cache/restore@v4
+      #  with:
+      #    path: /var/tmp/filecoin-proof-parameters/
+      #    key: proof-params-v28-n-4096-${{ hashFiles('filecoin-proofs/parameters.json') }}
+      #
+      #- name: List parameter files
+      #  run: ls -al /var/tmp/filecoin-proof-parameters/
+      #
+
+
+      - name: Get proof parameters
+      - uses: actions/download-artifact@v4
         with:
+          #name: my-artifact
           path: /var/tmp/filecoin-proof-parameters/
-          #key: proof-params-v28-n-${{ runner.os }}-${{ hashFiles('filecoin-proofs/parameters.json') }}
-          key: proof-params-v28-n-2048-${{ hashFiles('filecoin-proofs/parameters.json') }}
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.action_repository }}
+      - name: Display structure of downloaded files
+        run: ls -lR /var/tmp/filecoin-proof-parameters/
 
-      - name: List parameter files
-        run: ls -al /var/tmp/filecoin-proof-parameters/
 
-      - name: Restore proof parameters cache 4KiB
-        id: cache-parameters-4096
-        uses: actions/cache/restore@v4
-        with:
-          path: /var/tmp/filecoin-proof-parameters/
-          key: proof-params-v28-n-4096-${{ hashFiles('filecoin-proofs/parameters.json') }}
-
-      - name: List parameter files
-        run: ls -al /var/tmp/filecoin-proof-parameters/
 
       - name: Test in release profile
-        if: steps.cache-parameters-2048.outputs.cache-hit != 'true' && steps.cache-parameters-4096.outputs.cache-hit != 'true'
+        #if: steps.cache-parameters-2048.outputs.cache-hit == 'true' && steps.cache-parameters-4096.outputs.cache-hit == 'true'
         run: cargo test --verbose --release --workspace --all-targets
             ## Some `storage-proofs-update` tests need to run sequentially due
             ## to their high memory usage.
