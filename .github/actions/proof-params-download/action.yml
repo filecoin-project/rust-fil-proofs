@@ -1,0 +1,35 @@
+name: Download proof params
+
+inputs:
+  github-token:
+    description: 'A secrets.GITHUB_TOKEN'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Get run-id from latest proof-params-generate workflow run
+      uses: octokit/request-action@v2.x
+      id: latest-proof-params
+      with:
+        route: GET /repos/filecoin-project/rust-fil-proofs/actions/workflows/proof-params-generate.yml/runs?per_page=1
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+    - name: Download all Artifacts from proof-params-generate workflow
+      uses: actions/download-artifact@v4
+      with:
+        #pattern: proof-params-v28-n-${{ inputs.parameters-json-hash }}-*
+        pattern: proof-params-v28-n-${{ hashFiles('filecoin-proofs/parameters.json') }}-*
+        path: /var/tmp/filecoin-proof-parameters/
+        merge-multiple: true
+        run-id: ${{ fromJson(steps.latest-proof-params.outputs.data).workflow_runs[0].id }}
+        github-token: ${{ inputs.github-token }}
+    - name: Obtain Filecoin IPP parameter file
+      shell: bash
+      # paramfetch is using `ipget` which currently always times out on CI,
+      # hence get this file via HTTP instead.
+      #cargo run --release --bin paramfetch -- -a -j srs-inner-product.json
+      run: 'curl https://proofs.filecoin.io/v28-fil-inner-product-v1.srs --output /var/tmp/filecoin-proof-parameters/v28-fil-inner-product-v1.srs'
+    - name: List parameter files
+      shell: bash
+      run: ls -al /var/tmp/filecoin-proof-parameters/

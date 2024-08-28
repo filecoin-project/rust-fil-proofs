@@ -1,0 +1,38 @@
+name: Proof params generate
+
+on:
+  pull_request:
+  # Make it also possible to trigger it manually.
+  workflow_dispatch:
+  schedule:
+    # The artifacts are available for 90 days. Run this workflow every two
+    # months, so that in case of a failure, there's enough time to fix it.
+    - cron: "0 0 1 */2 *"
+
+env:
+  # Faster crates.io index checkout.
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
+jobs:
+  proof-params:
+    runs-on: ubuntu-latest
+    name: Generate proof parameters and cache them
+    strategy:
+      # Run the parameter generation in separate jobs, so that they can run in
+      # parallel.
+      matrix:
+        size: [2048, 4096, 16384, 32768]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate proof parameters
+        run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes=${{ matrix.size }}
+
+      - name: Upload proof parameters as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: proof-params-v28-n-${{ hashFiles('filecoin-proofs/parameters.json') }}-${{ matrix.size }}
+          path: /var/tmp/filecoin-proof-parameters/
+          compression-level: 0
+          if-no-files-found: error
