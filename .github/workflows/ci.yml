@@ -1,0 +1,73 @@
+name: CI
+
+on: [pull_request, push]
+
+# Cancel a job if there's a new on on the same branch started.
+# Based on https://stackoverflow.com/questions/58895283/stop-already-running-workflow-job-in-github-actions/67223051#67223051
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+  # Faster crates.io index checkout.
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
+jobs:
+  set-msrv:
+    runs-on: ubuntu-latest
+    outputs:
+      msrv: ${{ steps.msrv.outputs.MSRV }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get MSRV from rust-toolchain
+        id: msrv
+        run: |
+          MSRV=$(cat ./rust-toolchain)
+          echo "MSRV=$MSRV" | tee --append "$GITHUB_OUTPUT"
+
+  #linux:
+  #  needs: set-msrv
+  #  runs-on: ubuntu-latest
+  #  name: Build and test
+  #  steps:
+  #    - uses: actions/checkout@v4
+  #    - uses: dtolnay/rust-toolchain@master
+  #      with:
+  #        toolchain: ${{needs.set-msrv.outputs.msrv}}
+  #    - name: Install required packages
+  #      run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev nvidia-cuda-toolkit
+  #    - name: Build with default features
+  #      run: cargo build --workspace
+  #    # Machine has no GPU installed, hence run without the `cuda` or `opencl` feature.
+  #    - name: Run tests without default features
+  #      run: cargo test --workspace --no-default-features -- --nocapture
+
+  check_clippy:
+    needs: set-msrv
+    runs-on: ubuntu-latest
+    name: Clippy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ needs.set-msrv.outputs.msrv }}
+          components: clippy
+      - name: Install required packages
+        run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev libhwloc-dev
+      - name: Run cargo clippy
+        run: cargo clippy --all-targets --workspace -- -D warnings
+
+  check_fmt:
+    needs: set-msrv
+    runs-on: ubuntu-latest
+    name: Checking fmt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ needs.set-msrv.outputs.msrv }}
+          components: rustfmt
+      - name: Run cargo fmt
+        run: cargo fmt --all -- --check
