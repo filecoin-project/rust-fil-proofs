@@ -77,7 +77,7 @@ jobs:
       - name: Generate proof parameters
         if: steps.cache-parameters.outputs.cache-hit != 'true'
         #run: cargo build --release --no-default-features --bin paramcache --sector-sizes='2048,4096,16384,32768'
-        run: cargo build --release --no-default-features --bin paramcache -- --sector-sizes='2048'
+        run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes='2048'
 
       - name: Test in release profile
         run: cargo test --verbose --release --workspace --all-targets
