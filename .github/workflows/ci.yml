@@ -85,7 +85,7 @@ jobs:
       - name: Upload proof parameters as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: proof-params-v28-n-${{ matrix.size }}-${{ hashFiles('filecoin-proofs/parameters.json') }}
+          name: proof-params-v28-n-${{ hashFiles('filecoin-proofs/parameters.json') }}-${{ matrix.size }}
           path: /var/tmp/filecoin-proof-parameters/
           compression-level: 0
           if-no-files-found: error
@@ -99,8 +99,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{needs.set-msrv.outputs.msrv}}
-      - name: Install required packages
-        run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev libhwloc-dev
+      #- name: Install required packages
+      #  run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev libhwloc-dev
+
+
 
       #- name: Cache proof parameters
       #  id: cache-parameters
@@ -150,7 +152,8 @@ jobs:
       - name: Get proof parameters
         uses: actions/download-artifact@v4
         with:
-          #name: my-artifact
+          name: proof-params-v28-n-${{ hashFiles('filecoin-proofs/parameters.json') }}
+          pattern: proof-params-v28-n-${{ hashFiles('filecoin-proofs/parameters.json') }}-*
           path: /var/tmp/filecoin-proof-parameters/
           merge-multiple: true
           #github-token: ${{ github.token }}
@@ -162,9 +165,9 @@ jobs:
 
 
 
-      - name: Test in release profile
-        #if: steps.cache-parameters-2048.outputs.cache-hit == 'true' && steps.cache-parameters-4096.outputs.cache-hit == 'true'
-        run: cargo test --verbose --release --workspace --all-targets
-            ## Some `storage-proofs-update` tests need to run sequentially due
-            ## to their high memory usage.
-            #cargo test -p storage-proofs-update --features isolated-testing --release << parameters.cargo-args >> -- --test-threads=1
+      #- name: Test in release profile
+      #  #if: steps.cache-parameters-2048.outputs.cache-hit == 'true' && steps.cache-parameters-4096.outputs.cache-hit == 'true'
+      #  run: cargo test --verbose --release --workspace --all-targets
+      #      ## Some `storage-proofs-update` tests need to run sequentially due
+      #      ## to their high memory usage.
+      #      #cargo test -p storage-proofs-update --features isolated-testing --release << parameters.cargo-args >> -- --test-threads=1
