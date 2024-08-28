@@ -68,11 +68,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{needs.set-msrv.outputs.msrv}}
-      - name: Install required packages
-        run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev libhwloc-dev
+      #- name: Install required packages
+      #  run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev libhwloc-dev
 
       - name: Generate proof parameters
-        run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes=${{ matrix.size }}
+        #run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes=${{ matrix.size }}
+        run: mkdir -p /var/tmp/filecoin-proof-parameters/ && touch /var/tmp/filecoin-proof-parameters/${{ matrix.size }}.params
 
       #- name: Cache proof parameters
       #  id: cache-parameters
@@ -152,8 +153,10 @@ jobs:
           #name: my-artifact
           path: /var/tmp/filecoin-proof-parameters/
           merge-multiple: true
-          github-token: ${{ github.token }}
-          repository: ${{ github.action_repository }}
+          #github-token: ${{ github.token }}
+          #repository: ${{ github.action_repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Display structure of downloaded files
         run: ls -lR /var/tmp/filecoin-proof-parameters/
 
