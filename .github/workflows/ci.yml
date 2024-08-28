@@ -72,7 +72,7 @@ jobs:
         id: cache-parameters
         uses: actions/cache@v4
         with:
-          path: /var/tmp/filecoin-proof-parameters/
+          path: '/var/tmp/filecoin-proof-parameters/'
           #key: proof-params-v28-n-${{ runner.os }}-${{ hashFiles('filecoin-proofs/parameters.json') }}
           key: proof-params-v28-n-${{ hashFiles('filecoin-proofs/parameters.json') }}
       - name: Generate proof parameters
