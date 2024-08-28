@@ -61,7 +61,7 @@ jobs:
     name: Generate proof parameters and cache them
     strategy:
       matrix:
-        size: [2048, 4096]
+        size: [2048, 4096, 16384, 32768]
 
     steps:
       - uses: actions/checkout@v4
@@ -72,8 +72,8 @@ jobs:
       #  run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev libhwloc-dev
 
       - name: Generate proof parameters
-        #run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes=${{ matrix.size }}
-        run: mkdir -p /var/tmp/filecoin-proof-parameters/ && touch /var/tmp/filecoin-proof-parameters/${{ matrix.size }}.params
+        run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes=${{ matrix.size }}
+        #run: mkdir -p /var/tmp/filecoin-proof-parameters/ && touch /var/tmp/filecoin-proof-parameters/${{ matrix.size }}.params
 
       #- name: Cache proof parameters
       #  id: cache-parameters
@@ -82,13 +82,13 @@ jobs:
       #    path: /var/tmp/filecoin-proof-parameters/
       #    key: proof-params-v28-n-${{ matrix.size }}-${{ hashFiles('filecoin-proofs/parameters.json') }}
 
-      #- name: Upload proof parameters as artifact
-      #  uses: actions/upload-artifact@v4
-      #  with:
-      #    name: proof-params-v28-n-${{ hashFiles('filecoin-proofs/parameters.json') }}-${{ matrix.size }}
-      #    path: /var/tmp/filecoin-proof-parameters/
-      #    compression-level: 0
-      #    if-no-files-found: error
+      - name: Upload proof parameters as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: proof-params-v28-n-fullsize-${{ hashFiles('filecoin-proofs/parameters.json') }}-${{ matrix.size }}
+          path: /var/tmp/filecoin-proof-parameters/
+          compression-level: 0
+          if-no-files-found: error
 
   test_release:
     needs: [set-msrv, proof-params]
