@@ -114,7 +114,7 @@ jobs:
           #key: proof-params-v28-n-${{ runner.os }}-${{ hashFiles('filecoin-proofs/parameters.json') }}
           key: proof-params-v28-n-2048-${{ hashFiles('filecoin-proofs/parameters.json') }}
 
-      - name: List parameter files:
+      - name: List parameter files
         run: ls -al /var/tmp/filecoin-proof-parameters/
 
       - name: Restore proof parameters cache 4KiB
@@ -124,7 +124,7 @@ jobs:
           path: /var/tmp/filecoin-proof-parameters/
           key: proof-params-v28-n-4096-${{ hashFiles('filecoin-proofs/parameters.json') }}
 
-      - name: List parameter files:
+      - name: List parameter files
         run: ls -al /var/tmp/filecoin-proof-parameters/
 
       - name: Test in release profile
