@@ -66,8 +66,6 @@ jobs:
           toolchain: ${{needs.set-msrv.outputs.msrv}}
       - name: Install required packages
         run: sudo apt install --no-install-recommends --yes ocl-icd-opencl-dev libhwloc-dev
-      - name: Build with default features
-        run: cargo build --workspace
       - name: Test in release profile
         run: cargo test --verbose --release --workspace --all-targets
             ## Some `storage-proofs-update` tests need to run sequentially due
