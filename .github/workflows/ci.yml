@@ -82,13 +82,13 @@ jobs:
       #    path: /var/tmp/filecoin-proof-parameters/
       #    key: proof-params-v28-n-${{ matrix.size }}-${{ hashFiles('filecoin-proofs/parameters.json') }}
 
-      - name: Upload proof parameters as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: proof-params-v28-n-${{ hashFiles('filecoin-proofs/parameters.json') }}-${{ matrix.size }}
-          path: /var/tmp/filecoin-proof-parameters/
-          compression-level: 0
-          if-no-files-found: error
+      #- name: Upload proof parameters as artifact
+      #  uses: actions/upload-artifact@v4
+      #  with:
+      #    name: proof-params-v28-n-${{ hashFiles('filecoin-proofs/parameters.json') }}-${{ matrix.size }}
+      #    path: /var/tmp/filecoin-proof-parameters/
+      #    compression-level: 0
+      #    if-no-files-found: error
 
   test_release:
     needs: [set-msrv, proof-params]
@@ -175,31 +175,31 @@ jobs:
 
 
 
-  upload:
-    strategy:
-      matrix:
-        runs-on: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.runs-on }}
-    steps:
-    - name: Create a File
-      run: echo "hello from ${{ matrix.runs-on }}" > file-${{ matrix.runs-on }}.txt
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: my-artifact-${{ matrix.runs-on }}
-        path: file-${{ matrix.runs-on }}.txt
-  download:
-    needs: upload
-    runs-on: ubuntu-latest
-    steps:
-    - name: Download All Artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: my-artifact
-        pattern: my-artifact-*
-        merge-multiple: true
-        #repository: ${{ github.action_repository }}
-        run-id: ${{ github.event.workflow_run.id }}
-        #github-token: ${{ secrets.GITHUB_TOKEN }}
-        #github-token: ${{ github.token }}
-    - run: ls -R my-artifact
+  #upload:
+  #  strategy:
+  #    matrix:
+  #      runs-on: [ubuntu-latest, macos-latest]
+  #  runs-on: ${{ matrix.runs-on }}
+  #  steps:
+  #  - name: Create a File
+  #    run: echo "hello from ${{ matrix.runs-on }}" > file-${{ matrix.runs-on }}.txt
+  #  - name: Upload Artifact
+  #    uses: actions/upload-artifact@v4
+  #    with:
+  #      name: my-artifact-${{ matrix.runs-on }}
+  #      path: file-${{ matrix.runs-on }}.txt
+  #download:
+  #  needs: upload
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #  - name: Download All Artifacts
+  #    uses: actions/download-artifact@v4
+  #    with:
+  #      path: my-artifact
+  #      pattern: my-artifact-*
+  #      merge-multiple: true
+  #      #repository: ${{ github.action_repository }}
+  #      run-id: ${{ github.event.workflow_run.id }}
+  #      #github-token: ${{ secrets.GITHUB_TOKEN }}
+  #      #github-token: ${{ github.token }}
+  #  - run: ls -R my-artifact
