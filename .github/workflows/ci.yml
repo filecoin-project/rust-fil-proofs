@@ -147,7 +147,7 @@ jobs:
 
 
       - name: Get proof parameters
-      - uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4
         with:
           #name: my-artifact
           path: /var/tmp/filecoin-proof-parameters/
