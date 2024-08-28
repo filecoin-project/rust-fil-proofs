@@ -107,7 +107,7 @@ jobs:
       #  run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes='2048'
 
       - name: Restore proof parameters cache 2KiB
-        id: cache-parameters
+        id: cache-parameters-2048
         uses: actions/cache/restore@v4
         with:
           path: /var/tmp/filecoin-proof-parameters/
@@ -118,7 +118,7 @@ jobs:
         run: ls -al /var/tmp/filecoin-proof-parameters/
 
       - name: Restore proof parameters cache 4KiB
-        id: cache-parameters
+        id: cache-parameters-4096
         uses: actions/cache/restore@v4
         with:
           path: /var/tmp/filecoin-proof-parameters/
@@ -128,6 +128,7 @@ jobs:
         run: ls -al /var/tmp/filecoin-proof-parameters/
 
       - name: Test in release profile
+        if: steps.cache-parameters-2048.outputs.cache-hit != 'true' && steps.cache-parameters-4096.outputs.cache-hit != 'true'
         run: cargo test --verbose --release --workspace --all-targets
             ## Some `storage-proofs-update` tests need to run sequentially due
             ## to their high memory usage.
