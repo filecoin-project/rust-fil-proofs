@@ -170,6 +170,10 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
     // Discard cached MTs that are no longer needed.
     stacked::clear_cache_dir(cache_dir.path()).expect("cached files delete failed");
 
+    // Discard normally permanent files no longer needed in testing.
+    common::remove_replica_and_tree_r::<Tree>(cache_dir.path())
+        .expect("failed to remove replica and tree_r");
+
     let proofs = StackedCompound::prove(
         &public_params,
         &public_inputs,
@@ -200,5 +204,7 @@ fn test_stacked_compound<Tree: 'static + MerkleTreeTrait>() {
 
     assert!(verified);
 
-    cache_dir.close().expect("Failed to remove cache dir");
+    if std::fs::remove_dir(cache_dir.path()).is_ok() && cache_dir.path().exists() {
+        let _ = cache_dir.close();
+    }
 }

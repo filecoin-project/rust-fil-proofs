@@ -159,7 +159,7 @@ impl ParamPublishSessionBuilder {
 /// An active pseudoterminal (pty) used to interact with parampublish.
 pub struct ParamPublishSession {
     pty_session: PtyReplSession,
-    _cache_dir: TempDir,
+    pub _cache_dir: TempDir,
 }
 
 impl ParamPublishSession {
