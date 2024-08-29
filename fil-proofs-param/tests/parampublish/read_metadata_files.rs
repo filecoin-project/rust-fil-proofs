@@ -15,6 +15,8 @@ fn fails_if_missing_metadata_file() -> Result<(), FailureError> {
     session.exp_string("found 2 param files in cache dir")?;
     session.exp_string("no file triples found, exiting")?;
 
+    std::fs::remove_dir_all(session._cache_dir.path())?;
+
     Ok(())
 }
 
@@ -33,6 +35,8 @@ fn fails_if_malformed_metadata_file() -> Result<(), FailureError> {
     session.exp_string("found 1 file triples")?;
     session.exp_string("failed to parse .meta file")?;
     session.exp_string("exiting")?;
+
+    std::fs::remove_dir_all(session._cache_dir.path())?;
 
     Ok(())
 }

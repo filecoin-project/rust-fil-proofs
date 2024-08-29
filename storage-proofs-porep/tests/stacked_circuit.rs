@@ -125,6 +125,10 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
     // Discard cached MTs that are no longer needed.
     stacked::clear_cache_dir(cache_dir.path()).expect("cached files delete failed");
 
+    // Discard normally permanent files no longer needed in testing.
+    common::remove_replica_and_tree_r::<Tree>(cache_dir.path())
+        .expect("failed to remove replica and tree_r");
+
     {
         // Verify that MetricCS returns the same metrics as TestConstraintSystem.
         let mut cs = MetricCS::<Fr>::new();
@@ -177,5 +181,7 @@ fn test_stacked_porep_circuit<Tree: MerkleTreeTrait + 'static>(
         "inputs are not the same length"
     );
 
-    cache_dir.close().expect("Failed to remove cache dir");
+    if std::fs::remove_dir(cache_dir.path()).is_ok() {
+        cache_dir.close().expect("Failed to close cache dir")
+    }
 }

@@ -164,7 +164,16 @@ fn test_extract_all<Tree: 'static + MerkleTreeTrait>() {
 
     assert_eq!(data, mmapped_data.as_ref());
 
-    cache_dir.close().expect("Failed to remove cache dir");
+    // Discard cached MTs that are no longer needed.
+    stacked::clear_cache_dir(cache_dir.path()).expect("cached files delete failed");
+
+    // Discard normally permanent files no longer needed in testing.
+    common::remove_replica_and_tree_r::<Tree>(cache_dir.path())
+        .expect("failed to remove replica and tree_r");
+
+    if std::fs::remove_dir(cache_dir.path()).is_ok() {
+        cache_dir.close().expect("Failed to close cache dir")
+    }
 }
 
 #[test]
@@ -281,7 +290,9 @@ fn test_stacked_porep_resume_seal() {
 
     assert_eq!(data, mmapped_data1.as_ref());
 
-    cache_dir.close().expect("Failed to remove cache dir");
+    if std::fs::remove_dir(cache_dir.path()).is_ok() {
+        cache_dir.close().expect("Failed to close cache dir")
+    }
 }
 
 table_tests! {
@@ -405,9 +416,15 @@ fn test_prove_verify<Tree: 'static + MerkleTreeTrait>(n: usize, challenges: Chal
     // Discard cached MTs that are no longer needed.
     stacked::clear_cache_dir(cache_dir.path()).expect("cached files delete failed");
 
+    // Discard normally permanent files no longer needed in testing.
+    common::remove_replica_and_tree_r::<Tree>(cache_dir.path())
+        .expect("failed to remove replica and tree_r");
+
     assert!(proofs_are_valid);
 
-    cache_dir.close().expect("Failed to remove cache dir");
+    if std::fs::remove_dir(cache_dir.path()).is_ok() {
+        cache_dir.close().expect("Failed to close cache dir")
+    }
 }
 
 // We are seeing a bug, in which setup never terminates for some sector sizes. This test is to

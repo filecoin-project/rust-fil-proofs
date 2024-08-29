@@ -22,6 +22,8 @@ fn ignores_files_unrecognized_extensions() -> Result<(), FailureError> {
     session.send_line("")?;
     session.exp_string("no params selected, exiting")?;
 
+    std::fs::remove_dir_all(session._cache_dir.path())?;
+
     Ok(())
 }
 
@@ -47,6 +49,8 @@ fn displays_sector_size_in_prompt() -> Result<(), FailureError> {
     session.send_line("")?;
     session.exp_string("no params selected, exiting")?;
 
+    std::fs::remove_dir_all(session._cache_dir.path())?;
+
     Ok(())
 }
 
@@ -58,6 +62,8 @@ fn no_assets_no_prompt() -> Result<(), FailureError> {
 
     session.exp_string("found 0 param files in cache dir")?;
     session.exp_string("no file triples found, exiting")?;
+
+    std::fs::remove_dir_all(session._cache_dir.path())?;
 
     Ok(())
 }

@@ -62,6 +62,13 @@ fn writes_json_manifest() -> Result<(), failure::Error> {
         }
     }
 
+    let parent_dir = std::path::Path::new(&manifest_path)
+        .parent()
+        .expect("failed to get parent dir");
+    std::fs::remove_file(&manifest_path)?;
+    std::fs::remove_dir(parent_dir)?;
+    std::fs::remove_dir_all(session._cache_dir.path())?;
+
     Ok(())
 }
 

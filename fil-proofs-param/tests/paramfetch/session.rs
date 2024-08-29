@@ -112,7 +112,7 @@ impl ParamFetchSessionBuilder {
 /// An active pseudoterminal (pty) used to interact with paramfetch.
 pub struct ParamFetchSession {
     pty_session: PtyReplSession,
-    _cache_dir: TempDir,
+    pub _cache_dir: TempDir,
 }
 
 impl ParamFetchSession {
