@@ -13,7 +13,9 @@ use storage_proofs_porep::stacked::{PersistentAux, PublicParams, StackedDrg, Tau
 
 // This method should ONLY be used in purposed test code.
 #[allow(dead_code)]
-pub fn remove_replica_and_tree_r<Tree: MerkleTreeTrait + 'static>(cache_path: &Path) -> Result<()> {
+pub(crate) fn remove_replica_and_tree_r<Tree: MerkleTreeTrait + 'static>(
+    cache_path: &Path,
+) -> Result<()> {
     let replica_path = cache_path.join("replica-path");
     let tree_r_last_config = StoreConfig {
         path: cache_path.to_path_buf(),

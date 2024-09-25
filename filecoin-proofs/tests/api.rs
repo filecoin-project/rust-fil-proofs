@@ -943,10 +943,16 @@ fn aggregate_seal_proofs<Tree: 'static + MerkleTreeTrait>(
     let mut prover_id = [0u8; 32];
     prover_id.copy_from_slice(AsRef::<[u8]>::as_ref(&prover_fr));
 
-    let aggregate_versions = vec![
-        groth16::aggregate::AggregateVersion::V1,
-        groth16::aggregate::AggregateVersion::V2,
-    ];
+    // Note that ApiVersion 1.2.0 only supports SnarkPack v2, so only
+    // allow that testing here.
+    let aggregate_versions = match porep_config.api_version {
+        ApiVersion::V1_2_0 => vec![groth16::aggregate::AggregateVersion::V2],
+        ApiVersion::V1_1_0 => vec![
+            groth16::aggregate::AggregateVersion::V1,
+            groth16::aggregate::AggregateVersion::V2,
+        ],
+        ApiVersion::V1_0_0 => vec![groth16::aggregate::AggregateVersion::V1],
+    };
     info!(
         "Aggregating {} seal proof with ApiVersion {}, Features {:?}, and PoRep ID {:?}",
         num_proofs_to_aggregate,
