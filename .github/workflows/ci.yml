@@ -75,7 +75,7 @@ jobs:
         run: CC=gcc-12 CXX=g++-12 NVCC_PREPEND_FLAGS='-ccbin /usr/bin/g++-12' cargo build --workspace --no-default-features --features cuda-supraseal
 
   test_gpu:
-    runs-on: ubuntu-24.04
+    runs-on: self-hosted
     name: Test on GPUs
     strategy:
       matrix:
