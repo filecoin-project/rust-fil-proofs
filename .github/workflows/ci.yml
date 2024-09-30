@@ -42,6 +42,7 @@ jobs:
       # Run all tests with multicore-SDR enabled.
       FIL_PROOFS_USE_MULTICORE_SDR: true
     steps:
+      - uses: actions/checkout@v4
       - name: Run usual tests in release profile
         run: cargo test --verbose --release --workspace --all-targets ${{ matrix.cargo-args }} -- --nocapture
       - name: Run isolated PoRep tests in release profile
@@ -53,6 +54,7 @@ jobs:
     runs-on: self-hosted
     name: Test ignored in release mode
     steps:
+      - uses: actions/checkout@v4
       - name: Test ignored in release profile
         run: cargo test --release --workspace -- ignored --nocapture
 
