@@ -1,7 +1,6 @@
 name: Proof params generate
 
 on:
-  pull_request:
   # Make it also possible to trigger it manually.
   workflow_dispatch:
   schedule:
