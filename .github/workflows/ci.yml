@@ -17,17 +17,15 @@ env:
 
 jobs:
   check_clippy:
-    runs-on: ubuntu-24.04
+    runs-on: self-hosted
     name: Clippy
     steps:
       - uses: actions/checkout@v4
-      - name: Install required packages
-        run: sudo apt install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
       - name: Run cargo clippy
         run: cargo clippy --all-targets --workspace -- -D warnings
 
   check_fmt:
-    runs-on: ubuntu-24.04
+    runs-on: self-hosted
     name: Checking fmt
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +33,7 @@ jobs:
         run: cargo fmt --all -- --check
 
   test_release:
-    runs-on: ubuntu-24.04
+    runs-on: self-hosted
     name: Test in release mode
     strategy:
       matrix:
@@ -44,15 +42,6 @@ jobs:
       # Run all tests with multicore-SDR enabled.
       FIL_PROOFS_USE_MULTICORE_SDR: true
     steps:
-      - uses: actions/checkout@v4
-      - name: Install required packages
-        run: sudo apt install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
-
-      - name: Download the proof params
-        uses: ./.github/actions/proof-params-download
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Run usual tests in release profile
         run: cargo test --verbose --release --workspace --all-targets ${{ matrix.cargo-args }} -- --nocapture
       - name: Run isolated PoRep tests in release profile
