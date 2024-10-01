@@ -47,7 +47,7 @@ jobs:
       - name: Run usual tests in release profile
         run: cargo test --verbose --release --workspace --all-targets ${{ matrix.cargo-args }} -- --nocapture
       - name: Run isolated PoRep tests in release profile
-        run: cargo test --release -p storage-proofs-porep --features isolated-testing ${{ matrix.cargo-args }} -- --nocapture
+        run: cargo test --release -p storage-proofs-porep --features isolated-testing ${{ matrix.cargo-args }} -- --nocapture --test-threads=1
       - name: Run isolated update tests in release profile
         run: cargo test --release -p storage-proofs-update --features isolated-testing ${{ matrix.cargo-args }} -- --nocapture
 
@@ -91,7 +91,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Test with CUDA
-        run: cargo test --verbose --release --workspace --features cuda -- --nocapture ${{ matrix.test-args }}
+        run: cargo test --verbose --release --workspace --features cuda -- --nocapture ${{ matrix.test-args }} -- --test-threads=1
       - name: Test with `cuda-supraseal`
         run: CC=gcc-12 CXX=g++-12 NVCC_PREPEND_FLAGS='-ccbin /usr/bin/g++-12' cargo test -p filecoin-proofs --release --no-default-features --features cuda-supraseal -- --nocapture --test-threads=1 ${{ matrix.test-args }}
 
