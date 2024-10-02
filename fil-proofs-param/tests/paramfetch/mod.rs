@@ -29,6 +29,14 @@ fn rand_bytes_with_blake2b() -> Result<(Vec<u8>, String), FailureError> {
     Ok((bytes.to_vec(), hasher.finalize().to_hex()[..32].into()))
 }
 
+fn clean_up_manifest_and_parent(manifest_pbuf: &PathBuf) {
+    let parent_dir = std::path::Path::new(manifest_pbuf)
+        .parent()
+        .expect("failed to get parent dir");
+    std::fs::remove_file(manifest_pbuf).expect("failed to remove manifest file");
+    std::fs::remove_dir_all(parent_dir).expect("failed to remove parent dir");
+}
+
 #[test]
 fn nothing_to_fetch_if_cache_fully_hydrated() -> Result<(), FailureError> {
     let mut manifest: BTreeMap<String, ParameterData> = BTreeMap::new();
@@ -48,7 +56,7 @@ fn nothing_to_fetch_if_cache_fully_hydrated() -> Result<(), FailureError> {
 
     let manifest_pbuf = tmp_manifest(Some(manifest))?;
 
-    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf))
+    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf.clone()))
         .with_session_timeout_ms(1000)
         .with_file_and_bytes("aaa.vk", &mut aaa_bytes)
         .build();
@@ -56,6 +64,9 @@ fn nothing_to_fetch_if_cache_fully_hydrated() -> Result<(), FailureError> {
     session.exp_string("determining if file is out of date: aaa.vk")?;
     session.exp_string("file is up to date")?;
     session.exp_string("no outdated files, exiting")?;
+
+    clean_up_manifest_and_parent(&manifest_pbuf);
+    std::fs::remove_dir_all(session._cache_dir.path())?;
 
     Ok(())
 }
@@ -75,7 +86,7 @@ fn prompts_to_download_if_file_in_manifest_is_missing() -> Result<(), FailureErr
 
     let manifest_pbuf = tmp_manifest(Some(manifest))?;
 
-    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf))
+    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf.clone()))
         .with_session_timeout_ms(1000)
         .build();
 
@@ -83,6 +94,9 @@ fn prompts_to_download_if_file_in_manifest_is_missing() -> Result<(), FailureErr
     session.exp_string("file not found, marking for download")?;
     session.exp_string("Select files to be downloaded")?;
     session.exp_string("aaa.vk (1 KiB)")?;
+
+    clean_up_manifest_and_parent(&manifest_pbuf);
+    std::fs::remove_dir_all(session._cache_dir.path())?;
 
     Ok(())
 }
@@ -105,7 +119,7 @@ fn prompts_to_download_if_file_checksum_does_not_match_manifest() -> Result<(), 
 
     let manifest_pbuf = tmp_manifest(Some(manifest))?;
 
-    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf))
+    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf.clone()))
         .with_session_timeout_ms(1000)
         .with_file_and_bytes("aaa.vk", &mut aaa_bytes)
         .build();
@@ -115,6 +129,9 @@ fn prompts_to_download_if_file_checksum_does_not_match_manifest() -> Result<(), 
     session.exp_string("file has unexpected digest, marking for download")?;
     session.exp_string("Select files to be downloaded")?;
     session.exp_string("aaa.vk (1 KiB)")?;
+
+    clean_up_manifest_and_parent(&manifest_pbuf);
+    std::fs::remove_dir_all(session._cache_dir.path())?;
 
     Ok(())
 }
@@ -143,7 +160,7 @@ fn fetches_vk_even_if_sector_size_does_not_match() -> Result<(), FailureError> {
 
     let manifest_pbuf = tmp_manifest(Some(manifest))?;
 
-    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf))
+    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf.clone()))
         .with_session_timeout_ms(1000)
         .whitelisted_sector_sizes(vec!["6666".to_string(), "4444".to_string()])
         .build();
@@ -152,6 +169,9 @@ fn fetches_vk_even_if_sector_size_does_not_match() -> Result<(), FailureError> {
     session.exp_string("ignoring file: aaa.params (1 KiB)")?;
     session.exp_string("determining if file is out of date: aaa.vk")?;
     session.exp_string("file not found, marking for download")?;
+
+    clean_up_manifest_and_parent(&manifest_pbuf);
+    std::fs::remove_dir_all(session._cache_dir.path())?;
 
     Ok(())
 }
@@ -165,6 +185,8 @@ fn invalid_json_path_produces_error() -> Result<(), FailureError> {
     session.exp_string("using json file: /invalid/path")?;
     session.exp_string("failed to open json file, exiting")?;
 
+    std::fs::remove_dir_all(session._cache_dir.path())?;
+
     Ok(())
 }
 
@@ -172,14 +194,19 @@ fn invalid_json_path_produces_error() -> Result<(), FailureError> {
 fn invalid_json_produces_error() -> Result<(), FailureError> {
     let manifest_pbuf = tmp_manifest(None)?;
 
-    let mut file = File::create(&manifest_pbuf)?;
-    file.write_all(b"invalid json")?;
+    {
+        let mut file = File::create(&manifest_pbuf)?;
+        file.write_all(b"invalid json")?;
+    }
 
-    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf))
+    let mut session = ParamFetchSessionBuilder::new(Some(manifest_pbuf.clone()))
         .with_session_timeout_ms(1000)
         .build();
 
     session.exp_string("failed to parse json file, exiting")?;
+
+    clean_up_manifest_and_parent(&manifest_pbuf);
+    std::fs::remove_dir_all(session._cache_dir.path())?;
 
     Ok(())
 }
@@ -202,6 +229,8 @@ fn no_json_path_uses_default_manifest() -> Result<(), FailureError> {
             parameter
         ))?;
     }
+
+    std::fs::remove_dir_all(session._cache_dir.path())?;
 
     Ok(())
 }
