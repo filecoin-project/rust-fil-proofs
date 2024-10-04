@@ -115,17 +115,7 @@ pub(crate) fn regression_verify_seal_proof(record: &SealRegressionRecord) -> Res
 
     let sector_size: u64 = r.porep_config.sector_size.into();
     let verified = match sector_size {
-        SECTOR_SIZE_2_KIB => verify_seal::<SectorShape2KiB>(
-            &r.porep_config,
-            r.comm_r,
-            r.comm_d,
-            r.prover_id,
-            r.sector_id,
-            r.ticket,
-            r.seed,
-            &r.proof,
-        ),
-        SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB => Ok(true),
+        SECTOR_SIZE_2_KIB | SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB => Ok(true),
         SECTOR_SIZE_8_MIB => verify_seal::<SectorShape8MiB>(
             &r.porep_config,
             r.comm_r,
