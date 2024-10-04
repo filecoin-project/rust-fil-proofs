@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
     api_version::{ApiFeature, ApiVersion},
     merkle::MerkleTreeTrait,
@@ -18,7 +19,7 @@ use crate::{
     POREP_PARTITIONS,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PoRepConfig {
     pub sector_size: SectorSize,
     pub partitions: PoRepProofPartitions,
@@ -79,19 +80,7 @@ impl PoRepConfig {
         api_version: ApiVersion,
         api_features: Vec<ApiFeature>,
     ) -> Result<Self> {
-        let mut config = Self {
-            sector_size: SectorSize(sector_size),
-            partitions: PoRepProofPartitions(
-                *POREP_PARTITIONS
-                    .read()
-                    .expect("POREP_PARTITIONS poisoned")
-                    .get(&sector_size)
-                    .expect("unknown sector size"),
-            ),
-            porep_id,
-            api_version,
-            api_features: vec![],
-        };
+        let mut config = PoRepConfig::new_groth16(sector_size, porep_id, api_version);
         for feature in api_features {
             config.enable_feature(feature)?;
         }
