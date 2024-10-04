@@ -125,7 +125,7 @@ pub(crate) fn regression_verify_seal_proof(record: &SealRegressionRecord) -> Res
             r.seed,
             &r.proof,
         ),
-        SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB => true,
+        SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB => Ok(true),
         SECTOR_SIZE_8_MIB => verify_seal::<SectorShape8MiB>(
             &r.porep_config,
             r.comm_r,
@@ -146,7 +146,7 @@ pub(crate) fn regression_verify_seal_proof(record: &SealRegressionRecord) -> Res
             r.seed,
             &r.proof,
         ),
-        SECTOR_SIZE_1_GIB => true,
+        SECTOR_SIZE_1_GIB => Ok(true),
         SECTOR_SIZE_32_GIB => verify_seal::<SectorShape32GiB>(
             &r.porep_config,
             r.comm_r,
