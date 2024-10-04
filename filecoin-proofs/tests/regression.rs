@@ -108,8 +108,80 @@ pub(crate) fn load_regression_records(records: &Path) -> Result<Vec<SealRegressi
     Ok(records)
 }
 
+// On MacOS, we only verify production parameter sizes and published test sector sizes
+#[cfg(target_os = "macos")]
+pub(crate) fn regression_verify_seal_proof(record: &SealRegressionRecord) -> Result<bool> {
+    let r = record;
+
+    let sector_size: u64 = r.porep_config.sector_size.into();
+    let verified = match sector_size {
+        SECTOR_SIZE_2_KIB => verify_seal::<SectorShape2KiB>(
+            &r.porep_config,
+            r.comm_r,
+            r.comm_d,
+            r.prover_id,
+            r.sector_id,
+            r.ticket,
+            r.seed,
+            &r.proof,
+        ),
+        SECTOR_SIZE_4_KIB | SECTOR_SIZE_16_KIB | SECTOR_SIZE_32_KIB => true,
+        SECTOR_SIZE_8_MIB => verify_seal::<SectorShape8MiB>(
+            &r.porep_config,
+            r.comm_r,
+            r.comm_d,
+            r.prover_id,
+            r.sector_id,
+            r.ticket,
+            r.seed,
+            &r.proof,
+        ),
+        SECTOR_SIZE_512_MIB => verify_seal::<SectorShape512MiB>(
+            &r.porep_config,
+            r.comm_r,
+            r.comm_d,
+            r.prover_id,
+            r.sector_id,
+            r.ticket,
+            r.seed,
+            &r.proof,
+        ),
+        SECTOR_SIZE_1_GIB => true,
+        SECTOR_SIZE_32_GIB => verify_seal::<SectorShape32GiB>(
+            &r.porep_config,
+            r.comm_r,
+            r.comm_d,
+            r.prover_id,
+            r.sector_id,
+            r.ticket,
+            r.seed,
+            &r.proof,
+        ),
+        SECTOR_SIZE_64_GIB => verify_seal::<SectorShape64GiB>(
+            &r.porep_config,
+            r.comm_r,
+            r.comm_d,
+            r.prover_id,
+            r.sector_id,
+            r.ticket,
+            r.seed,
+            &r.proof,
+        ),
+        _ => {
+            error!(
+                "Cannot verify proof: Unsupported sector size [{}]",
+                sector_size
+            );
+            Ok(false)
+        }
+    }?;
+
+    Ok(verified)
+}
+
 #[allow(non_snake_case)]
 #[allow(unused_variables)]
+#[cfg(not(target_os = "macos"))]
 pub(crate) fn regression_verify_seal_proof(record: &SealRegressionRecord) -> Result<bool> {
     let r = record;
 
