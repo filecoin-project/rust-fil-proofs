@@ -108,18 +108,6 @@ pub struct SectorUpdateProofInputs {
     pub comm_d_new: Commitment,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SealRegressionRecord {
-    pub porep_config: PoRepConfig,
-    pub comm_r: Commitment,
-    pub comm_d: Commitment,
-    pub prover_id: ProverId,
-    pub sector_id: SectorId,
-    pub ticket: [u8; 32],
-    pub seed: [u8; 32],
-    pub proof: Vec<u8>,
-}
-
 // This FallbackPoStSectorProof is used during Fallback PoSt, but
 // contains only Vanilla proof information and is not a full Fallback
 // PoSt proof.

@@ -4,24 +4,36 @@ use std::path::Path;
 
 use anyhow::Result;
 use filecoin_proofs::{
-    verify_seal, SealRegressionRecord, SectorShape16KiB, SectorShape1GiB, SectorShape2KiB,
-    SectorShape32GiB, SectorShape32KiB, SectorShape4KiB, SectorShape512MiB, SectorShape64GiB,
-    SectorShape8MiB, SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
+    verify_seal, SectorShape16KiB, SectorShape1GiB, SectorShape2KiB, SectorShape32GiB,
+    SectorShape32KiB, SectorShape4KiB, SectorShape512MiB, SectorShape64GiB, SectorShape8MiB,
+    SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
     SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
     SECTOR_SIZE_8_MIB,
 };
 use log::{error, info};
+use serde::{Deserialize, Serialize};
 
+use filecoin_proofs::{Commitment, PoRepConfig, ProverId};
 #[cfg(feature = "persist-regression-proofs")]
 use filecoin_proofs::{
-    MerkleTreeTrait, PoRepConfig, ProverId, SealCommitOutput, SealPreCommitOutput,
-    PUBLISHED_SECTOR_SIZES,
+    MerkleTreeTrait, SealCommitOutput, SealPreCommitOutput, PUBLISHED_SECTOR_SIZES,
 };
-#[cfg(feature = "persist-regression-proofs")]
 use storage_proofs_core::sector::SectorId;
 
 const V16_SEAL_REGRESSION_RECORDS: &str = "seal_regression_records-v16.json";
 const V18_SEAL_REGRESSION_RECORDS: &str = "seal_regression_records-v18.json";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct SealRegressionRecord {
+    pub porep_config: PoRepConfig,
+    pub comm_r: Commitment,
+    pub comm_d: Commitment,
+    pub prover_id: ProverId,
+    pub sector_id: SectorId,
+    pub ticket: [u8; 32],
+    pub seed: [u8; 32],
+    pub proof: Vec<u8>,
+}
 
 #[cfg(feature = "persist-regression-proofs")]
 #[allow(dead_code)]
