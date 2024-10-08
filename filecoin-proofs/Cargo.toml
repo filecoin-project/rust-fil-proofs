@@ -37,6 +37,7 @@ serde = { workspace = true, features = ["rc", "derive"] }
 serde_json.workspace = true
 sha2.workspace = true
 typenum.workspace = true
+file-lock="2.1.10"
 
 [dev-dependencies]
 # Sorted alphabetically
@@ -86,6 +87,7 @@ fixed-rows-to-discard = [
     "storage-proofs-post/fixed-rows-to-discard",
     "storage-proofs-update/fixed-rows-to-discard",
 ]
+persist-regression-proofs = []
 
 [[bench]]
 name = "preprocessing"

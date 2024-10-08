@@ -186,6 +186,22 @@ Some results are displayed at the command line, or alternatively written as JSON
 
 Note: On macOS you need `gtime` (`brew install gnu-time`), as the built in `time` command is not enough.
 
+## Regression Testing
+
+Within the `filecoin-proofs` crate there is a regression suite.  The idea is to record some generated proofs at various proof release versions, so that future versions/revisions can always ensure that it can properly verify historical proofs as expected.
+
+By default, there is a test that verifies all known regression records that exist within the source tree.
+
+In order to generate a new set of regression records, the feature flag `persist-regression-proofs` must be used.
+
+When the feature is used and all of the `filecoin-proofs` tests are run (including the ignored tests), the following files are written to disk:
+
+```
+filecoin-proofs/tests/seal_regression_records.json
+```
+
+Once the new files are generated with a given proof version, they should be renamed appropriately and added to the repository and then referenced for verification during routine testing in the `filecoin-proofs/tests/regression.rs` source (see the `const` values at the top and go from there).
+
 ## Logging
 
 For better logging with backtraces on errors, developers should use `expects` rather than `expect` on `Result<T, E>` and `Option<T>`.
