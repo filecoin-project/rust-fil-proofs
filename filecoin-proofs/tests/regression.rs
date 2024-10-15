@@ -23,6 +23,11 @@ use storage_proofs_core::sector::SectorId;
 const V16_SEAL_REGRESSION_RECORDS: &str = "seal_regression_records-v16.json";
 const V18_SEAL_REGRESSION_RECORDS: &str = "seal_regression_records-v18.json";
 
+const SEAL_REGRESSION_RECORD_VERSIONS: [(&str, &str); 2] = [
+    (V16_SEAL_REGRESSION_RECORDS, "v16"),
+    (V18_SEAL_REGRESSION_RECORDS, "v18"),
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SealRegressionRecord {
     pub porep_config: PoRepConfig,
@@ -237,12 +242,8 @@ fn run_seal_regression_tests() -> Result<()> {
     fil_logger::maybe_init();
 
     let basedir = Path::new(&std::env::var("CARGO_MANIFEST_DIR")?).join("tests");
-    let seal_regression_record_versions = vec![
-        (V16_SEAL_REGRESSION_RECORDS, "v16"),
-        (V18_SEAL_REGRESSION_RECORDS, "v18"),
-    ];
 
-    for (path, version) in seal_regression_record_versions {
+    for (path, version) in SEAL_REGRESSION_RECORD_VERSIONS {
         let path = basedir.join(path);
         info!("Loading regression records from {:?}", path);
         let records = load_regression_records(&path)?;
