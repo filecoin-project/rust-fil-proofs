@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use anyhow::{format_err, Error, Result};
 use semver::Version;
+use serde::{Deserialize, Serialize};
 
 pub use bellperson::groth16::aggregate::AggregateVersion;
 
@@ -11,7 +12,7 @@ pub use bellperson::groth16::aggregate::AggregateVersion;
 /// must use and recognize.
 ///
 /// New versions always require new network behaviour.
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ApiVersion {
     V1_0_0,
     V1_1_0,
@@ -94,7 +95,7 @@ impl FromStr for ApiVersion {
 ///
 /// New features always require new network behaviour (i.e. for proper
 /// validation of others, even if not actively using)
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ApiFeature {
     SyntheticPoRep,
     NonInteractivePoRep,
