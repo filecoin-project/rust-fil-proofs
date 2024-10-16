@@ -65,6 +65,8 @@ use filecoin_proofs::{
 };
 
 #[cfg(feature = "persist-regression-proofs")]
+mod regression;
+#[cfg(feature = "persist-regression-proofs")]
 use regression::persist_generated_proof_for_regression_testing;
 
 // Use a fixed PoRep ID, so that the parents cache can be re-used between some tests.
