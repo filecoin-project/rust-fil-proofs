@@ -60,8 +60,14 @@ use filecoin_proofs::constants::{
 
 #[cfg(feature = "big-tests")]
 use filecoin_proofs::{
-    SectorShape512MiB, SectorShape64GiB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
+    SectorShape512MiB, SectorShape64GiB, SectorShape8MiB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
+    SECTOR_SIZE_8_MIB,
 };
+
+#[cfg(feature = "persist-regression-proofs")]
+mod regression;
+#[cfg(feature = "persist-regression-proofs")]
+use regression::persist_generated_proof_for_regression_testing;
 
 // Use a fixed PoRep ID, so that the parents cache can be re-used between some tests.
 // Note however, that parents caches cannot be shared when testing the differences
@@ -403,30 +409,68 @@ fn test_seal_lifecycle_32kib_base_8() -> Result<()> {
 
 #[cfg(feature = "big-tests")]
 #[test]
-fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1() -> Result<()> {
-    use filecoin_proofs::{SectorShape512MiB, SECTOR_SIZE_512_MIB};
-    let porep_id_v1: u64 = 2; // This is a RegisteredSealProof value
+fn test_seal_lifecycle_8mib_base_8() -> Result<()> {
+    let test_inputs = vec![
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, Vec::new()),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::SyntheticPoRep],
+        ),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::NonInteractivePoRep],
+        ),
+    ];
 
-    let mut porep_id = [0u8; 32];
-    porep_id[..8].copy_from_slice(&porep_id_v1.to_le_bytes());
-    assert!(is_legacy_porep_id(porep_id));
+    for (porep_id, api_version, features) in test_inputs {
+        let porep_config = PoRepConfig::new_groth16_with_features(
+            SECTOR_SIZE_8_MIB,
+            porep_id,
+            api_version,
+            features,
+        )?;
 
-    let porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_512_MIB, porep_id, ApiVersion::V1_0_0);
-    seal_lifecycle::<SectorShape512MiB>(&porep_config)
+        seal_lifecycle::<SectorShape8MiB>(&porep_config)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(feature = "big-tests")]
 #[test]
-fn test_seal_lifecycle_512mib_porep_id_v1_top_8_0_0_api_v1_1() -> Result<()> {
-    use filecoin_proofs::{SectorShape512MiB, SECTOR_SIZE_512_MIB};
-    let porep_id_v1_1: u64 = 7; // This is a RegisteredSealProof value
+fn test_seal_lifecycle_512mib_base_8() -> Result<()> {
+    let test_inputs = vec![
+        (ARBITRARY_POREP_ID_V1_0_0, ApiVersion::V1_0_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_1_0, ApiVersion::V1_1_0, Vec::new()),
+        (ARBITRARY_POREP_ID_V1_2_0, ApiVersion::V1_2_0, Vec::new()),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::SyntheticPoRep],
+        ),
+        (
+            ARBITRARY_POREP_ID_V1_2_0,
+            ApiVersion::V1_2_0,
+            vec![ApiFeature::NonInteractivePoRep],
+        ),
+    ];
 
-    let mut porep_id = [0u8; 32];
-    porep_id[..8].copy_from_slice(&porep_id_v1_1.to_le_bytes());
-    assert!(!is_legacy_porep_id(porep_id));
+    for (porep_id, api_version, features) in test_inputs {
+        let porep_config = PoRepConfig::new_groth16_with_features(
+            SECTOR_SIZE_512_MIB,
+            porep_id,
+            api_version,
+            features,
+        )?;
 
-    let porep_config = PoRepConfig::new_groth16(SECTOR_SIZE_512_MIB, porep_id, ApiVersion::V1_1_0);
-    seal_lifecycle::<SectorShape512MiB>(&porep_config)
+        seal_lifecycle::<SectorShape512MiB>(&porep_config)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(feature = "big-tests")]
@@ -962,6 +1006,15 @@ fn aggregate_seal_proofs<Tree: 'static + MerkleTreeTrait>(
     );
 
     for aggregate_version in aggregate_versions {
+        info!(
+            "Aggregating {} seal proofs with ApiVersion {}, Snarkpack{}, Features {:?}, and PoRep ID {:?}",
+            num_proofs_to_aggregate,
+            porep_config.api_version,
+            aggregate_version,
+            porep_config.api_features,
+            porep_config.porep_id
+        );
+
         let mut commit_outputs = Vec::with_capacity(num_proofs_to_aggregate);
         let mut commit_inputs = Vec::with_capacity(num_proofs_to_aggregate);
         let mut seeds = Vec::with_capacity(num_proofs_to_aggregate);
@@ -2224,6 +2277,18 @@ fn proof_and_unseal<Tree: 'static + MerkleTreeTrait>(
         aggregation_enabled,
     )?;
 
+    // For regression suite only -- persist seal proof and everything required for the verify here
+    #[cfg(feature = "persist-regression-proofs")]
+    persist_generated_proof_for_regression_testing::<Tree>(
+        config,
+        prover_id,
+        sector_id,
+        ticket,
+        seed,
+        &pre_commit_output,
+        &commit_output,
+    )?;
+
     unseal::<Tree>(
         config,
         cache_dir_path,
@@ -2283,7 +2348,7 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
     )?;
     compare_trees::<Tree>(&tree_r_last_dir, &cache_dir, CacheKey::CommRLastTree)?;
 
-    // Check if creating only the tree_r generates the same output as the full pre commit phase 2
+    // Check if creating only the tree_c generates the same output as the full pre commit phase 2
     // process.
     let tree_c_dir = tempdir().expect("failed to create temp dir");
     generate_tree_c::<_, _, Tree>(
