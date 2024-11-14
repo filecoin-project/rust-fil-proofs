@@ -2,14 +2,15 @@ use std::convert::TryInto;
 use std::sync::{Mutex, MutexGuard};
 
 use anyhow::{format_err, Result};
-use hwloc::{Bitmap, ObjectType, Topology, TopologyObject, CPUBIND_THREAD};
+use hwloc::{Bitmap, CpuBindFlags, ObjectType, Topology, TopologyObject};
 use lazy_static::lazy_static;
 use log::{debug, warn};
 use storage_proofs_core::settings::SETTINGS;
 
 type CoreUnit = Vec<CoreIndex>;
 lazy_static! {
-    pub static ref TOPOLOGY: Mutex<Topology> = Mutex::new(Topology::new());
+    pub static ref TOPOLOGY: Mutex<Topology> =
+        Mutex::new(Topology::new().expect("failed to initialize and load cpu topology"));
     pub static ref CORE_GROUPS: Option<Vec<Mutex<CoreUnit>>> = {
         let num_producers = &SETTINGS.multicore_sdr_producers;
         let cores_per_unit = num_producers + 1;
@@ -69,7 +70,8 @@ impl Drop for Cleanup {
         if let Some(prior) = self.prior_state.take() {
             let child_topo = &TOPOLOGY;
             let mut locked_topo = child_topo.lock().expect("poisded lock");
-            let _ = locked_topo.set_cpubind_for_thread(self.tid, prior, CPUBIND_THREAD);
+            let _ =
+                locked_topo.set_cpubind_for_thread(self.tid, prior, CpuBindFlags::CPUBIND_THREAD);
         }
     }
 }
@@ -82,7 +84,7 @@ pub fn bind_core(core_index: CoreIndex) -> Result<Cleanup> {
         .map_err(|err| format_err!("failed to get core at index {}: {:?}", core_index.0, err))?;
 
     let cpuset = core
-        .allowed_cpuset()
+        .cpuset()
         .ok_or_else(|| format_err!("no allowed cpuset for core at index {}", core_index.0,))?;
     debug!("allowed cpuset: {:?}", cpuset);
     let mut bind_to = cpuset;
@@ -91,12 +93,12 @@ pub fn bind_core(core_index: CoreIndex) -> Result<Cleanup> {
     bind_to.singlify();
 
     // Thread binding before explicit set.
-    let before = locked_topo.get_cpubind_for_thread(tid, CPUBIND_THREAD);
+    let before = locked_topo.get_cpubind_for_thread(tid, CpuBindFlags::CPUBIND_THREAD);
 
     debug!("binding to {:?}", bind_to);
     // Set the binding.
     let result = locked_topo
-        .set_cpubind_for_thread(tid, bind_to, CPUBIND_THREAD)
+        .set_cpubind_for_thread(tid, bind_to, CpuBindFlags::CPUBIND_THREAD)
         .map_err(|err| format_err!("failed to bind CPU: {:?}", err));
 
     if result.is_err() {
@@ -239,7 +241,7 @@ fn core_units(cores_per_unit: usize) -> Option<Vec<Mutex<CoreUnit>>> {
         .get_cpubind(hwloc::CpuBindFlags::empty())
         .unwrap_or_else(|| {
             topo.object_at_root()
-                .allowed_cpuset()
+                .cpuset()
                 .unwrap_or_else(hwloc::CpuSet::full)
         });
 
