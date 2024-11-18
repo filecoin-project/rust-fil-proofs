@@ -9,7 +9,7 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
 [dependencies]
-filecoin-hashers = { workspace = true, features = ["poseidon", "sha256"]}
+filecoin-hashers = { workspace = true, features = ["poseidon", "sha256"] }
 fr32.workspace = true
 sha2raw.workspace = true
 storage-proofs-core.workspace = true
@@ -28,7 +28,7 @@ ff.workspace = true
 generic-array.workspace = true
 glob = "0.3.0"
 hex.workspace = true
-hwloc = { version = "0.5.0", optional = true }
+hwloc = { version = "2.2.0", optional = true, package = "hwloc2" }
 lazy_static.workspace = true
 libc = "0.2"
 log.workspace = true
@@ -53,7 +53,11 @@ sha2 = { workspace = true, features = ["compress", "asm"] }
 sha2 = { workspace = true, features = ["compress"] }
 
 [dev-dependencies]
-filecoin-hashers = { workspace = true, features = ["poseidon", "sha256", "blake2s"]}
+filecoin-hashers = { workspace = true, features = [
+    "poseidon",
+    "sha256",
+    "blake2s",
+] }
 # Sorted alphabetically
 criterion.workspace = true
 fil_logger.workspace = true
@@ -63,8 +67,18 @@ tempfile.workspace = true
 
 [features]
 default = ["opencl", "multicore-sdr"]
-cuda = ["storage-proofs-core/cuda", "filecoin-hashers/cuda", "neptune/cuda", "bellperson/cuda"]
-opencl = ["storage-proofs-core/opencl", "filecoin-hashers/opencl", "neptune/opencl", "bellperson/opencl"]
+cuda = [
+    "storage-proofs-core/cuda",
+    "filecoin-hashers/cuda",
+    "neptune/cuda",
+    "bellperson/cuda",
+]
+opencl = [
+    "storage-proofs-core/opencl",
+    "filecoin-hashers/opencl",
+    "neptune/opencl",
+    "bellperson/opencl",
+]
 isolated-testing = []
 multicore-sdr = ["hwloc"]
 # This feature enables a fixed number of discarded rows for TreeR. The `FIL_PROOFS_ROWS_TO_DISCARD`
