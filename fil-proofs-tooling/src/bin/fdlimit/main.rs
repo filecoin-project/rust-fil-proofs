@@ -1,6 +1,15 @@
 fn main() {
     fil_logger::init();
 
-    let res = fdlimit::raise_fd_limit().expect("failed to raise fd limit");
-    println!("File descriptor limit was raised to {}", res);
+    match fdlimit::raise_fd_limit() {
+        Ok(fdlimit::Outcome::LimitRaised { from, to }) => {
+            println!("File descriptor limit was raised from {from} to {to}");
+        }
+        Ok(fdlimit::Outcome::Unsupported) => {
+            panic!("failed to raise fd limit: unsupported")
+        }
+        Err(e) => {
+            panic!("failed to raise fd limit: {}", e)
+        }
+    }
 }

@@ -22,7 +22,7 @@ blake2b_simd.workspace = true
 blstrs.workspace = true
 byteorder.workspace = true
 cbc = { version = "0.1.2", features = ["std"] }
-config = { version = "0.12.0", default-features = false, features = ["toml"] }
+config = { version = "0.14", default-features = false, features = ["toml"] }
 cpu-time = { workspace = true, optional = true }
 ff.workspace = true
 fs2 = "0.4"
