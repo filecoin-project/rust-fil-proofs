@@ -78,7 +78,7 @@ impl<Tree: MerkleTreeTrait> Ord for PrivateReplicaInfo<Tree> {
 
 impl<Tree: MerkleTreeTrait> PartialOrd for PrivateReplicaInfo<Tree> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.comm_r.as_ref().partial_cmp(other.comm_r.as_ref())
+        Some(self.cmp(other))
     }
 }
 
