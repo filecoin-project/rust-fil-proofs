@@ -38,7 +38,7 @@ impl<R: Read> Iterator for ChunkIterator<R> {
         match self.reader.read_many(&mut buffer) {
             Ok(bytes_read) if bytes_read == self.chunk_size => Some(Ok(buffer)),
             // A position of 0 indicates end of file.
-            Ok(bytes_read) if bytes_read == 0 => None,
+            Ok(0) => None,
             Ok(bytes_read) => Some(Ok(buffer[..bytes_read].to_vec())),
             Err(error) => Some(Err(error)),
         }

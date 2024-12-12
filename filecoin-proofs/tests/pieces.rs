@@ -266,14 +266,14 @@ fn test_verify_padded_pieces() {
         hash(&layer1[10], &layer1[11]), // 4
     ];
 
-    let layer3 = vec![
+    let layer3 = [
         hash(&layer2[0], &layer2[1]), // 8
         hash(&layer2[2], &layer2[3]), // 8
         layer2[4],                    // 8
         hash(&layer2[5], &layer2[6]), // 8
     ];
 
-    let layer4 = vec![
+    let layer4 = [
         hash(&layer3[0], &layer3[1]), // 16
         hash(&layer3[2], &layer3[3]), // 16
     ];
