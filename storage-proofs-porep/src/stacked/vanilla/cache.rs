@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashSet};
+use std::fmt::Write;
 use std::fs::{remove_file, File};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -250,7 +251,10 @@ impl ParentCache {
             drop(data);
 
             let hash = hasher.finalize();
-            digest_hex = hash.iter().map(|x| format!("{:01$x}", x, 2)).collect();
+            digest_hex = hash.iter().fold(String::new(), |mut output, x| {
+                let _ = write!(output, "{:01$x}", x, 2);
+                output
+            });
 
             info!(
                 "[open] parent cache: calculated consistency digest: {:?}",
@@ -343,7 +347,10 @@ impl ParentCache {
             let mut hasher = Sha256::new();
             hasher.update(&data);
             let hash = hasher.finalize();
-            digest_hex = hash.iter().map(|x| format!("{:01$x}", x, 2)).collect();
+            digest_hex = hash.iter().fold(String::new(), |mut output, x| {
+                let _ = write!(output, "{:01$x}", x, 2);
+                output
+            });
             info!(
                 "[generate] parent cache: generated consistency digest: {:?}",
                 digest_hex

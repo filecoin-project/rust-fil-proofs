@@ -2,9 +2,10 @@ use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::mem::{self, size_of};
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::{
     atomic::{AtomicU64, Ordering::SeqCst},
-    Arc, MutexGuard,
+    MutexGuard,
 };
 use std::thread;
 use std::time::Duration;
@@ -208,7 +209,7 @@ fn create_layer_labels(
     exp_labels: Option<&mut MmapMut>,
     num_nodes: u64,
     cur_layer: u32,
-    core_group: Arc<Option<MutexGuard<'_, Vec<CoreIndex>>>>,
+    core_group: Rc<Option<MutexGuard<'_, Vec<CoreIndex>>>>,
 ) {
     info!("Creating labels for layer {}", cur_layer);
     // num_producers is the number of producer threads
@@ -458,14 +459,14 @@ pub fn create_labels_for_encoding<
 
     let default_cache_size = DEGREE * 4 * cache_window_nodes;
 
-    let core_group = Arc::new(checkout_core_group());
+    let core_group = Rc::new(checkout_core_group());
 
     // When `_cleanup_handle` is dropped, the previous binding of thread will be restored.
     let _cleanup_handle = (*core_group).as_ref().map(|group| {
         // This could fail, but we will ignore the error if so.
         // It will be logged as a warning by `bind_core`.
         debug!("binding core in main thread");
-        group.get(0).map(|core_index| bind_core(*core_index))
+        group.first().map(|core_index| bind_core(*core_index))
     });
 
     // NOTE: this means we currently keep 2x sector size around, to improve speed
@@ -556,14 +557,14 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
 
     let default_cache_size = DEGREE * 4 * cache_window_nodes;
 
-    let core_group = Arc::new(checkout_core_group());
+    let core_group = Rc::new(checkout_core_group());
 
     // When `_cleanup_handle` is dropped, the previous binding of thread will be restored.
     let _cleanup_handle = (*core_group).as_ref().map(|group| {
         // This could fail, but we will ignore the error if so.
         // It will be logged as a warning by `bind_core`.
         debug!("binding core in main thread");
-        group.get(0).map(|core_index| bind_core(*core_index))
+        group.first().map(|core_index| bind_core(*core_index))
     });
 
     // NOTE: this means we currently keep 2x sector size around, to improve speed
