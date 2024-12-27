@@ -653,7 +653,7 @@ fn test_seal_lifecycle_64gib_porep_id_v1_2_ni_top_8_8_2_api_v1_2() -> Result<()>
 
 #[cfg(feature = "big-tests")]
 #[test]
-fn test_seal_lifecycle_upgrade_64gib_top_8_8_2_v1_1() -> Result<()> {
+fn test_seal_lifecycle_upgrade_64gib_top_8_8_2_v1_2() -> Result<()> {
     let porep_config = PoRepConfig::new_groth16(
         SECTOR_SIZE_64_GIB,
         ARBITRARY_POREP_ID_V1_2_0,
