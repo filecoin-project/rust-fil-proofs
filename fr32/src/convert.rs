@@ -12,6 +12,7 @@ pub enum Error {
 /// Invariants:
 /// - Value of each 32-byte chunks MUST represent valid Frs.
 /// - Total length must be a multiple of 32.
+///
 /// That is to say: each 32-byte chunk taken alone must be a valid Fr32.
 pub type Fr32Vec = Vec<u8>;
 

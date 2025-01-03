@@ -192,12 +192,11 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         t_aux.synth_proofs_path(),
                         partition_count,
                     )
-                    .map_err(|error| {
+                    .inspect_err(|_| {
                         info!(
                             "failed to read porep proofs from synthetic proofs file: {:?}",
                             t_aux.synth_proofs_path(),
                         );
-                        error
                     })
                 }
             }
@@ -1503,6 +1502,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 );
                 let mut f = OpenOptions::new()
                     .create(true)
+                    .truncate(true)
                     .write(true)
                     .open(&tree_r_last_path)
                     .expect("failed to open file for tree_r_last");
@@ -1912,6 +1912,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     );
                     let mut f = OpenOptions::new()
                         .create(true)
+                        .truncate(true)
                         .write(true)
                         .open(&tree_r_last_path)
                         .expect("failed to open file for tree_r_last");

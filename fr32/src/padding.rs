@@ -563,14 +563,14 @@ need to handle the potential bit-level misalignments:
 // offset and num_bytes are based on the unpadded data, so
 // if [0, 1, ..., 255] was the original unpadded data, offset 3 and len 4 would return
 // [3, 4, 5, 6].
-pub fn write_unpadded<W: ?Sized>(
+pub fn write_unpadded<W>(
     source: &[u8],
     target: &mut W,
     offset: usize,
     len: usize,
 ) -> io::Result<usize>
 where
-    W: Write,
+    W: Write + ?Sized,
 {
     // Check that there's actually `len` raw data bytes encoded inside
     // `source` starting at `offset`.
@@ -630,7 +630,7 @@ The reader will generally operate with bit precision, even if the padded
 layout is byte-aligned (no extra bits) the data inside it isn't (since
 we pad at the bit-level).
 **/
-fn write_unpadded_aux<W: ?Sized>(
+fn write_unpadded_aux<W>(
     padding_map: &PaddingMap,
     source: &[u8],
     target: &mut W,
@@ -638,7 +638,7 @@ fn write_unpadded_aux<W: ?Sized>(
     max_write_size: usize,
 ) -> io::Result<usize>
 where
-    W: Write,
+    W: Write + ?Sized,
 {
     // Position of the reader in the padded bit stream layout, deduced from
     // the position of the writer (`write_pos`) in the raw data layout.

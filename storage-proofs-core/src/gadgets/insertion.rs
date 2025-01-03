@@ -321,10 +321,7 @@ pub fn pick<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     condition: &Boolean,
     a: &AllocatedNum<Scalar>,
     b: &AllocatedNum<Scalar>,
-) -> Result<AllocatedNum<Scalar>, SynthesisError>
-where
-    CS: ConstraintSystem<Scalar>,
-{
+) -> Result<AllocatedNum<Scalar>, SynthesisError> {
     let c = AllocatedNum::alloc(cs.namespace(|| "pick result"), || {
         if condition
             .get_value()

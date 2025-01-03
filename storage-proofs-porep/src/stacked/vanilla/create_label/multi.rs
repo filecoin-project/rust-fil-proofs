@@ -466,7 +466,7 @@ pub fn create_labels_for_encoding<
         // This could fail, but we will ignore the error if so.
         // It will be logged as a warning by `bind_core`.
         debug!("binding core in main thread");
-        group.get(0).map(|core_index| bind_core(*core_index))
+        group.first().map(|core_index| bind_core(*core_index))
     });
 
     // NOTE: this means we currently keep 2x sector size around, to improve speed
@@ -564,7 +564,7 @@ pub fn create_labels_for_decoding<Tree: 'static + MerkleTreeTrait, T: AsRef<[u8]
         // This could fail, but we will ignore the error if so.
         // It will be logged as a warning by `bind_core`.
         debug!("binding core in main thread");
-        group.get(0).map(|core_index| bind_core(*core_index))
+        group.first().map(|core_index| bind_core(*core_index))
     });
 
     // NOTE: this means we currently keep 2x sector size around, to improve speed

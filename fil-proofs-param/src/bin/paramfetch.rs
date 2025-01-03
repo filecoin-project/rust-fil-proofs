@@ -51,9 +51,8 @@ struct FetchProgress<R> {
 
 impl<R: Read> Read for FetchProgress<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.reader.read(buf).map(|n| {
+        self.reader.read(buf).inspect(|&n| {
             self.progress_bar.add(n as u64);
-            n
         })
     }
 }
