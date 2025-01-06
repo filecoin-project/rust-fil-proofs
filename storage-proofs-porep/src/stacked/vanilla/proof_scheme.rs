@@ -13,8 +13,8 @@ use crate::stacked::vanilla::{
     proof::StackedDrg,
 };
 
-impl<'a, 'c, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'a>
-    for StackedDrg<'c, Tree, G>
+impl<Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> ProofScheme<'_>
+    for StackedDrg<'_, Tree, G>
 {
     type PublicParams = PublicParams<Tree>;
     type SetupParams = SetupParams;

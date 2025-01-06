@@ -539,7 +539,7 @@ fn clear_right_bits(byte: &mut u8, offset: usize) {
     *(byte) &= !((1 << offset) - 1)
 }
 
-/** Padding process.
+/* Padding process.
 
 Read a `source` of raw byte-aligned data, pad it in a bit stream and
 write a byte-aligned version of it in the `target`. The `target` needs

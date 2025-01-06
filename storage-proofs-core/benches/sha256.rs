@@ -16,7 +16,7 @@ struct Sha256Example<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a> Circuit<Fr> for Sha256Example<'a> {
+impl Circuit<Fr> for Sha256Example<'_> {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data

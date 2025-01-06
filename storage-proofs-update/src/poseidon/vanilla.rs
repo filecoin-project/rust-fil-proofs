@@ -97,7 +97,7 @@ where
     _tree_r: PhantomData<TreeR>,
 }
 
-impl<'a, TreeR> ProofScheme<'a> for EmptySectorUpdate<TreeR>
+impl<TreeR> ProofScheme<'_> for EmptySectorUpdate<TreeR>
 where
     TreeR: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,
 {
