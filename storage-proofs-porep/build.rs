@@ -8,4 +8,6 @@ fn cfg_if_nightly() {
 }
 
 #[rustversion::not(nightly)]
-fn cfg_if_nightly() {}
+fn cfg_if_nightly() {
+    println!("cargo::rustc-check-cfg=cfg(nightly)");
+}

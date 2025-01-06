@@ -367,7 +367,7 @@ where
 /// # Arguments
 ///
 /// * `source` - a readable source of unprocessed piece bytes. The piece's commitment will be
-/// generated for the bytes read from the source plus any added padding.
+///    generated for the bytes read from the source plus any added padding.
 /// * `piece_size` - the number of unpadded user-bytes which can be read from source before EOF.
 pub fn generate_piece_commitment<T: Read>(
     source: T,

@@ -249,7 +249,7 @@ where
         let param_identifier = pub_params.identifier();
         info!("parameter set identifier for cache: {}", param_identifier);
         let mut hasher = Sha256::default();
-        hasher.update(&param_identifier.into_bytes());
+        hasher.update(param_identifier.into_bytes());
         let circuit_hash = hasher.finalize();
         format!(
             "{}-{:02x}",

@@ -101,7 +101,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
             OpenOptions::new().read(true).write(true).open(&staged_file_path)
         } else {
             info!("*** Creating staged file");
-            OpenOptions::new().read(true).write(true).create(true).open(&staged_file_path)
+            OpenOptions::new().read(true).write(true).create(true).truncate(true).open(&staged_file_path)
         }?;
 
         let sealed_file_path = cache_dir.join(SEALED_FILE);
@@ -110,7 +110,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
             OpenOptions::new().read(true).write(true).open(&sealed_file_path)
         } else {
             info!("*** Creating sealed file");
-            OpenOptions::new().read(true).write(true).create(true).open(&sealed_file_path)
+            OpenOptions::new().read(true).write(true).create(true).truncate(true).open(&sealed_file_path)
         }?;
 
         let sector_size_unpadded_bytes_amount =
@@ -128,7 +128,7 @@ fn run_pre_commit_phases<Tree: 'static + MerkleTreeTrait>(
                 .collect();
 
             info!("*** Created piece file");
-            let mut piece_file = OpenOptions::new().read(true).write(true).create(true).open(&piece_file_path)?;
+            let mut piece_file = OpenOptions::new().read(true).write(true).create(true).truncate(true).open(&piece_file_path)?;
             piece_file.write_all(&piece_bytes)?;
             piece_file.sync_all()?;
             piece_file.rewind()?;

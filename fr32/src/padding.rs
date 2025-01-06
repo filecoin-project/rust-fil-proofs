@@ -563,6 +563,7 @@ need to handle the potential bit-level misalignments:
 // offset and num_bytes are based on the unpadded data, so
 // if [0, 1, ..., 255] was the original unpadded data, offset 3 and len 4 would return
 // [3, 4, 5, 6].
+#[allow(clippy::multiple_bound_locations)]
 pub fn write_unpadded<W: ?Sized>(
     source: &[u8],
     target: &mut W,
@@ -630,6 +631,7 @@ The reader will generally operate with bit precision, even if the padded
 layout is byte-aligned (no extra bits) the data inside it isn't (since
 we pad at the bit-level).
 **/
+#[allow(clippy::multiple_bound_locations)]
 fn write_unpadded_aux<W: ?Sized>(
     padding_map: &PaddingMap,
     source: &[u8],

@@ -1,3 +1,5 @@
+println!("cargo::rustc-check-cfg=cfg(nightly)");
+
 fn is_compiled_for_64_bit_arch() -> bool {
     cfg!(target_pointer_width = "64")
 }

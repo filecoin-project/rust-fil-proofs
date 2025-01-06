@@ -9,6 +9,7 @@ pub fn setup_replica(data: &[u8], replica_path: &Path) -> MmapMut {
         .read(true)
         .write(true)
         .create(true)
+        .truncate(true)
         .open(replica_path)
         .expect("Failed to create replica");
     f.write_all(data).expect("Failed to write data to replica");
