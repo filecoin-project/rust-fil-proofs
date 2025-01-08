@@ -316,16 +316,12 @@ pub fn select<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
 }
 
 /// Takes two allocated numbers (`a`, `b`) and returns `a` if the condition is true, and `b` otherwise.
-#[allow(clippy::multiple_bound_locations)]
 pub fn pick<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     mut cs: CS,
     condition: &Boolean,
     a: &AllocatedNum<Scalar>,
     b: &AllocatedNum<Scalar>,
-) -> Result<AllocatedNum<Scalar>, SynthesisError>
-where
-    CS: ConstraintSystem<Scalar>,
-{
+) -> Result<AllocatedNum<Scalar>, SynthesisError> {
     let c = AllocatedNum::alloc(cs.namespace(|| "pick result"), || {
         if condition
             .get_value()
