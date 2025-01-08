@@ -431,7 +431,7 @@ pub fn run_porep_bench<Tree: 'static + MerkleTreeTrait>(
             let phase1_output = seal_commit_phase1_measurement.return_value;
 
             if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
-                clear_synthetic_proofs::<Tree>(&cache_dir)?;
+                clear_synthetic_proofs(&cache_dir)?;
             }
 
             // Persist commit phase1_output here

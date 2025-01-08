@@ -278,7 +278,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
                             piece_infos[i].as_slice(),
                         )
                         .expect("failed to generate synthetic proofs");
-                        clear_cache::<Tree>(cache_dirs[i].path())
+                        clear_cache(cache_dirs[i].path())
                             .expect("failed to clear synthetic porep layer data");
                     } else {
                         info!("SyntheticPoRep is NOT enabled");
