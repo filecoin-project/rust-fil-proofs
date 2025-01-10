@@ -570,7 +570,7 @@ pub fn write_unpadded<W>(
     len: usize,
 ) -> io::Result<usize>
 where
-    W: Write + Sized,
+    W: Write + ?Sized,
 {
     // Check that there's actually `len` raw data bytes encoded inside
     // `source` starting at `offset`.
@@ -638,7 +638,7 @@ fn write_unpadded_aux<W>(
     max_write_size: usize,
 ) -> io::Result<usize>
 where
-    W: Write + Sized,
+    W: Write + ?Sized,
 {
     // Position of the reader in the padded bit stream layout, deduced from
     // the position of the writer (`write_pos`) in the raw data layout.
