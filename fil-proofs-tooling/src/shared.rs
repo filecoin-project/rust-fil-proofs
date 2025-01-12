@@ -298,7 +298,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
     let priv_infos = sealed_files
         .iter()
         .zip(seal_pre_commit_outputs.return_value.iter())
-        .zip(cache_dirs.into_iter())
+        .zip(cache_dirs)
         .map(|((sealed_file, seal_pre_commit_output), cache_dir)| {
             PrivateReplicaInfo::new(
                 sealed_file.to_path_buf(),

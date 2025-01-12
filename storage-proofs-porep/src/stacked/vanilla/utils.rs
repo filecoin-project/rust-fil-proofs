@@ -15,7 +15,7 @@ pub struct UnsafeSlice<'a, T> {
     len: usize,
 }
 
-unsafe impl<'a, T> Sync for UnsafeSlice<'a, T> {}
+unsafe impl<T> Sync for UnsafeSlice<'_, T> {}
 
 impl<'a, T> UnsafeSlice<'a, T> {
     /// Takes mutable slice, to ensure that `UnsafeSlice` is the only user of this memory, until it gets dropped.

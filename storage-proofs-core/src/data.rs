@@ -21,7 +21,7 @@ enum RawData<'a> {
     Mmap(MmapMut),
 }
 
-impl<'a> Deref for RawData<'a> {
+impl Deref for RawData<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -32,7 +32,7 @@ impl<'a> Deref for RawData<'a> {
     }
 }
 
-impl<'a> DerefMut for RawData<'a> {
+impl DerefMut for RawData<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
             RawData::Slice(ref mut raw) => raw,
@@ -52,7 +52,7 @@ impl<'a> From<&'a mut [u8]> for Data<'a> {
     }
 }
 
-impl<'a> From<(MmapMut, PathBuf)> for Data<'a> {
+impl From<(MmapMut, PathBuf)> for Data<'_> {
     fn from(raw: (MmapMut, PathBuf)) -> Self {
         let len = raw.0.len();
         Data {
@@ -63,7 +63,7 @@ impl<'a> From<(MmapMut, PathBuf)> for Data<'a> {
     }
 }
 
-impl<'a> AsRef<[u8]> for Data<'a> {
+impl AsRef<[u8]> for Data<'_> {
     fn as_ref(&self) -> &[u8] {
         match self.raw {
             Some(ref raw) => raw,
@@ -72,7 +72,7 @@ impl<'a> AsRef<[u8]> for Data<'a> {
     }
 }
 
-impl<'a> AsMut<[u8]> for Data<'a> {
+impl AsMut<[u8]> for Data<'_> {
     fn as_mut(&mut self) -> &mut [u8] {
         match self.raw {
             Some(ref mut raw) => raw,

@@ -119,7 +119,7 @@ where
     }
 }
 
-impl<'a, Tree> From<&'a PublicParams<Tree>> for PublicParams<Tree>
+impl<Tree> From<&PublicParams<Tree>> for PublicParams<Tree>
 where
     Tree: MerkleTreeTrait,
 {

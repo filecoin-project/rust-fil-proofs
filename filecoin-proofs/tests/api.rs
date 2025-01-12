@@ -653,7 +653,7 @@ fn test_seal_lifecycle_64gib_porep_id_v1_2_ni_top_8_8_2_api_v1_2() -> Result<()>
 
 #[cfg(feature = "big-tests")]
 #[test]
-fn test_seal_lifecycle_upgrade_64gib_top_8_8_2_v1_1() -> Result<()> {
+fn test_seal_lifecycle_upgrade_64gib_top_8_8_2_v1_2() -> Result<()> {
     let porep_config = PoRepConfig::new_groth16(
         SECTOR_SIZE_64_GIB,
         ARBITRARY_POREP_ID_V1_2_0,
@@ -1454,7 +1454,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     assert_eq!(challenged_sectors.len(), sector_count);
     assert_eq!(challenged_sectors[0], 0); // with a sector_count of 1, the only valid index is 0
 
-    let pub_replicas = vec![(sector_id, PublicReplicaInfo::new(comm_r)?)];
+    let pub_replicas = [(sector_id, PublicReplicaInfo::new(comm_r)?)];
     let private_replica_info =
         PrivateReplicaInfo::new(replica.path().into(), comm_r, cache_dir.path().into())?;
 
@@ -1462,7 +1462,7 @@ fn winning_post<Tree: 'static + MerkleTreeTrait>(
     // The following methods of proof generation are functionally equivalent:
     // 1)
     //
-    let priv_replicas = vec![(sector_id, private_replica_info.clone())];
+    let priv_replicas = [(sector_id, private_replica_info.clone())];
     let proof = generate_winning_post::<Tree>(&config, &randomness, &priv_replicas[..], prover_id)?;
 
     let valid =
@@ -2629,6 +2629,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         .read(true)
         .write(true)
         .create(true)
+        .truncate(true)
         .open(new_sealed_sector_file.path())
         .with_context(|| format!("could not open path={:?}", new_sealed_sector_file.path()))?;
     f_sealed_sector.set_len(new_replica_target_len)?;
@@ -2734,6 +2735,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         .read(true)
         .write(true)
         .create(true)
+        .truncate(true)
         .open(decoded_sector_file.path())
         .with_context(|| format!("could not open path={:?}", decoded_sector_file.path()))?;
     f_decoded_sector.set_len(decoded_sector_target_len)?;
@@ -2780,6 +2782,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
         .read(true)
         .write(true)
         .create(true)
+        .truncate(true)
         .open(remove_encoded_file.path())
         .with_context(|| format!("could not open path={:?}", remove_encoded_file.path()))?;
     f_remove_encoded.set_len(remove_encoded_target_len)?;
@@ -2895,6 +2898,7 @@ fn create_seal_for_upgrade_aggregation<
         .read(true)
         .write(true)
         .create(true)
+        .truncate(true)
         .open(new_sealed_sector_file.path())
         .with_context(|| format!("could not open path={:?}", new_sealed_sector_file.path()))?;
     f_sealed_sector.set_len(new_replica_target_len)?;

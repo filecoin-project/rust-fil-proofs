@@ -16,7 +16,7 @@ struct Blake2sExample<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a> Circuit<Fr> for Blake2sExample<'a> {
+impl Circuit<Fr> for Blake2sExample<'_> {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let data: Vec<Boolean> = self
             .data

@@ -14,7 +14,7 @@ struct XorExample<'a> {
     data: &'a [Option<bool>],
 }
 
-impl<'a> Circuit<Fr> for XorExample<'a> {
+impl Circuit<Fr> for XorExample<'_> {
     fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
         let key: Vec<Boolean> = self
             .key

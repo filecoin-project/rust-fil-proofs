@@ -104,7 +104,7 @@ fn thread_fun(
 ) -> RunInfo {
     let timing = Instant::now();
     let mut iteration = 0;
-    while iteration < std::u8::MAX {
+    while iteration < u8::MAX {
         info!("iter {}", iteration);
 
         // This is the higher priority proof, get it on the GPU even if there is one running

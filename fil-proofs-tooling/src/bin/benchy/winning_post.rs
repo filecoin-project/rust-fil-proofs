@@ -63,8 +63,8 @@ pub fn run_fallback_post_bench<Tree: 'static + MerkleTreeTrait>(
         create_replica::<Tree>(sector_size, fake_replica, api_version, api_features);
 
     // Store the replica's private and publicly facing info for proving and verifying respectively.
-    let pub_replica_info = vec![(sector_id, replica_output.public_replica_info.clone())];
-    let priv_replica_info = vec![(sector_id, replica_output.private_replica_info.clone())];
+    let pub_replica_info = [(sector_id, replica_output.public_replica_info.clone())];
+    let priv_replica_info = [(sector_id, replica_output.private_replica_info.clone())];
 
     let post_config = PoStConfig {
         sector_size: sector_size.into(),

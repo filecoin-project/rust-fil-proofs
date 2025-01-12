@@ -1,4 +1,5 @@
 fn main() {
+    println!("cargo::rustc-check-cfg=cfg(nightly)");
     cfg_if_nightly()
 }
 

@@ -192,12 +192,12 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                         t_aux.synth_proofs_path(),
                         partition_count,
                     )
-                    .map_err(|error| {
+                    .inspect_err(|error| {
                         info!(
-                            "failed to read porep proofs from synthetic proofs file: {:?}",
+                            "failed to read porep proofs from synthetic proofs file: {:?} [{}]",
                             t_aux.synth_proofs_path(),
+                            error,
                         );
-                        error
                     })
                 }
             }
@@ -1503,6 +1503,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                 );
                 let mut f = OpenOptions::new()
                     .create(true)
+                    .truncate(true)
                     .write(true)
                     .open(&tree_r_last_path)
                     .expect("failed to open file for tree_r_last");
@@ -1663,10 +1664,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         let configs = split_config(tree_c_config.clone(), tree_count)?;
 
         match raise_fd_limit() {
-            Some(res) => {
-                info!("Building trees [{} descriptors max available]", res);
+            Ok(fdlimit::Outcome::LimitRaised { from, to }) => {
+                info!("Building trees [raised file descriptors from {from} to {to}]");
             }
-            None => error!("Failed to raise the fd limit"),
+            Ok(fdlimit::Outcome::Unsupported) => {
+                error!("Failed to raise the fd limit: unsupported");
+            }
+            Err(e) => error!("Failed to raise the fd limit: {e}"),
         };
 
         let tree_c_root = match num_layers {
@@ -1912,6 +1916,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                     );
                     let mut f = OpenOptions::new()
                         .create(true)
+                        .truncate(true)
                         .write(true)
                         .open(&tree_r_last_path)
                         .expect("failed to open file for tree_r_last");
