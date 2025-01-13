@@ -76,8 +76,9 @@ impl<R: Read> Fr32Reader<R> {
             // Safety: This is safe because the struct/data is aligned on
             // a 16 byte boundary and can therefore be casted from u128
             // to u8 without alignment safety issues.
+            #[allow(clippy::cast_slice_different_sizes)]
             unsafe {
-                &mut (*(&self.in_buffer.0 as *const [u8] as *mut [u128]))
+                &mut (*(&mut self.in_buffer.0 as *const [u8] as *mut [u128]))
             }
             #[cfg(not(target_arch = "aarch64"))]
             self.in_buffer.0.as_slice_of::<u128>().unwrap()
