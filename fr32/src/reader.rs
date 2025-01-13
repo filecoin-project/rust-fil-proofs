@@ -2,10 +2,7 @@ use std::cmp::min;
 use std::io::{self, Read};
 use std::mem::size_of;
 
-#[cfg(not(target_arch = "aarch64"))]
-use byte_slice_cast::AsSliceOf;
-
-use byte_slice_cast::AsByteSlice;
+use byte_slice_cast::{AsByteSlice, AsSliceOf};
 
 /// The number of Frs per Block.
 const NUM_FRS_PER_BLOCK: usize = 4;
@@ -71,17 +68,11 @@ impl<R: Read> Fr32Reader<R> {
 
     /// Processes a single block in in_buffer, writing the result to out_buffer.
     fn process_block(&mut self) {
-        let in_buffer: &[u128] = {
-            #[cfg(target_arch = "aarch64")]
-            // Safety: This is safe because the struct/data is aligned on
-            // a 16 byte boundary and can therefore be casted from u128
-            // to u8 without alignment safety issues.
-            unsafe {
-                &mut (*(&self.in_buffer.0 as *const [u8] as *mut [u128]))
-            }
-            #[cfg(not(target_arch = "aarch64"))]
-            self.in_buffer.0.as_slice_of::<u128>().unwrap()
-        };
+        let in_buffer: &[u128] = self
+            .in_buffer
+            .0
+            .as_slice_of::<u128>()
+            .expect("slice can be used as list of u128s");
         let out = &mut self.out_buffer;
 
         // 0..254
