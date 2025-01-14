@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
@@ -28,8 +27,8 @@ use crate::{
     parameters::public_params,
     pieces::{get_piece_alignment, sum_piece_bytes_with_alignment},
     types::{
-        Commitment, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, PrivateReplicaInfo,
-        ProverId, SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
+        Commitment, MerkleTreeTrait, PaddedBytesAmount, PieceInfo, PoRepConfig, ProverId,
+        SealPreCommitPhase1Output, Ticket, UnpaddedByteIndex, UnpaddedBytesAmount,
     },
 };
 
@@ -51,10 +50,7 @@ pub use winning_post::*;
 
 pub use storage_proofs_update::constants::{partition_count, TreeRHasher};
 
-// TODO vmx 2023-09-26: The `Tree` generic is not needed, it's only there in order to not breaking
-// the public API. Once we break the API, remove that generic.
-// Ensure that any associated cached data persisted is discarded.
-pub fn clear_cache<Tree>(cache_dir: &Path) -> Result<()> {
+pub fn clear_cache(cache_dir: &Path) -> Result<()> {
     info!("clear_cache:start");
 
     let result = stacked::clear_cache_dir(cache_dir);
@@ -64,40 +60,7 @@ pub fn clear_cache<Tree>(cache_dir: &Path) -> Result<()> {
     result
 }
 
-// TODO vmx 2023-09-26: The `Tree` generic is not needed, it's only there in order to not breaking
-// the public API. Once we break the API, remove that generic.
-// Ensure that any associated cached data persisted is discarded.
-pub fn clear_caches<Tree: MerkleTreeTrait>(
-    replicas: &BTreeMap<SectorId, PrivateReplicaInfo<Tree>>,
-) -> Result<()> {
-    info!("clear_caches:start");
-
-    for replica in replicas.values() {
-        clear_cache::<Tree>(replica.cache_dir.as_path())?;
-    }
-
-    info!("clear_caches:finish");
-
-    Ok(())
-}
-
-// TODO vmx 2023-09-26: The `Tree` generic is not needed, it's only there in order to not breaking
-// the public API. Once we break the API, remove that generic.
-// Ensure that any persisted layer data generated from porep are discarded.
-pub fn clear_layer_data<Tree>(cache_dir: &Path) -> Result<()> {
-    info!("clear_layer_data:start");
-
-    let result = stacked::clear_cache_dir(cache_dir);
-
-    info!("clear_layer_data:finish");
-
-    result
-}
-
-// TODO vmx 2023-09-26: The `Tree` generic is not needed, it's only there in order to not breaking
-// the public API. Once we break the API, remove that generic.
-// Ensure that any persisted vanilla proofs generated from synthetic porep are discarded.
-pub fn clear_synthetic_proofs<Tree>(cache_dir: &Path) -> Result<()> {
+pub fn clear_synthetic_proofs(cache_dir: &Path) -> Result<()> {
     info!("clear_synthetic_proofs:start");
 
     let result = stacked::clear_synthetic_proofs(cache_dir);

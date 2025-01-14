@@ -2122,7 +2122,7 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
             pre_commit_output.clone(),
             piece_infos,
         )?;
-        clear_cache::<Tree>(cache_dir_path)?;
+        clear_cache(cache_dir_path)?;
     } else {
         info!("SyntheticPoRep is NOT enabled");
         validate_cache_for_commit::<_, _, Tree>(cache_dir_path, sealed_sector_file.path())?;
@@ -2141,9 +2141,9 @@ fn generate_proof<Tree: 'static + MerkleTreeTrait>(
     )?;
 
     if config.feature_enabled(ApiFeature::SyntheticPoRep) {
-        clear_synthetic_proofs::<Tree>(cache_dir_path)?;
+        clear_synthetic_proofs(cache_dir_path)?;
     } else {
-        clear_cache::<Tree>(cache_dir_path)?;
+        clear_cache(cache_dir_path)?;
     }
 
     ensure!(
@@ -2363,9 +2363,9 @@ fn create_seal<R: Rng, Tree: 'static + MerkleTreeTrait>(
 
     if skip_proof {
         if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
-            clear_synthetic_proofs::<Tree>(cache_dir.path())?;
+            clear_synthetic_proofs(cache_dir.path())?;
         }
-        clear_cache::<Tree>(cache_dir.path())?;
+        clear_cache(cache_dir.path())?;
     } else {
         proof_and_unseal::<Tree>(
             porep_config,
@@ -2592,7 +2592,7 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
             pre_commit_output,
             &piece_infos,
         )?;
-        clear_cache::<Tree>(cache_dir.path())?;
+        clear_cache(cache_dir.path())?;
     } else {
         info!("SyntheticPoRep is NOT enabled");
         validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
@@ -2804,10 +2804,10 @@ fn create_seal_for_upgrade<R: Rng, Tree: 'static + MerkleTreeTrait<Hasher = Tree
     remove_encoded_file.close()?;
 
     if porep_config.feature_enabled(ApiFeature::SyntheticPoRep) {
-        clear_synthetic_proofs::<Tree>(cache_dir.path())?;
+        clear_synthetic_proofs(cache_dir.path())?;
     }
-    clear_cache::<Tree>(cache_dir.path())?;
-    clear_cache::<Tree>(new_cache_dir.path())?;
+    clear_cache(cache_dir.path())?;
+    clear_cache(new_cache_dir.path())?;
 
     Ok((sector_id, sealed_sector_file, comm_r, cache_dir))
 }
@@ -2861,7 +2861,7 @@ fn create_seal_for_upgrade_aggregation<
             pre_commit_output,
             &piece_infos,
         )?;
-        clear_cache::<Tree>(cache_dir.path())?;
+        clear_cache(cache_dir.path())?;
     } else {
         info!("SyntheticPoRep is NOT enabled");
         validate_cache_for_commit::<_, _, Tree>(cache_dir.path(), sealed_sector_file.path())?;
