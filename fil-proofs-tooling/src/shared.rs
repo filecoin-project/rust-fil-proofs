@@ -303,7 +303,7 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
             PrivateReplicaInfo::new(
                 sealed_file.to_path_buf(),
                 seal_pre_commit_output.comm_r,
-                cache_dir.into_path(),
+                cache_dir.keep(),
             )
             .expect("failed to create PrivateReplicaInfo")
         });
