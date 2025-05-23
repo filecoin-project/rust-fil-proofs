@@ -88,7 +88,7 @@ pub fn tmp_manifest(
     opt_manifest: Option<BTreeMap<String, ParameterData>>,
 ) -> Result<PathBuf, failure::Error> {
     let manifest_dir = tempdir()?;
-    let mut pbuf = manifest_dir.into_path();
+    let mut pbuf = manifest_dir.keep();
     pbuf.push("parameters.json");
 
     let mut file = File::create(&pbuf)?;
