@@ -4,12 +4,16 @@ use std::path::Path;
 
 use anyhow::Result;
 use filecoin_proofs::{
-    verify_seal, SectorShape16KiB, SectorShape1GiB, SectorShape2KiB, SectorShape32GiB,
-    SectorShape32KiB, SectorShape4KiB, SectorShape512MiB, SectorShape64GiB, SectorShape8MiB,
+    verify_seal, SectorShape16KiB, SectorShape2KiB, SectorShape32KiB, SectorShape4KiB,
     SECTOR_SIZE_16_KIB, SECTOR_SIZE_1_GIB, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB,
     SECTOR_SIZE_32_KIB, SECTOR_SIZE_4_KIB, SECTOR_SIZE_512_MIB, SECTOR_SIZE_64_GIB,
     SECTOR_SIZE_8_MIB,
 };
+#[cfg(feature = "big-tests")]
+use filecoin_proofs::{
+    SectorShape1GiB, SectorShape32GiB, SectorShape512MiB, SectorShape64GiB, SectorShape8MiB,
+};
+
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 
@@ -172,6 +176,7 @@ pub(crate) fn regression_verify_seal_proof(record: &SealRegressionRecord) -> Res
             r.seed,
             &r.proof,
         ),
+        #[cfg(feature = "big-tests")]
         SECTOR_SIZE_8_MIB => verify_seal::<SectorShape8MiB>(
             &r.porep_config,
             r.comm_r,
@@ -182,6 +187,7 @@ pub(crate) fn regression_verify_seal_proof(record: &SealRegressionRecord) -> Res
             r.seed,
             &r.proof,
         ),
+        #[cfg(feature = "big-tests")]
         SECTOR_SIZE_512_MIB => verify_seal::<SectorShape512MiB>(
             &r.porep_config,
             r.comm_r,
@@ -192,6 +198,7 @@ pub(crate) fn regression_verify_seal_proof(record: &SealRegressionRecord) -> Res
             r.seed,
             &r.proof,
         ),
+        #[cfg(feature = "big-tests")]
         SECTOR_SIZE_1_GIB => verify_seal::<SectorShape1GiB>(
             &r.porep_config,
             r.comm_r,
@@ -202,6 +209,7 @@ pub(crate) fn regression_verify_seal_proof(record: &SealRegressionRecord) -> Res
             r.seed,
             &r.proof,
         ),
+        #[cfg(feature = "big-tests")]
         SECTOR_SIZE_32_GIB => verify_seal::<SectorShape32GiB>(
             &r.porep_config,
             r.comm_r,
@@ -212,6 +220,7 @@ pub(crate) fn regression_verify_seal_proof(record: &SealRegressionRecord) -> Res
             r.seed,
             &r.proof,
         ),
+        #[cfg(feature = "big-tests")]
         SECTOR_SIZE_64_GIB => verify_seal::<SectorShape64GiB>(
             &r.porep_config,
             r.comm_r,
@@ -222,6 +231,15 @@ pub(crate) fn regression_verify_seal_proof(record: &SealRegressionRecord) -> Res
             r.seed,
             &r.proof,
         ),
+        #[cfg(not(feature = "big-tests"))]
+        SECTOR_SIZE_8_MIB | SECTOR_SIZE_512_MIB | SECTOR_SIZE_1_GIB | SECTOR_SIZE_32_GIB
+        | SECTOR_SIZE_64_GIB => {
+            info!(
+                "`big-tests` feature is disabled, hence skipping verification for sector size [{}]",
+                sector_size
+            );
+            Ok(true)
+        }
         _ => {
             error!(
                 "Cannot verify proof: Unsupported sector size [{}]",
