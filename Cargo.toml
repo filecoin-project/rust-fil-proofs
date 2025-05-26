@@ -15,7 +15,7 @@ members = [
 [workspace.dependencies]
 fil-proofs-param = { path = "fil-proofs-param", default-features = false, version = "~13.1.0" }
 fil-proofs-tooling = { path = "fil-proofs-tooling", default-features = false, version = "~18.1.0" }
-filecoin-hashers = { path = "filecoin-hashers", default-features = false, version = "~13.1.0" }
+filecoin-hashers = { path = "filecoin-hashers", default-features = false, version = "~14.0.0" }
 filecoin-proofs = { path = "filecoin-proofs", default-features = false, version = "~18.1.0" }
 fr32 = { path = "fr32", default-features = false, version = "~11.1.0" }
 sha2raw = { path = "sha2raw", default-features = false, version = "~13.1.0" }
