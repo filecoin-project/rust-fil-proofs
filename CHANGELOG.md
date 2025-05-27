@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [19.0.0] - 2025-05-26
+
+- **BREAKING CHANGE:** Remove unused functions `clear_layer_data()` and `clear_caches` from the public API. The signatures of `clear_cache()` and `clear_synthetic_proofs()` have been updated to no longer be generic over the tree type. These functions are not used internally, so the removal and signature change helps clean up the public API. [#1771](https://github.com/filecoin-project/rust-fil-proofs/pull/1771)
+- Fix compilation issues on aarch64 in the `fr32` crate. [#1772](https://github.com/filecoin-project/rust-fil-proofs/pull/1772)
+- Upgrade the `hwloc` dependency in the `storage-proofs-porep` crate to ensure proper hardware locality support. [#1766](https://github.com/filecoin-project/rust-fil-proofs/pull/1766)
+- Add seal regression testing support in the core module, improving our internal testing capabilities. [#1765](https://github.com/filecoin-project/rust-fil-proofs/pull/1765)
+
 ## [18.1.0] - 2024-06-18
 
 - Change FIP92 min value to updated value [#1758](https://github.com/filecoin-project/rust-fil-proofs/pull/1758)
