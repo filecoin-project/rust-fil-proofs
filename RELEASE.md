@@ -6,6 +6,23 @@ Steps to cut a release:
 2) Copy Cargo.lock file to releases directory with appropriate version name
 3) Run `cargo release` with the appropriate options
 
+Specifics on how @cryptonemo used to do releases (modify as needed):
+
+- PR all functionality intended for the release
+- Do pre-release testing
+  - In particular when running the 'big-tests' outlined below, keep an eye on the runtime and RAM usage for any unexpected behaviour
+  - Miners tend to be optimized for the RAM usage required today, so even a 10% increase may cause crashes
+- When the feature set is complete and tested and a release is going to be made
+  - Copy the Cargo.lock file to the releases directy with appropriate version name
+  - Update CHANGELOG.md and commit and push both directly to `master` (no PR here)
+  - An example of this is in commit 56c956c7417de475ae06e0a762c3ccf7d04b8a58
+- Run `cargo release` with the appropriate options
+  - API changes or other breaking changes are major releases
+  - Added or enhanced functionality can be a minor release
+  - Patch releases are reserved for minor fixes or updates
+  - When in doubt, cut a major release
+
+
 ## Pre-release testing
 
 Ensure that the following tests work as expected:
