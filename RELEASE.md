@@ -4,7 +4,7 @@ Steps to cut a release:
 
 1) Update the CHANGELOG.md file
 2) Copy Cargo.lock file to releases directory with appropriate version name
-3) Run `cargo release` with the appropriate options
+3) Run `cargo release <level> [--execute]` (replace `<level>` with `major`, `minor`, or `patch`; by default, this is a dry run, add `--execute` to perform the release. If you omit options, cargo release will prompt you interactively.)
 
 Specifics on how @cryptonemo used to do releases (modify as needed):
 
