@@ -27,6 +27,8 @@ Specifics on how @cryptonemo used to do releases (modify as needed):
 
 Ensure that the following tests work as expected:
 
+Note that these tests were run manually on a dual AMD EPYC 7402 with 1TB of RAM.  I believe 256GB RAM is the minimum requirement (to avoid requiring VRAM/swap) for 32GiB sectors.
+
 Basic tests:
 
 ```
