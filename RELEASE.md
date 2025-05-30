@@ -12,6 +12,7 @@ Specifics on how @cryptonemo used to do releases (modify as needed):
 - Do pre-release testing
   - In particular when running the 'big-tests' outlined below, keep an eye on the runtime and RAM usage for any unexpected behaviour
   - Miners tend to be optimized for the RAM usage required today, so even a 10% increase may cause crashes
+  - The minimum RAM requirement for running the 32GiB and 64GiB sector tests is ~256GiB. Using a machine with 512GiB or more guarantees that swap is never required.
 - When the feature set is complete and tested and a release is going to be made
   - Copy the Cargo.lock file to the releases directy with appropriate version name
   - Update CHANGELOG.md and commit and push both directly to `master` (no PR here)
