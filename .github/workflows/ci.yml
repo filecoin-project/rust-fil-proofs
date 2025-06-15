@@ -1,7 +1,10 @@
 name: CI
 
-on: [pull_request, push]
-#on: [push]
+on:
+  pull_request:
+  push:
+    branches:
+      - master
 
 # Cancel a job if there's a new on on the same branch started.
 # Based on https://stackoverflow.com/questions/58895283/stop-already-running-workflow-job-in-github-actions/67223051#67223051
@@ -23,7 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install required packages
-        run: sudo apt install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
       - name: Install cargo clippy
         run: rustup component add clippy
       - name: Run cargo clippy
@@ -40,34 +45,39 @@ jobs:
         run: cargo fmt --all -- --check
 
   test_release:
-    runs-on: ubuntu-24.04
+    runs-on: ['self-hosted', 'linux', 'x64', '4xlarge']
     name: Test in release mode
     strategy:
       matrix:
         cargo-args: ['', '--features fixed-rows-to-discard']
+      fail-fast: false
     env:
       # Run all tests with multicore-SDR enabled.
       FIL_PROOFS_USE_MULTICORE_SDR: true
     steps:
       - uses: actions/checkout@v4
       - name: Install required packages
-        run: sudo apt install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
 
       - name: Download the proof params
         uses: ./.github/actions/proof-params-download
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # TODO: Remove this and other rust installation directives from jobs running 
+      # on self-hosted runners once rust is available on these machines by default
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
+        with:
+          toolchain: 1.83
+
       - name: Run usual tests in release profile
         run: cargo test --verbose --release --workspace --all-targets ${{ matrix.cargo-args }} -- --nocapture
       - name: Run isolated PoRep tests in release profile
-        # Getting the cores does not work on GitHub Actions, hence skip that
-        # specific test.
-        run: cargo test --release -p storage-proofs-porep --features isolated-testing ${{ matrix.cargo-args }} -- --nocapture --skip stacked::vanilla::cores::tests::test_checkout_cores
+        run: cargo test --release -p storage-proofs-porep --features isolated-testing ${{ matrix.cargo-args }} -- --nocapture --test-threads=1
       - name: Run isolated update tests in release profile
-        # Some `storage-proofs-update` tests need to run sequentially due to
-        # their high memory usage.
-        run: cargo test --release -p storage-proofs-update --features isolated-testing ${{ matrix.cargo-args }} -- --nocapture --test-threads=1
+        run: cargo test --release -p storage-proofs-update --features isolated-testing ${{ matrix.cargo-args }} -- --nocapture
 
   test_ignored_release:
     runs-on: ubuntu-24.04
@@ -75,7 +85,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install required packages
-        run: sudo apt install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
 
       - name: Download the proof params
         uses: ./.github/actions/proof-params-download
@@ -86,60 +98,89 @@ jobs:
         run: cargo test --release --workspace -- ignored --nocapture
 
   test_no_default_features:
-    runs-on: ubuntu-24.04
+    runs-on: ['self-hosted', 'linux', 'x64', '2xlarge']
     name: Test without default features
     steps:
       - uses: actions/checkout@v4
       - name: Install required packages
-        run: sudo apt install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
 
       - name: Download the proof params
         uses: ./.github/actions/proof-params-download
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
+        with:
+          toolchain: 1.83
+
       - name: Test ignored in release profile
         run: cargo test --release --workspace --no-default-features
 
   build_gpu:
-    runs-on: ubuntu-24.04
+    runs-on: ['self-hosted', 'linux', 'x64', '2xlarge']
     name: Build with various GPU support enabled
     steps:
       - uses: actions/checkout@v4
       - name: Install required packages
-        run: sudo apt install --no-install-recommends --yes libhwloc-dev nvidia-cuda-toolkit ocl-icd-opencl-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes libhwloc-dev nvidia-cuda-toolkit ocl-icd-opencl-dev
+
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
+        with:
+          toolchain: 1.83
 
       - name: Build with `cuda` and `opencl` features enabled
         run: cargo build --workspace --features cuda,opencl
       - name: Build with `cuda-supraseal` feature enabled
         run: CC=gcc-12 CXX=g++-12 NVCC_PREPEND_FLAGS='-ccbin /usr/bin/g++-12' cargo build --workspace --no-default-features --features cuda-supraseal
 
-  # Commented out until we run it on hardware with actual GPUs.
-  #test_gpu:
-  #  runs-on: ubuntu-24.04
-  #  name: Test on GPUs
-  #  strategy:
-  #    matrix:
-  #      test-args: ['', '--ignored']
-  #  env:
-  #    FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
-  #    FIL_PROOFS_USE_GPU_TREE_BUILDER: true
-  #    BELLMAN_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
-  #    NEPTUNE_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
-  #  steps:
-  #    - uses: actions/checkout@v4
-  #    - name: Install required packages
-  #      run: sudo apt install --no-install-recommends --yes libhwloc-dev nvidia-cuda-toolkit ocl-icd-opencl-dev
-  #
-  #    - name: Download the proof params
-  #      uses: ./.github/actions/proof-params-download
-  #      with:
-  #        github-token: ${{ secrets.GITHUB_TOKEN }}
-  #
-  #    - name: Test with CUDA
-  #      run: cargo test --verbose --release --workspace --features cuda -- --nocapture ${{ matrix.test-args }}
-  #    - name: Test with `cuda-supraseal`
-  #      run: CC=gcc-12 CXX=g++-12 NVCC_PREPEND_FLAGS='-ccbin /usr/bin/g++-12' cargo test -p filecoin-proofs --release --no-default-features --features cuda-supraseal -- --nocapture --test-threads=1 ${{ matrix.test-args }}
+  test_gpu:
+    runs-on: ['self-hosted', 'linux', 'x64', 'xlarge+gpu']
+    name: Test on GPUs
+    strategy:
+      matrix:
+        test-args: ['', '--ignored']
+      fail-fast: false
+    env:
+      FIL_PROOFS_USE_GPU_COLUMN_BUILDER: true
+      FIL_PROOFS_USE_GPU_TREE_BUILDER: true
+      BELLMAN_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
+      NEPTUNE_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
+    steps:
+      - uses: actions/checkout@v4
+      # TODO: Move the driver installation to the AMI.
+      # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html
+      # https://www.nvidia.com/en-us/drivers/
+      - name: Install CUDA drivers
+        run: |
+          curl -L -o nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb https://us.download.nvidia.com/tesla/570.148.08/nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
+          sudo dpkg -i nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
+          sudo cp /var/nvidia-driver-local-repo-ubuntu2404-570.148.08/nvidia-driver-local-*-keyring.gpg /usr/share/keyrings/
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes cuda-drivers
+          rm nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
+      - name: Install required packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes libhwloc-dev nvidia-cuda-toolkit ocl-icd-opencl-dev
+
+      - name: Download the proof params
+        uses: ./.github/actions/proof-params-download
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
+        with:
+          toolchain: 1.83
+
+      - name: Test with CUDA
+        run: cargo test --verbose --release --workspace --features cuda -- --nocapture ${{ matrix.test-args }}
+      - name: Test with `cuda-supraseal`
+        run: CC=gcc-12 CXX=g++-12 NVCC_PREPEND_FLAGS='-ccbin /usr/bin/g++-12' cargo test -p filecoin-proofs --release --no-default-features --features cuda-supraseal -- --nocapture --test-threads=1 ${{ matrix.test-args }}
 
   test_macos:
     runs-on: macos-latest
