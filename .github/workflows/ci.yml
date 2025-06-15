@@ -66,6 +66,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # TODO: Remove this and other rust installation directives from jobs running 
+      # on self-hosted runners once rust is available on these machines by default
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
         with:
           toolchain: 1.83
