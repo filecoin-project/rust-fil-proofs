@@ -45,7 +45,7 @@ The dependencies between those crates look like this:
        └────────────────────────────────────────────────────────────────────┘
 ```
 
-Things shared between crates, should go into `storage-proofs-core`. An exception is the `storage-proofs-update`, which needs the needs the stacked DRG from `storage-proofs-porep`. All crates are free to use other crates for the workspace like [`filecoin-hashers`](./filecoin-hashers) or [`fr32`](./fr32).
+Things shared between crates, should go into `storage-proofs-core`. An exception is the `storage-proofs-update`, which needs the stacked DRG from `storage-proofs-porep`. All crates are free to use other crates for the workspace like [`filecoin-hashers`](./filecoin-hashers) or [`fr32`](./fr32).
 
 ## Security Audits
 
