@@ -21,6 +21,7 @@ jobs:
       # parallel.
       matrix:
         size: [2048, 4096, 16384, 32768]
+      fail-fast: false
 
     steps:
       - uses: actions/checkout@v4

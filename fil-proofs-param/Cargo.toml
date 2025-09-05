@@ -24,6 +24,7 @@ flate2 = { version = "1.0.9", features = ["rust_backend"] }
 gperftools = { workspace = true, optional = true }
 humansize.workspace = true
 indicatif = "0.16.2"
+console = { version = "0.16.0", features = ["std"] }
 itertools.workspace = true
 lazy_static.workspace = true
 log.workspace = true
