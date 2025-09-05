@@ -4,6 +4,8 @@ Steps to cut a release:
 
 1) Update the CHANGELOG.md file
 2) Copy Cargo.lock file to releases directory with appropriate version name
+   * **NOTE:** This project does not have a checked in root Cargo.lock. Since intentional (and generally minimal) dependency changes between releases is preferred, copy the last release's Cargo.lock into the root and start from that, updating as required. This is especially true when different individuals perform releases and have a different local lock state.
+   * The `./scripts/compare-locks.py` command can be used to check the dependency differences between releases. Once you have a new Cargo.lock for your release, run this to compare it with the old release and carefully note the differences, making sure they are intentional. e.g. `./scripts/compare-locks.py releases/Cargo.lock.v19.0.0 releases/Cargo.lock.v19.0.1`.
 3) Run `cargo release <level> [--execute]` (replace `<level>` with `major`, `minor`, or `patch`; by default, this is a dry run, add `--execute` to perform the release. If you omit options, cargo release will prompt you interactively.)
 
 Specifics on how @cryptonemo used to do releases (modify as needed):
