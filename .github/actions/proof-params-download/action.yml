@@ -29,7 +29,7 @@ runs:
       # paramfetch is using `ipget` which currently always times out on CI,
       # hence get this file via HTTP instead.
       #cargo run --release --bin paramfetch -- -a -j srs-inner-product.json
-      run: 'curl https://proofs.filecoin.io/v28-fil-inner-product-v1.srs --output /var/tmp/filecoin-proof-parameters/v28-fil-inner-product-v1.srs'
+      run: 'mkdir -p /var/tmp/filecoin-proof-parameters && curl -fSL https://proofs.filecoin.io/v28-fil-inner-product-v1.srs -o /var/tmp/filecoin-proof-parameters/v28-fil-inner-product-v1.srs'
     - name: List parameter files
       shell: bash
       run: ls -al /var/tmp/filecoin-proof-parameters/
