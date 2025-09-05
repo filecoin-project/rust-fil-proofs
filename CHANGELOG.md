@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 
 ## Unreleased
 
+## [19.0.1] - 2025-09-05
+
+- Update `supraseal-c2` dependency from 0.1.0 to 0.1.1
+- Update `indicatif` dependency from 0.16.2 to 0.17
+
 ## [19.0.0] - 2025-05-26
 
 - **BREAKING CHANGE:** Remove unused functions `clear_layer_data()` and `clear_caches` from the public API. The signatures of `clear_cache()` and `clear_synthetic_proofs()` have been updated to no longer be generic over the tree type. These functions are not used internally, so the removal and signature change helps clean up the public API. [#1771](https://github.com/filecoin-project/rust-fil-proofs/pull/1771)
