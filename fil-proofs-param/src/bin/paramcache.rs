@@ -1,6 +1,7 @@
 use std::env;
 use std::process::exit;
 use std::str::FromStr;
+use std::time::Duration;
 
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
 use filecoin_proofs::{
@@ -283,7 +284,7 @@ pub fn main() {
 
         let spinner = ProgressBar::new_spinner();
         spinner.set_message(message);
-        spinner.enable_steady_tick(100);
+        spinner.enable_steady_tick(Duration::from_millis(100));
 
         if opts.only_sector_update {
             generate_params_empty_sector_update(sector_size, api_version);
