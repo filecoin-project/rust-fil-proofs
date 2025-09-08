@@ -1,4 +1,4 @@
-//! An implementation of the [SHA-2][1] cryptographic hash algorithms.
+//! An implementation of the [SHA-2](https://en.wikipedia.org/wiki/SHA-2) cryptographic hash algorithms.
 
 // Give relevant error messages if the user tries to enable AArch64 asm on unsupported platforms.
 
