@@ -204,75 +204,81 @@ fn sha256_digest_block_u32(state: &mut [u32; 8], block: &[u32; 16]) {
 /// digest calculation. The schedule-related instructions allow 4 rounds to be
 /// calculated as:
 ///
-/// ```compile_fail
-/// use std::simd::u32x4;
-/// use self::crypto::sha2::{
-///     sha256msg1,
-///     sha256msg2,
-///     sha256load
-/// };
+/// ```text
+/// // Pseudocode showing how Intel SHA extensions would work with SIMD vectors
+/// // (not actual sha2raw API - for illustration only)
+///
+/// type u32x4 = [u32; 4]; // Represents a SIMD vector
 ///
 /// fn schedule4_data(work: &mut [u32x4], w: &[u32]) {
-///
-///     // this is to illustrate the data order
-///     work[0] = u32x4(w[3], w[2], w[1], w[0]);
-///     work[1] = u32x4(w[7], w[6], w[5], w[4]);
-///     work[2] = u32x4(w[11], w[10], w[9], w[8]);
-///     work[3] = u32x4(w[15], w[14], w[13], w[12]);
+///     // Intel SHA extensions operate on 4 words at a time
+///     work[0] = [w[3], w[2], w[1], w[0]];
+///     work[1] = [w[7], w[6], w[5], w[4]];
+///     work[2] = [w[11], w[10], w[9], w[8]];
+///     work[3] = [w[15], w[14], w[13], w[12]];
 /// }
 ///
 /// fn schedule4_work(work: &mut [u32x4], t: usize) {
-///
-///     // this is the core expression
-///     work[t] = sha256msg2(sha256msg1(work[t - 4], work[t - 3]) +
-///                          sha256load(work[t - 2], work[t - 1]),
-///                          work[t - 1])
+///     // The SHA256MSG1/2 instructions compute 4 message schedule words
+///     // This is pseudocode for what the CPU instructions do internally
+///     work[t] = sha256msg2(
+///         sha256msg1(work[t - 4], work[t - 3]) + work[t - 2],
+///         work[t - 1]
+///     )
 /// }
 /// ```
 ///
 /// instead of 4 rounds of:
 ///
-/// ```compile_fail
+/// ```text
+/// // Traditional SHA-256 message schedule (one word at a time)
 /// fn schedule_work(w: &mut [u32], t: usize) {
-///     w[t] = sigma1!(w[t - 2]) + w[t - 7] + sigma0!(w[t - 15]) + w[t - 16];
+///     // sigma0 and sigma1 are the message schedule functions
+///     w[t] = sigma1(w[t - 2]) + w[t - 7] + sigma0(w[t - 15]) + w[t - 16];
 /// }
 /// ```
 ///
 /// and the digest-related instructions allow 4 rounds to be calculated as:
 ///
-/// ```compile_fail
-/// use std::simd::u32x4;
-/// use self::crypto::sha2::{K32X4,
-///     sha256rnds2,
-///     sha256swap
-/// };
+/// ```text
+/// // Pseudocode showing how Intel SHA extensions process 4 rounds at once
+/// // (not actual sha2raw API - for illustration only)
+///
+/// type u32x4 = [u32; 4]; // Represents a SIMD vector
+/// const K32X4: [[u32; 4]; 16] = /* round constants */;
 ///
 /// fn rounds4(state: &mut [u32; 8], work: &mut [u32x4], t: usize) {
-///     let [a, b, c, d, e, f, g, h]: [u32; 8] = *state;
+///     let [a, b, c, d, e, f, g, h] = *state;
 ///
-///     // this is to illustrate the data order
-///     let mut abef = u32x4(a, b, e, f);
-///     let mut cdgh = u32x4(c, d, g, h);
-///     let temp = K32X4[t] + work[t];
+///     // Intel SHA extensions pack state into two vectors
+///     let mut abef = [a, b, e, f];
+///     let mut cdgh = [c, d, g, h];
+///     let temp = add_vectors(K32X4[t], work[t]);
 ///
-///     // this is the core expression
+///     // SHA256RNDS2 performs 2 rounds of SHA-256
 ///     cdgh = sha256rnds2(cdgh, abef, temp);
 ///     abef = sha256rnds2(abef, cdgh, sha256swap(temp));
 ///
-///     *state = [abef.0, abef.1, cdgh.0, cdgh.1,
-///               abef.2, abef.3, cdgh.2, cdgh.3];
+///     // Unpack back to state array
+///     *state = [abef[0], abef[1], cdgh[0], cdgh[1],
+///               abef[2], abef[3], cdgh[2], cdgh[3]];
 /// }
 /// ```
 ///
 /// instead of 4 rounds of:
 ///
-/// ```compile_fail
-/// fn round(state: &mut [u32; 8], w: &mut [u32], t: usize) {
-///     let [a, b, c, mut d, e, f, g, mut h]: [u32; 8] = *state;
+/// ```text
+/// // Traditional SHA-256 round function (one round at a time)
+/// // This is closer to what sha2raw actually implements
+/// fn round(state: &mut [u32; 8], w: &[u32], t: usize) {
+///     let [a, b, c, mut d, e, f, g, mut h] = *state;
 ///
-///     h += big_sigma1!(e) +   choose!(e, f, g) + K32[t] + w[t]; d += h;
-///     h += big_sigma0!(a) + majority!(a, b, c);
+///     // SHA-256 round operations using the functions defined in this module
+///     h += big_sigma1(e) + choose(e, f, g) + K32[t] + w[t];
+///     d += h;
+///     h += big_sigma0(a) + majority(a, b, c);
 ///
+///     // Rotate the state
 ///     *state = [h, a, b, c, d, e, f, g];
 /// }
 /// ```
