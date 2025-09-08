@@ -163,6 +163,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes cuda-drivers
           rm nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
+      - name: Load NVIDIA kernel modules and verify GPU
+        run: |
+          sudo modprobe nvidia
+          sudo modprobe nvidia-uvm
+          nvidia-smi || echo "WARNING: nvidia-smi failed, GPU may not be available"
       - name: Install required packages
         run: |
           sudo apt-get update
