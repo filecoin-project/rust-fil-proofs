@@ -46,7 +46,7 @@ jobs:
 
   extended:
     needs: basic
-    runs-on: ['self-hosted', 'linux', 'x64', '8xlarge+gpu']
+    runs-on: ['self-hosted', 'linux', 'x64', '16xlarge+gpu']
     name: Extended tests
     env:
       FIL_PROOFS_VERIFY_CACHE: 1
