@@ -1,0 +1,66 @@
+name: Set up environment
+description: Sets up the environment for running the CI
+
+inputs:
+  github-token:
+    description: 'A secrets.GITHUB_TOKEN'
+    required: true
+    default: ${{ github.token }}
+  gpu:
+    description: 'Whether to enable GPU support'
+    required: false
+    default: 'false'
+  proof-params:
+    description: 'Whether to download the proof params'
+    required: false
+    default: 'false'
+  rust-toolchain:
+    description: 'Whether to install the rust toolchain'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Update apt
+      run: sudo apt-get update
+      shell: bash
+
+    # TODO: Move the driver installation to the AMI.
+    # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html
+    # https://www.nvidia.com/en-us/drivers/
+    - name: Install CUDA drivers
+      if: ${{ inputs.gpu == 'true' }}
+      run: |
+        curl -L -o nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb https://us.download.nvidia.com/tesla/570.148.08/nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
+        sudo dpkg -i nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
+        sudo cp /var/nvidia-driver-local-repo-ubuntu2404-570.148.08/nvidia-driver-local-*-keyring.gpg /usr/share/keyrings/
+        sudo apt-get install --no-install-recommends --yes cuda-drivers nvidia-cuda-toolkit
+        rm nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
+      shell: bash
+
+    - name: Load NVIDIA kernel modules and verify GPU
+      if: ${{ inputs.gpu == 'true' }}
+      run: |
+        sudo modprobe nvidia
+        sudo modprobe nvidia-uvm
+        nvidia-smi || echo "WARNING: nvidia-smi failed, GPU may not be available"
+      shell: bash
+
+    - name: Install required packages
+      run: |
+        sudo apt-get install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
+      shell: bash
+
+    - name: Download the proof params
+      if: ${{ inputs.proof-params == 'true' }}
+      uses: ./.github/actions/proof-params-download
+      with:
+        github-token: ${{ inputs.github-token }}
+
+    # TODO: Remove this and other rust installation directives from jobs running
+    # on self-hosted runners once rust is available on these machines by default
+    - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
+      if: ${{ inputs.rust-toolchain == 'true' }}
+      with:
+        toolchain: 1.83
