@@ -2,6 +2,7 @@ name: Test
 
 on:
   workflow_dispatch:
+  push:
 
 defaults:
   run:
