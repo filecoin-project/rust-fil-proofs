@@ -41,7 +41,8 @@ FIL_PROOFS_USE_GPU_COLUMN_BUILDER=1 \
 FIL_PROOFS_USE_GPU_TREE_BUILDER=1 \
 FIL_PROOFS_USE_MULTICORE_SDR=1 \
 RUST_BACKTRACE=full \
-RUST_LOG=trace RUSTFLAGS="-C target-cpu=native" \
+RUST_LOG=trace \
+RUSTFLAGS="-C target-cpu=native" \
 cargo test --release --all
 
 # Ignored tests
@@ -51,7 +52,8 @@ FIL_PROOFS_USE_GPU_COLUMN_BUILDER=1 \
 FIL_PROOFS_USE_GPU_TREE_BUILDER=1 \
 FIL_PROOFS_USE_MULTICORE_SDR=1 \
 RUST_BACKTRACE=full \
-RUST_LOG=trace RUSTFLAGS="-C target-cpu=native" \
+RUST_LOG=trace \
+RUSTFLAGS="-C target-cpu=native" \
 cargo test --release --all -- --ignored
 ```
 
