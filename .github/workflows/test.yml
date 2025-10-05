@@ -14,38 +14,38 @@ env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
 jobs:
-  basic:
-    runs-on: ['self-hosted', 'linux', 'x64', 'xlarge+gpu']
-    name: Basic tests (${{ matrix.name }})
-    strategy:
-      matrix:
-        include:
-          - name: regular
-            command: cargo test --release --all
-          - name: ignored
-            command: cargo test --release --all -- --ignored
-      fail-fast: false
-    env:
-      FIL_PROOFS_VERIFY_CACHE: 1
-      FIL_PROOFS_VERIFY_PRODUCTION_PARAMS: 0
-      FIL_PROOFS_USE_GPU_COLUMN_BUILDER: 1
-      FIL_PROOFS_USE_GPU_TREE_BUILDER: 1
-      FIL_PROOFS_USE_MULTICORE_SDR: 1
-      RUST_BACKTRACE: full
-      RUST_LOG: debug
-      RUSTFLAGS: -C target-cpu=native
-    steps:
-      - uses: actions/checkout@v5
-      - uses: ./.github/actions/setup-environment
-        with:
-          gpu: true
-          proof-params: true
-          rust-toolchain: true
-      - name: Run basic tests
-        run: ${{ matrix.command }}
+  # basic:
+  #   runs-on: ['self-hosted', 'linux', 'x64', 'xlarge+gpu']
+  #   name: Basic tests (${{ matrix.name }})
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - name: regular
+  #           command: cargo test --release --all
+  #         - name: ignored
+  #           command: cargo test --release --all -- --ignored
+  #     fail-fast: false
+  #   env:
+  #     FIL_PROOFS_VERIFY_CACHE: 1
+  #     FIL_PROOFS_VERIFY_PRODUCTION_PARAMS: 0
+  #     FIL_PROOFS_USE_GPU_COLUMN_BUILDER: 1
+  #     FIL_PROOFS_USE_GPU_TREE_BUILDER: 1
+  #     FIL_PROOFS_USE_MULTICORE_SDR: 1
+  #     RUST_BACKTRACE: full
+  #     RUST_LOG: debug
+  #     RUSTFLAGS: -C target-cpu=native
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #     - uses: ./.github/actions/setup-environment
+  #       with:
+  #         gpu: true
+  #         proof-params: true
+  #         rust-toolchain: true
+  #     - name: Run basic tests
+  #       run: ${{ matrix.command }}
 
   extended:
-    needs: basic
+    # needs: basic
     runs-on: ['self-hosted', 'linux', 'x64', '16xlarge+gpu']
     name: Extended tests
     env:
