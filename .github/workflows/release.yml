@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      level:
+        description: 'Release level'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      # The contents write should allow:
+      # 1. Push to the branch of the repository that triggered the workflow.
+      # 2. Create a tag.
+      # 3. Push to crates.io.
+      contents: write
+      # The id-token write should allow the OIDC token exchange
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install required packages
+        run: sudo apt install --no-install-recommends --yes libhwloc-dev nvidia-cuda-toolkit ocl-icd-opencl-dev
+      - name: Install cargo release
+        run: cargo install --version 0.25.17 cargo-release
+      - name: Set git user
+        run: |
+          git config --global user.email "${GITHUB_TRIGGERING_ACTOR}@users.noreply.github.com"
+          git config --global user.name "${GITHUB_TRIGGERING_ACTOR}"
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      - name: Run cargo release
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo release ${{ github.event.inputs.level }} --no-confirm --execute

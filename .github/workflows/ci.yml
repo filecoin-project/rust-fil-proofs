@@ -1,7 +1,7 @@
 name: CI
 
 on:
-  pull_request:
+  # pull_request:
   push:
     branches:
       - master
@@ -24,11 +24,8 @@ jobs:
     runs-on: ubuntu-24.04
     name: Clippy
     steps:
-      - uses: actions/checkout@v4
-      - name: Install required packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-environment
       - name: Install cargo clippy
         run: rustup component add clippy
       - name: Run cargo clippy
@@ -38,7 +35,7 @@ jobs:
     runs-on: ubuntu-24.04
     name: Checking fmt
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install cargo fmt
         run: rustup component add rustfmt
       - name: Run cargo fmt
@@ -55,22 +52,11 @@ jobs:
       # Run all tests with multicore-SDR enabled.
       FIL_PROOFS_USE_MULTICORE_SDR: true
     steps:
-      - uses: actions/checkout@v4
-      - name: Install required packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
-
-      - name: Download the proof params
-        uses: ./.github/actions/proof-params-download
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-environment
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      # TODO: Remove this and other rust installation directives from jobs running 
-      # on self-hosted runners once rust is available on these machines by default
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
-        with:
-          toolchain: 1.83
+          proof-params: true
+          rust-toolchain: true
 
       - name: Run usual tests in release profile
         run: cargo test --verbose --release --workspace --all-targets ${{ matrix.cargo-args }} -- --nocapture
@@ -83,16 +69,10 @@ jobs:
     runs-on: ubuntu-24.04
     name: Test ignored in release mode
     steps:
-      - uses: actions/checkout@v4
-      - name: Install required packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
-
-      - name: Download the proof params
-        uses: ./.github/actions/proof-params-download
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-environment
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          proof-params: true
 
       - name: Test ignored in release profile
         run: cargo test --release --workspace -- ignored --nocapture
@@ -101,20 +81,11 @@ jobs:
     runs-on: ['self-hosted', 'linux', 'x64', '2xlarge']
     name: Test without default features
     steps:
-      - uses: actions/checkout@v4
-      - name: Install required packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
-
-      - name: Download the proof params
-        uses: ./.github/actions/proof-params-download
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-environment
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
-        with:
-          toolchain: 1.83
+          proof-params: true
+          rust-toolchain: true
 
       - name: Test ignored in release profile
         run: cargo test --release --workspace --no-default-features
@@ -123,15 +94,10 @@ jobs:
     runs-on: ['self-hosted', 'linux', 'x64', '2xlarge']
     name: Build with various GPU support enabled
     steps:
-      - uses: actions/checkout@v4
-      - name: Install required packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes libhwloc-dev nvidia-cuda-toolkit ocl-icd-opencl-dev
-
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-environment
         with:
-          toolchain: 1.83
+          rust-toolchain: true
 
       - name: Build with `cuda` and `opencl` features enabled
         run: cargo build --workspace --features cuda,opencl
@@ -151,36 +117,12 @@ jobs:
       BELLMAN_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
       NEPTUNE_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
     steps:
-      - uses: actions/checkout@v4
-      # TODO: Move the driver installation to the AMI.
-      # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html
-      # https://www.nvidia.com/en-us/drivers/
-      - name: Install CUDA drivers
-        run: |
-          curl -L -o nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb https://us.download.nvidia.com/tesla/570.148.08/nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
-          sudo dpkg -i nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
-          sudo cp /var/nvidia-driver-local-repo-ubuntu2404-570.148.08/nvidia-driver-local-*-keyring.gpg /usr/share/keyrings/
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes cuda-drivers
-          rm nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
-      - name: Load NVIDIA kernel modules and verify GPU
-        run: |
-          sudo modprobe nvidia
-          sudo modprobe nvidia-uvm
-          nvidia-smi || echo "WARNING: nvidia-smi failed, GPU may not be available"
-      - name: Install required packages
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes libhwloc-dev nvidia-cuda-toolkit ocl-icd-opencl-dev
-
-      - name: Download the proof params
-        uses: ./.github/actions/proof-params-download
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-environment
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
-        with:
-          toolchain: 1.83
+          gpu: true
+          proof-params: true
+          rust-toolchain: true
 
       - name: Test with CUDA
         run: cargo test --verbose --release --workspace --features cuda -- --nocapture ${{ matrix.test-args }}
@@ -197,8 +139,6 @@ jobs:
 
       - name: Download the proof params
         uses: ./.github/actions/proof-params-download
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run usual tests in release profile
         run: cargo test --verbose --release --workspace -- --nocapture
