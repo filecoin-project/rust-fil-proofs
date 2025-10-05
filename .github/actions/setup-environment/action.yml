@@ -22,10 +22,6 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Update apt
-      run: sudo apt-get update
-      shell: bash
-
     # TODO: Move the driver installation to the AMI.
     # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html
     # https://www.nvidia.com/en-us/drivers/
@@ -35,6 +31,7 @@ runs:
         curl -L -o nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb https://us.download.nvidia.com/tesla/570.148.08/nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
         sudo dpkg -i nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
         sudo cp /var/nvidia-driver-local-repo-ubuntu2404-570.148.08/nvidia-driver-local-*-keyring.gpg /usr/share/keyrings/
+        sudo apt-get update
         sudo apt-get install --no-install-recommends --yes cuda-drivers nvidia-cuda-toolkit
         rm nvidia-driver-local-repo-ubuntu2404-570.148.08_1.0-1_amd64.deb
       shell: bash
@@ -49,6 +46,7 @@ runs:
 
     - name: Install required packages
       run: |
+        sudo apt-get update
         sudo apt-get install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
       shell: bash
 
