@@ -24,6 +24,7 @@ jobs:
             command: cargo test --release --all
           - name: ignored
             command: cargo test --release --all -- --ignored
+      fail-fast: false
     env:
       FIL_PROOFS_VERIFY_CACHE: 1
       FIL_PROOFS_VERIFY_PRODUCTION_PARAMS: 0
