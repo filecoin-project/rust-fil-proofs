@@ -32,7 +32,7 @@ jobs:
       FIL_PROOFS_USE_GPU_TREE_BUILDER: 1
       FIL_PROOFS_USE_MULTICORE_SDR: 1
       RUST_BACKTRACE: full
-      RUST_LOG: trace
+      RUST_LOG: debug
       RUSTFLAGS: -C target-cpu=native
     steps:
       - uses: actions/checkout@v5
