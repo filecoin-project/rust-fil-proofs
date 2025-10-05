@@ -34,16 +34,17 @@ jobs:
       RUSTFLAGS: -C target-cpu=native
     steps:
       - uses: actions/checkout@v5
-      - name: Download the proof params
-        uses: ./.github/actions/proof-params-download
+      - uses: ./.github/actions/setup-environment
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gpu: true
+          proof-params: true
+          rust-toolchain: true
       - name: Run basic tests
         run: ${{ matrix.command }}
 
   extended:
     needs: basic
-    runs-on: ['self-hosted', 'linux', 'x64', '16xlarge+gpu']
+    runs-on: ['self-hosted', 'linux', 'x64', '8xlarge+gpu']
     name: Extended tests
     env:
       FIL_PROOFS_VERIFY_CACHE: 1
@@ -56,10 +57,11 @@ jobs:
       RUSTFLAGS: -C target-cpu=native
     steps:
       - uses: actions/checkout@v5
-      - name: Download the proof params
-        uses: ./.github/actions/proof-params-download
+      - uses: ./.github/actions/setup-environment
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gpu: true
+          proof-params: true
+          rust-toolchain: true
       - name: Test 32GiB seal lifecycle
         run: cargo test --features big-tests --release test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_1 -- --nocapture
       - name: Test 32GiB seal lifecycle (synth-porep)
