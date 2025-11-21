@@ -1128,7 +1128,7 @@ dependencies = [
 
 [[package]]
 name = "filecoin-proofs"
-version = "19.0.0"
+version = "19.0.1"
 dependencies = [
  "anyhow",
  "bellperson",
