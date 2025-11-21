@@ -19,7 +19,7 @@ filecoin-hashers = { path = "filecoin-hashers", default-features = false, versio
 filecoin-proofs = { path = "filecoin-proofs", default-features = false, version = "~19.0.0" }
 fr32 = { path = "fr32", default-features = false, version = "~12.0.0" }
 sha2raw = { path = "sha2raw", default-features = false, version = "~14.0.0" }
-storage-proofs-core = { path = "storage-proofs-core", default-features = false, version = "~19.0.0" }
+storage-proofs-core = { path = "storage-proofs-core", default-features = false, version = "~19.0.1" }
 storage-proofs-porep = { path = "storage-proofs-porep", default-features = false, version = "~19.0.0" }
 storage-proofs-post = { path = "storage-proofs-post", default-features = false, version = "~19.0.0" }
 storage-proofs-update = { path = "storage-proofs-update", default-features = false, version = "~19.0.0" }
