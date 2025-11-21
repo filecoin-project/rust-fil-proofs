@@ -3106,7 +3106,7 @@ dependencies = [
 
 [[package]]
 name = "storage-proofs-post"
-version = "19.0.0"
+version = "19.0.1"
 dependencies = [
  "anyhow",
  "bellperson",
