@@ -998,7 +998,7 @@ dependencies = [
 
 [[package]]
 name = "fil-proofs-param"
-version = "14.0.0"
+version = "14.0.1"
 dependencies = [
  "anyhow",
  "blake2b_simd",
