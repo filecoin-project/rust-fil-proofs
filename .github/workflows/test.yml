@@ -1,0 +1,91 @@
+name: Test
+
+on:
+  workflow_dispatch:
+  push:
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_INCREMENTAL: 0
+  # Faster crates.io index checkout.
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
+jobs:
+  # basic:
+  #   runs-on: ['self-hosted', 'linux', 'x64', 'xlarge+gpu']
+  #   name: Basic tests (${{ matrix.name }})
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         - name: regular
+  #           command: cargo test --release --all
+  #         - name: ignored
+  #           command: cargo test --release --all -- --ignored
+  #     fail-fast: false
+  #   env:
+  #     FIL_PROOFS_VERIFY_CACHE: 1
+  #     FIL_PROOFS_VERIFY_PRODUCTION_PARAMS: 0
+  #     FIL_PROOFS_USE_GPU_COLUMN_BUILDER: 1
+  #     FIL_PROOFS_USE_GPU_TREE_BUILDER: 1
+  #     FIL_PROOFS_USE_MULTICORE_SDR: 1
+  #     RUST_BACKTRACE: full
+  #     RUST_LOG: debug
+  #     RUSTFLAGS: -C target-cpu=native
+  #   steps:
+  #     - uses: actions/checkout@v6
+  #     - uses: ./.github/actions/setup-environment
+  #       with:
+  #         gpu: true
+  #         proof-params: true
+  #         rust-toolchain: true
+  #     - name: Run basic tests
+  #       run: ${{ matrix.command }}
+
+  extended:
+    # needs: basic
+    runs-on: ['self-hosted', 'linux', 'x64', '16xlarge+gpu']
+    name: Extended tests
+    env:
+      FIL_PROOFS_VERIFY_CACHE: 1
+      FIL_PROOFS_VERIFY_PRODUCTION_PARAMS: 1
+      FIL_PROOFS_USE_GPU_COLUMN_BUILDER: 1
+      FIL_PROOFS_USE_GPU_TREE_BUILDER: 1
+      FIL_PROOFS_USE_MULTICORE_SDR: 1
+      RUST_BACKTRACE: full
+      RUST_LOG: debug
+      RUSTFLAGS: -C target-cpu=native
+      RUST_TEST_TIMEOUT: 0
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-environment
+        with:
+          gpu: true
+          proof-params: false
+          rust-toolchain: true
+      - name: Generate 32GiB proof parameters
+        run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes=34359738368
+      - name: Test 32GiB seal lifecycle
+        run: cargo test --features big-tests --release test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_1 -- --nocapture
+      - name: Test 32GiB seal lifecycle (synth-porep)
+        run: cargo test --features big-tests --release test_seal_lifecycle_32gib_porep_id_v1_2_top_8_8_0_api_v1_2 -- --nocapture
+      - name: Test 32GiB seal lifecycle (ni-porep)
+        run: cargo test --features big-tests --release test_seal_lifecycle_32gib_porep_id_v1_2_ni_top_8_8_0_api_v1_2 -- --nocapture
+      - name: Test 32GiB max seal proof aggregation
+        run: cargo test --features big-tests --release test_max_ni_seal_proof_aggregation_32gib -- --nocapture
+      - name: Test 32GiB seal lifecycle sector upgrade test
+        run: cargo test --features big-tests --release test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_2 -- --nocapture
+      - name: Generate 64GiB proof parameters
+        run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes=68719476736
+      - name: Test 64GiB seal lifecycle
+        run: cargo test --features big-tests --release test_seal_lifecycle_64gib_porep_id_v1_1_top_8_8_2_api_v1_1 -- --nocapture
+      - name: Test 64GiB seal lifecycle (synth-porep)
+        run: cargo test --features big-tests --release test_seal_lifecycle_64gib_porep_id_v1_2_top_8_8_2_api_v1_2 -- --nocapture
+      - name: Test 64GiB seal lifecycle (ni-porep)
+        run: cargo test --features big-tests --release test_seal_lifecycle_64gib_porep_id_v1_2_ni_top_8_8_2_api_v1_2 -- --nocapture
+      - name: Test 64GiB seal proof aggregation
+        run: cargo test --features big-tests --release test_sector_update_proof_aggregation_3_64gib -- --nocapture
+      - name: Test 64GiB seal lifecycle sector upgrade test
+        run: cargo test --features big-tests --release test_seal_lifecycle_upgrade_64gib_top_8_8_2_v1_2 -- --nocapture

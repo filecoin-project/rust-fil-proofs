@@ -1,9 +1,11 @@
 name: Download proof params
+description: Downloads the proof params from the latest proof-params-generate workflow run
 
 inputs:
   github-token:
     description: 'A secrets.GITHUB_TOKEN'
     required: true
+    default: ${{ github.token }}
 
 runs:
   using: 'composite'
