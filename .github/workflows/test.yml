@@ -63,8 +63,10 @@ jobs:
       - uses: ./.github/actions/setup-environment
         with:
           gpu: true
-          proof-params: true
+          proof-params: false
           rust-toolchain: true
+      - name: Generate 32GiB proof parameters
+        run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes=34359738368
       - name: Test 32GiB seal lifecycle
         run: cargo test --features big-tests --release test_seal_lifecycle_32gib_porep_id_v1_1_top_8_8_0_api_v1_1 -- --nocapture
       - name: Test 32GiB seal lifecycle (synth-porep)
@@ -75,6 +77,8 @@ jobs:
         run: cargo test --features big-tests --release test_max_ni_seal_proof_aggregation_32gib -- --nocapture
       - name: Test 32GiB seal lifecycle sector upgrade test
         run: cargo test --features big-tests --release test_seal_lifecycle_upgrade_32gib_top_8_8_0_v1_2 -- --nocapture
+      - name: Generate 64GiB proof parameters
+        run: cargo run --release --no-default-features --bin paramcache -- --sector-sizes=68719476736
       - name: Test 64GiB seal lifecycle
         run: cargo test --features big-tests --release test_seal_lifecycle_64gib_porep_id_v1_1_top_8_8_2_api_v1_1 -- --nocapture
       - name: Test 64GiB seal lifecycle (synth-porep)
