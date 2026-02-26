@@ -64,6 +64,7 @@ pub fn insert<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     }
 
     let mut result = Vec::new();
+    #[allow(clippy::needless_range_loop)]
     for pos in 0..size {
         // These are the choices needed such that for each position in the selected result,
         // the value is column-for-pos[index].

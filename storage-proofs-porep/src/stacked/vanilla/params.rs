@@ -460,6 +460,7 @@ impl<Proof: MerkleProofTrait> ReplicaColumnProof<Proof> {
     }
 }
 
+#[allow(clippy::doc_overindented_list_items)]
 /// Type for serializing/deserializing synthetic proofs' file.
 ///
 /// Note that the synthetic proofs' serialization format differs from the standard `serde`
@@ -471,15 +472,15 @@ impl<Proof: MerkleProofTrait> ReplicaColumnProof<Proof> {
 /// 2) root_c (32 bytes)
 /// 3) root_r (32 bytes)
 /// 4) For each synthetic challenge proof:
-///     4.1) Challenge's node index (8 bytes)
-///     4.2) Parents' node indices (8 bytes per parent)
-///     4.3) Challenge's proof_d (32 bytes for leaf_d and 32 bytes per path_d sibling)
-///     4.4) Challenge's column (32 bytes per layer)
-///     4.5) Challenge's proof_c (32 bytes for leaf_c and 32 bytes per path_c sibling)
-///     4.6) For each parent:
-///         4.6.1) Parent's column (32 bytes per layer)
-///         4.6.2) Parent's proof_c (32 bytes for leaf_c and 32 bytes per path_c sibling)
-///     4.7) Challenge's proof_r (32 bytes for leaf_r and 32 bytes per path_r sibling)
+///    4.1) Challenge's node index (8 bytes)
+///    4.2) Parents' node indices (8 bytes per parent)
+///    4.3) Challenge's proof_d (32 bytes for leaf_d and 32 bytes per path_d sibling)
+///    4.4) Challenge's column (32 bytes per layer)
+///    4.5) Challenge's proof_c (32 bytes for leaf_c and 32 bytes per path_c sibling)
+///    4.6) For each parent:
+///       4.6.1) Parent's column (32 bytes per layer)
+///       4.6.2) Parent's proof_c (32 bytes for leaf_c and 32 bytes per path_c sibling)
+///    4.7) Challenge's proof_r (32 bytes for leaf_r and 32 bytes per path_r sibling)
 pub(crate) struct SynthProofs;
 
 impl SynthProofs {
@@ -626,18 +627,17 @@ impl SynthProofs {
         let base_path_r_len = (challenge_bit_len - sub_bit_len - top_bit_len) / base_bit_len;
         let path_r_len = base_path_r_len + has_sub + has_top;
 
-        let (path_r_sibs, path_r_bit_masks): (Vec<usize>, Vec<u64>) = iter::repeat(base_arity)
-            .take(base_path_r_len)
-            .chain([sub_arity, top_arity])
-            .take(path_r_len)
-            .map(|arity| {
-                let arity_minus_1 = arity - 1;
-                (arity_minus_1, arity_minus_1 as u64)
-            })
-            .unzip();
+        let (path_r_sibs, path_r_bit_masks): (Vec<usize>, Vec<u64>) =
+            std::iter::repeat_n(base_arity, base_path_r_len)
+                .chain([sub_arity, top_arity])
+                .take(path_r_len)
+                .map(|arity| {
+                    let arity_minus_1 = arity - 1;
+                    (arity_minus_1, arity_minus_1 as u64)
+                })
+                .unzip();
 
-        let path_r_bit_lens: Vec<usize> = iter::repeat(base_bit_len)
-            .take(base_path_r_len)
+        let path_r_bit_lens: Vec<usize> = std::iter::repeat_n(base_bit_len, base_path_r_len)
             .chain([sub_bit_len, top_bit_len])
             .take(path_r_len)
             .collect();

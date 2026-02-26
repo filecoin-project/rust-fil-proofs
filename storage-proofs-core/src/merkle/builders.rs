@@ -394,7 +394,7 @@ where
         );
 
         let mut tree =
-            MerkleTreeWrapper::try_from_iter_with_config(elements.iter().map(|v| (Ok(*v))), config)
+            MerkleTreeWrapper::try_from_iter_with_config(elements.iter().map(|v| Ok(*v)), config)
                 .expect("try from iter with config failure");
 
         // Write out the replica data.

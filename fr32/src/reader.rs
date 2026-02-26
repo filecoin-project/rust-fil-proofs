@@ -340,14 +340,14 @@ mod tests {
             // To avoid reconverting the iterator, we deduce if we need the padding
             // by the length of `padded_data`: a full data unit would not leave the
             // padded layout aligned (it would leave it unaligned by just `pad_bits()`).
-            if padded_data.len() % 8 != 0 {
+            if !padded_data.len().is_multiple_of(8) {
                 for _ in 0..(TARGET_BITS - DATA_BITS) {
                     padded_data.push(false);
                 }
             }
         }
 
-        while padded_data.len() % (TARGET_BITS as usize) != 0 {
+        while !padded_data.len().is_multiple_of(TARGET_BITS as usize) {
             padded_data.push(false);
         }
 

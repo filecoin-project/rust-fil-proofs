@@ -846,7 +846,7 @@ pub fn aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
 /// * `seeds` - an ordered list of seeds used to derive the PoRep challenges.
 /// * `aggregate_proof_bytes` - the returned aggregate proof from 'aggreate_seal_commit_proofs'.
 /// * `commit_inputs` - a flattened/combined and ordered list of all public inputs, which must match
-///    the ordering of the seal proofs when aggregated.
+///   the ordering of the seal proofs when aggregated.
 pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     porep_config: &PoRepConfig,
     aggregate_proof_bytes: AggregateSnarkProof,
@@ -887,7 +887,7 @@ pub fn verify_aggregate_seal_commit_proofs<Tree: 'static + MerkleTreeTrait>(
     let num_inputs_per_proof = get_aggregate_target_len(num_inputs) / aggregated_proofs_len;
     let target_inputs_len = aggregated_proofs_len * num_inputs_per_proof;
     ensure!(
-        target_inputs_len % aggregated_proofs_len == 0,
+        target_inputs_len.is_multiple_of(aggregated_proofs_len),
         "invalid number of inputs provided",
     );
 
@@ -1172,8 +1172,7 @@ pub fn verify_batch_seal<Tree: 'static + MerkleTreeTrait>(
         &ChallengeRequirements {
             minimum_challenges: porep_config.minimum_challenges(),
         },
-    )
-    .map_err(Into::into);
+    );
 
     info!("verify_batch_seal:finish");
     result

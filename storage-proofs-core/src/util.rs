@@ -136,7 +136,7 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
 pub fn reverse_bit_numbering(bits: Vec<Boolean>) -> Vec<Boolean> {
     let mut padded_bits = bits;
     // Pad partial bytes
-    while padded_bits.len() % 8 != 0 {
+    while !padded_bits.len().is_multiple_of(8) {
         padded_bits.push(Boolean::Constant(false));
     }
 

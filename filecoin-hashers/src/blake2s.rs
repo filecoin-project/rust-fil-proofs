@@ -212,12 +212,12 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         let mut preimage: Vec<Boolean> = vec![];
 
         preimage.extend_from_slice(left);
-        while preimage.len() % 8 != 0 {
+        while !preimage.len().is_multiple_of(8) {
             preimage.push(Boolean::Constant(false));
         }
 
         preimage.extend_from_slice(right);
-        while preimage.len() % 8 != 0 {
+        while !preimage.len().is_multiple_of(8) {
             preimage.push(Boolean::Constant(false));
         }
 
@@ -249,12 +249,12 @@ impl HashFunction<Blake2sDomain> for Blake2sFunction {
         let mut preimage: Vec<Boolean> = vec![];
 
         preimage.extend_from_slice(&a);
-        while preimage.len() % 8 != 0 {
+        while !preimage.len().is_multiple_of(8) {
             preimage.push(Boolean::Constant(false));
         }
 
         preimage.extend_from_slice(&b);
-        while preimage.len() % 8 != 0 {
+        while !preimage.len().is_multiple_of(8) {
             preimage.push(Boolean::Constant(false));
         }
 

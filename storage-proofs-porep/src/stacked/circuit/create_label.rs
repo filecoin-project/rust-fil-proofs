@@ -47,7 +47,7 @@ where
         ciphertexts.extend_from_slice(parent);
 
         // pad such that each parents take 32 bytes
-        while ciphertexts.len() % 256 != 0 {
+        while !ciphertexts.len().is_multiple_of(256) {
             ciphertexts.push(Boolean::constant(false));
         }
     }

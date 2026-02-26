@@ -31,7 +31,7 @@ impl<R: Read> CommitmentReader<R> {
     /// Attempt to generate the next hash, but only if the buffers are full.
     fn try_hash(&mut self) {
         // Get more bytes in case we cannot iterate cleanly in 64 byte chunks.
-        if self.buffer_pos % 64 != 0 {
+        if !self.buffer_pos.is_multiple_of(64) {
             return;
         }
 
