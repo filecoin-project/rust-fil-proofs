@@ -203,7 +203,6 @@ pub(crate) fn get_stacked_params<Tree: 'static + MerkleTreeTrait>(
             StackedDrg<'_, Tree, DefaultPieceHasher>,
             _,
         >>::groth_params::<OsRng>(None, &public_params)
-        .map_err(Into::into)
     };
 
     lookup_groth_params(
@@ -227,7 +226,6 @@ pub(crate) fn get_post_params<Tree: 'static + MerkleTreeTrait>(
                     FallbackPoSt<'_, Tree>,
                     FallbackPoStCircuit<Tree>,
                 >>::groth_params::<OsRng>(None, &post_public_params)
-                .map_err(Into::into)
             };
 
             Ok(lookup_groth_params(
@@ -246,7 +244,6 @@ pub(crate) fn get_post_params<Tree: 'static + MerkleTreeTrait>(
                     FallbackPoSt<'_, Tree>,
                     FallbackPoStCircuit<Tree>,
                 >>::groth_params::<OsRng>(None, &post_public_params)
-                .map_err(Into::into)
             };
 
             Ok(lookup_groth_params(
@@ -273,7 +270,6 @@ pub(crate) fn get_empty_sector_update_params<
             EmptySectorUpdate<Tree>,
             EmptySectorUpdateCircuit<Tree>,
         >>::groth_params::<OsRng>(None, &public_params)
-        .map_err(Into::into)
     };
 
     lookup_groth_params(

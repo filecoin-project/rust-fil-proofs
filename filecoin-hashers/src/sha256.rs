@@ -189,7 +189,7 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         let mut preimage: Vec<Boolean> = vec![];
 
         let mut left_padded = left.to_vec();
-        while left_padded.len() % 8 != 0 {
+        while !left_padded.len().is_multiple_of(8) {
             left_padded.push(Boolean::Constant(false));
         }
 
@@ -201,7 +201,7 @@ impl HashFunction<Sha256Domain> for Sha256Function {
         );
 
         let mut right_padded = right.to_vec();
-        while right_padded.len() % 8 != 0 {
+        while !right_padded.len().is_multiple_of(8) {
             right_padded.push(Boolean::Constant(false));
         }
 

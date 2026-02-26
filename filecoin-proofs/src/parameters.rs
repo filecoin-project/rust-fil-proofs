@@ -28,7 +28,9 @@ pub fn winning_post_public_params<Tree: 'static + MerkleTreeTrait>(
 
 pub fn winning_post_setup_params(post_config: &PoStConfig) -> Result<WinningPostSetupParams> {
     ensure!(
-        post_config.challenge_count % post_config.sector_count == 0,
+        post_config
+            .challenge_count
+            .is_multiple_of(post_config.sector_count),
         "sector count must divide challenge count"
     );
 

@@ -1,5 +1,5 @@
 use std::cmp::{min, Ordering};
-use std::io::{self, Error, ErrorKind, Write};
+use std::io::{self, Error, Write};
 
 /** PaddingMap represents a mapping between data and its padded equivalent.
 
@@ -580,13 +580,10 @@ where
     )
     .bytes_needed();
     if raw_data_size < len {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!(
-                "requested extraction of {} raw data bytes when there's at most {} in the source",
-                len, raw_data_size
-            ),
-        ));
+        return Err(Error::other(format!(
+            "requested extraction of {} raw data bytes when there's at most {} in the source",
+            len, raw_data_size
+        )));
     }
 
     // In order to optimize alignment in the common case of writing from an aligned start,
@@ -854,7 +851,7 @@ mod tests {
             // To avoid reconverting the iterator, we deduce if we need the padding
             // by the length of `padded_data`: a full data unit would not leave the
             // padded layout aligned (it would leave it unaligned by just `pad_bits()`).
-            if padded_data.len() % 8 != 0 {
+            if !padded_data.len().is_multiple_of(8) {
                 for _ in 0..FR32_PADDING_MAP.pad_bits() {
                     padded_data.push(false);
                 }

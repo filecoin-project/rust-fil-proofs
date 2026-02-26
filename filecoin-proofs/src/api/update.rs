@@ -924,7 +924,7 @@ pub fn verify_aggregate_sector_update_proofs<
     );
 
     ensure!(
-        target_inputs_len % aggregated_proofs_len == 0,
+        target_inputs_len.is_multiple_of(aggregated_proofs_len),
         "invalid number of inputs provided",
     );
 

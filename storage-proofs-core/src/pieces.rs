@@ -51,7 +51,10 @@ pub fn generate_piece_commitment_bytes_from_source<H: Hasher>(
     padded_piece_size: usize,
 ) -> Result<Fr32Ary> {
     ensure!(padded_piece_size > 32, "piece is too small");
-    ensure!(padded_piece_size % 32 == 0, "piece is not valid size");
+    ensure!(
+        padded_piece_size.is_multiple_of(32),
+        "piece is not valid size"
+    );
 
     let mut buf = [0; NODE_SIZE];
 

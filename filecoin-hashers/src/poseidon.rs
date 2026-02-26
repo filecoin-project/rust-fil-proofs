@@ -89,7 +89,7 @@ impl Ord for PoseidonDomain {
 impl PartialOrd for PoseidonDomain {
     #[inline(always)]
     fn partial_cmp(&self, other: &PoseidonDomain) -> Option<Ordering> {
-        Some((self.0).cmp(&other.0))
+        Some(self.cmp(other))
     }
 }
 
