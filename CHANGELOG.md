@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://book.async.rs/overview
 ## [19.1.0] - 2026-03-06
 
 - Update Rust toolchain to `1.93.1`. This effectively raises MSRV to `1.89.0`.  [#1796](https://github.com/filecoin-project/rust-fil-proofs/pull/1796)
+- Update `bellperson` dependency from `0.26.0` to `0.27.0`. [#1796](https://github.com/filecoin-project/rust-fil-proofs/pull/1796)
 
 ## [19.0.1] - 2025-09-05
 
