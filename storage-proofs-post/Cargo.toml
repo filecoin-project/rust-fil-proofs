@@ -1,6 +1,6 @@
 [package]
 name = "storage-proofs-post"
-version = "19.0.1"
+version = "19.1.0"
 authors = ["dignifiedquire <me@dignifiedquire.com>"]
 license = "MIT OR Apache-2.0"
 description = "Proofs of Space Time"
