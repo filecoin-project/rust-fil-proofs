@@ -29,8 +29,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes libhwloc-dev ocl-icd-opencl-dev
-      - name: Install cargo clippy
-        run: rustup component add clippy
       - name: Run cargo clippy
         run: cargo clippy --all-targets --workspace -- -D warnings
 
@@ -39,8 +37,6 @@ jobs:
     name: Checking fmt
     steps:
       - uses: actions/checkout@v4
-      - name: Install cargo fmt
-        run: rustup component add rustfmt
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
 
