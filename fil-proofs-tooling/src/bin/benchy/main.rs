@@ -15,6 +15,7 @@ mod porep;
 mod window_post;
 mod window_post_fake;
 mod winning_post;
+mod zigzag;
 
 const API_FEATURES: [&str; 2] = ["synthetic-porep", "non-interactive-porep"];
 
@@ -261,6 +262,30 @@ fn main() -> Result<()> {
                 .takes_value(true),
         );
 
+    let zigzag_cmd = Command::new("zigzag")
+        .about("Benchmark ZigZag PoRep (replication vs. fast extraction)")
+        .arg(
+            Arg::new("size")
+                .long("size")
+                .required(true)
+                .help("The data size (e.g. 2KiB)")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new("prove")
+                .long("prove")
+                .required(false)
+                .help("Also generate and verify a Groth16 proof (slow; generates params)")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::new("api_version")
+                .long("api-version")
+                .help("The api_version to use (default: 1.2.0)")
+                .default_value("1.2.0")
+                .takes_value(true),
+        );
+
     let merkleproof_cmd = Command::new("merkleproofs")
         .about("Benchmark merkle proof generation")
         .arg(
@@ -295,6 +320,7 @@ fn main() -> Result<()> {
         .subcommand(winning_post_cmd)
         .subcommand(hash_cmd)
         .subcommand(porep_cmd)
+        .subcommand(zigzag_cmd)
         .subcommand(merkleproof_cmd)
         .get_matches();
 
@@ -374,6 +400,12 @@ fn main() -> Result<()> {
         }
         Some(("hash-constraints", _m)) => {
             hash_fns::run()?;
+        }
+        Some(("zigzag", m)) => {
+            let sector_size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;
+            let api_version = ApiVersion::from_str(&m.value_of_t::<String>("api_version")?)?;
+            let prove = m.is_present("prove");
+            zigzag::run(sector_size, api_version, prove)?;
         }
         Some(("merkleproofs", m)) => {
             let size = Byte::from_str(m.value_of_t::<String>("size")?)?.get_bytes() as usize;

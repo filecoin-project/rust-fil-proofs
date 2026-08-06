@@ -6,10 +6,12 @@ use std::time::Duration;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
 use filecoin_proofs::{
     constants::{
-        DefaultPieceHasher, SUPPORTED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
+        DefaultPieceHasher, ZigZagTree, SUPPORTED_SECTOR_SIZES, WINDOW_POST_CHALLENGE_COUNT,
         WINDOW_POST_SECTOR_COUNT, WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
     },
-    parameters::{public_params, window_post_public_params, winning_post_public_params},
+    parameters::{
+        public_params, window_post_public_params, winning_post_public_params, zigzag_public_params,
+    },
     types::{PoRepConfig, PoStConfig, SectorSize},
     with_shape, PoStType,
 };
@@ -22,6 +24,8 @@ use storage_proofs_core::{
     parameter_cache::CacheableParameters,
 };
 use storage_proofs_porep::stacked::{StackedCircuit, StackedCompound, StackedDrg};
+use storage_proofs_porep::zigzag::{circuit::ZigZagCompound, ZigZagDrgPoRep};
+// DefaultPieceHasher is the Sha256 data-tree hasher for ZigZag CommD.
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 use storage_proofs_update::constants::TreeRHasher;
 use storage_proofs_update::{
@@ -55,6 +59,38 @@ fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig
     .expect("failed to get groth params");
 
     let _ = StackedCompound::<Tree, DefaultPieceHasher>::get_verifying_key(
+        Some(&mut OsRng),
+        circuit,
+        &public_params,
+    )
+    .expect("failed to get verifying key");
+}
+
+fn cache_zigzag_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) {
+    info!("generating ZigZag PoRep groth params");
+
+    let public_params = zigzag_public_params::<Tree>(&porep_config)
+        .expect("failed to get zigzag public params from config");
+
+    let circuit = <ZigZagCompound<Tree, DefaultPieceHasher> as CompoundProof<
+        ZigZagDrgPoRep<Tree, DefaultPieceHasher>,
+        _,
+    >>::blank_circuit(&public_params);
+
+    let _ = ZigZagCompound::<Tree, DefaultPieceHasher>::get_param_metadata(
+        circuit.clone(),
+        &public_params,
+    )
+    .expect("failed to get metadata");
+
+    let _ = ZigZagCompound::<Tree, DefaultPieceHasher>::get_groth_params(
+        Some(&mut OsRng),
+        circuit.clone(),
+        &public_params,
+    )
+    .expect("failed to get groth params");
+
+    let _ = ZigZagCompound::<Tree, DefaultPieceHasher>::get_verifying_key(
         Some(&mut OsRng),
         circuit,
         &public_params,
@@ -146,7 +182,7 @@ fn cache_empty_sector_update_params<Tree: 'static + MerkleTreeTrait<Hasher = Tre
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "paramcache",
-    about = "generates and caches SDR PoRep, Winning-PoSt, Window-PoSt, and EmptySectorUpdate groth params"
+    about = "generates and caches SDR PoRep, ZigZag PoRep, Winning-PoSt, Window-PoSt, and EmptySectorUpdate groth params"
 )]
 struct Opt {
     #[structopt(long, group = "onlyonecache", help = "Only cache PoSt groth params.")]
@@ -157,6 +193,17 @@ struct Opt {
         help = "Only cache EmptySectorUpdate groth params."
     )]
     only_sector_update: bool,
+    #[structopt(
+        long,
+        group = "onlyonecache",
+        help = "Only cache ZigZag PoRep groth params."
+    )]
+    only_zigzag: bool,
+    #[structopt(
+        long,
+        help = "Also cache ZigZag PoRep groth params (in addition to SDR PoRep and PoSt)."
+    )]
+    zigzag: bool,
     #[structopt(
         short = "z",
         long,
@@ -219,6 +266,12 @@ fn generate_params_empty_sector_update(sector_size: u64, api_version: ApiVersion
         cache_empty_sector_update_params,
         PoRepConfig::new_groth16(sector_size, [0; 32], api_version)
     );
+}
+
+fn generate_params_zigzag(sector_size: u64, api_version: ApiVersion) {
+    // ZigZag always uses a binary Poseidon tree, so it is generated for the fixed `ZigZagTree`
+    // shape rather than dispatching on sector size via `with_shape!`.
+    cache_zigzag_params::<ZigZagTree>(PoRepConfig::new_groth16(sector_size, [0; 32], api_version));
 }
 
 pub fn main() {
@@ -288,12 +341,18 @@ pub fn main() {
 
         if opts.only_sector_update {
             generate_params_empty_sector_update(sector_size, api_version);
+        } else if opts.only_zigzag {
+            generate_params_zigzag(sector_size, api_version);
         } else {
             generate_params_post(sector_size, api_version);
 
             if !opts.only_post {
                 generate_params_porep(sector_size, api_version);
                 generate_params_empty_sector_update(sector_size, api_version);
+
+                if opts.zigzag {
+                    generate_params_zigzag(sector_size, api_version);
+                }
             }
         }
 

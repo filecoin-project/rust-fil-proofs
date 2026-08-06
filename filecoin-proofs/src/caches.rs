@@ -12,6 +12,8 @@ use storage_proofs_core::{
     compound_proof::CompoundProof, merkle::MerkleTreeTrait, parameter_cache::Bls12GrothParams,
 };
 use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
+use storage_proofs_porep::zigzag::{circuit::ZigZagCompound, ZigZagDrgPoRep};
+// DefaultPieceHasher is the Sha256 data-tree hasher for ZigZag CommD.
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
 use storage_proofs_update::{
     circuit::EmptySectorUpdateCircuit, compound::EmptySectorUpdateCompound, constants::TreeRHasher,
@@ -20,7 +22,9 @@ use storage_proofs_update::{
 
 use crate::{
     constants::{DefaultPieceHasher, SUPPORTED_SECTOR_SIZES},
-    parameters::{public_params, window_post_public_params, winning_post_public_params},
+    parameters::{
+        public_params, window_post_public_params, winning_post_public_params, zigzag_public_params,
+    },
     types::{PoRepConfig, PoStConfig, PoStType},
 };
 
@@ -214,6 +218,27 @@ pub(crate) fn get_stacked_params<Tree: 'static + MerkleTreeTrait>(
     )
 }
 
+pub(crate) fn get_zigzag_params<Tree: 'static + MerkleTreeTrait>(
+    porep_config: &PoRepConfig,
+) -> Result<Arc<Bls12GrothParams>> {
+    let public_params = zigzag_public_params::<Tree>(porep_config)?;
+
+    let parameters_generator = || {
+        <ZigZagCompound<Tree, DefaultPieceHasher> as CompoundProof<
+            ZigZagDrgPoRep<Tree, DefaultPieceHasher>,
+            _,
+        >>::groth_params::<OsRng>(None, &public_params)
+    };
+
+    lookup_groth_params(
+        format!(
+            "ZIGZAG[{}]",
+            usize::from(porep_config.padded_bytes_amount())
+        ),
+        parameters_generator,
+    )
+}
+
 pub(crate) fn get_post_params<Tree: 'static + MerkleTreeTrait>(
     post_config: &PoStConfig,
 ) -> Result<Arc<Bls12GrothParams>> {
@@ -297,6 +322,28 @@ pub(crate) fn get_stacked_verifying_key<Tree: 'static + MerkleTreeTrait>(
     lookup_verifying_key(
         format!(
             "STACKED[{}]",
+            usize::from(porep_config.padded_bytes_amount())
+        ),
+        vk_generator,
+    )
+}
+
+pub(crate) fn get_zigzag_verifying_key<Tree: 'static + MerkleTreeTrait>(
+    porep_config: &PoRepConfig,
+) -> Result<Arc<Bls12PreparedVerifyingKey>> {
+    let public_params = zigzag_public_params::<Tree>(porep_config)?;
+
+    let vk_generator = || {
+        let vk = <ZigZagCompound<Tree, DefaultPieceHasher> as CompoundProof<
+            ZigZagDrgPoRep<Tree, DefaultPieceHasher>,
+            _,
+        >>::verifying_key::<OsRng>(None, &public_params)?;
+        Ok(prepare_verifying_key(&vk))
+    };
+
+    lookup_verifying_key(
+        format!(
+            "ZIGZAG[{}]",
             usize::from(porep_config.padded_bytes_amount())
         ),
         vk_generator,

@@ -4,6 +4,7 @@
 #![warn(clippy::unnecessary_wraps)]
 
 pub mod stacked;
+pub mod zigzag;
 
 mod encode;
 
