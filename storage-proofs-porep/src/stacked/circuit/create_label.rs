@@ -76,12 +76,12 @@ mod tests {
     use blstrs::Scalar as Fr;
     use ff::Field;
     use filecoin_hashers::sha256::Sha256Hasher;
-    use fr32::{bytes_into_fr, fr_into_bytes};
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
     use storage_proofs_core::{
         api_version::ApiVersion,
         drgraph::{Graph, BASE_DEGREE},
+        fr32::{bytes_into_fr, fr_into_bytes},
         util::{bytes_into_boolean_vec_be, data_at_node, NODE_SIZE},
         TEST_SEED,
     };

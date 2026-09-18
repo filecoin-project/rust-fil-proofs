@@ -9,22 +9,15 @@ repository = "https://github.com/filecoin-project/rust-fil-proofs"
 
 [dependencies]
 # Sorted alphabetically
-anyhow.workspace = true
-blstrs.workspace = true
 byte-slice-cast.workspace = true
-byteorder.workspace = true
-ff.workspace = true
-thiserror.workspace = true
 
 [dev-dependencies]
 # Sorted alphabetically
 bitvec = "0.17"
+blstrs.workspace = true
 criterion.workspace = true
 itertools.workspace = true
+ff.workspace = true
 pretty_assertions.workspace = true
 rand.workspace = true
 rand_xorshift.workspace = true
-
-[[bench]]
-name = "fr"
-harness = false

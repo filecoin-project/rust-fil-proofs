@@ -9,7 +9,6 @@ use anyhow::{ensure, Context, Error};
 use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{Domain, HashFunction, Hasher};
-use fr32::{bytes_into_fr, fr_into_bytes_slice};
 use generic_array::typenum::Unsigned;
 use log::{info, trace};
 use memmap2::{Mmap, MmapMut, MmapOptions};
@@ -26,6 +25,7 @@ use serde::{Deserialize, Serialize};
 use storage_proofs_core::{
     data::Data,
     error::Result,
+    fr32::{bytes_into_fr, fr_into_bytes_slice},
     merkle::{
         create_base_merkle_tree, create_lc_tree, get_base_tree_count, split_config_and_replica,
         BinaryMerkleTree, LCTree, MerkleProof, MerkleProofTrait, MerkleTreeTrait,
