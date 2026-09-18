@@ -8,7 +8,6 @@ use bellperson::groth16;
 use blstrs::Scalar as Fr;
 use ff::PrimeField;
 use filecoin_hashers::{Domain, Hasher};
-use fr32::bytes_into_fr;
 use generic_array::typenum::Unsigned;
 use log::{info, trace};
 use merkletree::merkle::get_merkle_tree_len;
@@ -18,6 +17,7 @@ use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     api_version::ApiVersion,
     compound_proof::{self, CompoundProof},
+    fr32::bytes_into_fr,
     merkle::{get_base_tree_count, MerkleTreeTrait},
     multi_proof::MultiProof,
     proof::ProofScheme,

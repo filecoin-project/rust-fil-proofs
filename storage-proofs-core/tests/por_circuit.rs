@@ -13,7 +13,6 @@ use filecoin_hashers::{
     sha256::Sha256Hasher,
     Domain, Hasher, PoseidonArity,
 };
-use fr32::{bytes_into_fr, fr_into_bytes};
 use generic_array::typenum::{Unsigned, U0, U2, U4, U8};
 use merkletree::store::{StoreConfig, VecStore};
 use pretty_assertions::assert_eq;
@@ -21,6 +20,7 @@ use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
 use storage_proofs_core::{
     compound_proof::CompoundProof,
+    fr32::{bytes_into_fr, fr_into_bytes},
     gadgets::por::{
         challenge_into_auth_path_bits, por_no_challenge_input, PoRCircuit, PoRCompound,
     },

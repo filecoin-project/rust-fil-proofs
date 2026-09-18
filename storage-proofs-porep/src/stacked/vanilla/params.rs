@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use filecoin_hashers::{Domain, Hasher};
-use fr32::bytes_into_fr_repr_safe;
 use generic_array::typenum::{Unsigned, U2};
 use log::trace;
 use merkletree::{
@@ -19,6 +18,7 @@ use storage_proofs_core::{
     api_version::{ApiFeature, ApiVersion},
     drgraph::{Graph, BASE_DEGREE},
     error::Result,
+    fr32::bytes_into_fr_repr_safe,
     merkle::{
         create_disk_tree, create_lc_tree, get_base_tree_count, split_config,
         split_config_and_replica, BinaryMerkleTree, DiskTree, LCTree, MerkleProof,

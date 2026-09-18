@@ -834,13 +834,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use std::cmp::min;
         use std::sync::{mpsc::sync_channel as channel, RwLock};
 
-        use fr32::fr_into_bytes;
         use generic_array::GenericArray;
         use log::warn;
         use neptune::{
             batch_hasher::Batcher,
             column_tree_builder::{ColumnTreeBuilder, ColumnTreeBuilderTrait},
         };
+        use storage_proofs_core::fr32::fr_into_bytes;
 
         info!("generating tree c using the GPU");
         // Build the tree for CommC
@@ -883,7 +883,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
                             );
 
                             let columns: Vec<GenericArray<Fr, ColumnArity>> = {
-                                use fr32::bytes_into_fr;
+                                use storage_proofs_core::fr32::bytes_into_fr;
 
                                 // Allocate layer data array and insert a placeholder for each layer.
                                 let mut layer_data: Vec<Vec<u8>> =
@@ -1185,7 +1185,7 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
     ) -> Result<TreeRElementData<Tree>> {
         if SETTINGS.use_gpu_tree_builder::<Tree>() {
             use ff::PrimeField;
-            use fr32::bytes_into_fr;
+            use storage_proofs_core::fr32::bytes_into_fr;
 
             use crate::encode::encode_fr;
 
@@ -1355,13 +1355,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use std::io::Write;
         use std::sync::mpsc::sync_channel as channel;
 
-        use fr32::fr_into_bytes;
         use log::warn;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
             batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
+        use storage_proofs_core::fr32::fr_into_bytes;
 
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
@@ -1828,13 +1828,13 @@ impl<'a, Tree: 'static + MerkleTreeTrait, G: 'static + Hasher> StackedDrg<'a, Tr
         use std::{fs::OpenOptions, io::Write};
 
         use ff::Field;
-        use fr32::fr_into_bytes;
         use log::warn;
         use merkletree::merkle::{get_merkle_tree_cache_size, get_merkle_tree_leafs};
         use neptune::{
             batch_hasher::Batcher,
             tree_builder::{TreeBuilder, TreeBuilderTrait},
         };
+        use storage_proofs_core::fr32::fr_into_bytes;
 
         let (configs, replica_config) = split_config_and_replica(
             tree_r_last_config.clone(),
