@@ -1263,18 +1263,15 @@ dependencies = [
 name = "fr32"
 version = "12.1.0"
 dependencies = [
- "anyhow",
  "bitvec 0.17.4",
  "blstrs",
  "byte-slice-cast",
- "byteorder",
  "criterion",
  "ff",
  "itertools 0.13.0",
  "pretty_assertions",
  "rand",
  "rand_xorshift",
- "thiserror 2.0.12",
 ]
 
 [[package]]

@@ -189,12 +189,11 @@ mod tests {
     use blstrs::Scalar as Fr;
     use ff::Field;
     use filecoin_hashers::{sha256::Sha256Function, HashFunction};
-    use fr32::fr_into_bytes;
     use merkletree::hash::Algorithm;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
-    use crate::TEST_SEED;
+    use crate::{fr32::fr_into_bytes, TEST_SEED};
 
     #[test]
     fn test_bytes_into_boolean_vec() {

@@ -35,7 +35,6 @@ use filecoin_proofs::{
     SECTOR_SIZE_4_KIB, WINDOW_POST_CHALLENGE_COUNT, WINDOW_POST_SECTOR_COUNT,
     WINNING_POST_CHALLENGE_COUNT, WINNING_POST_SECTOR_COUNT,
 };
-use fr32::bytes_into_fr;
 use log::{info, trace};
 use memmap2::MmapOptions;
 use merkletree::store::StoreConfig;
@@ -45,6 +44,7 @@ use sha2::{Digest, Sha256};
 use storage_proofs_core::{
     api_version::{ApiFeature, ApiVersion},
     cache_key::CacheKey,
+    fr32::bytes_into_fr,
     is_legacy_porep_id,
     merkle::get_base_tree_count,
     sector::SectorId,

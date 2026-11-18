@@ -2,11 +2,11 @@ use std::io::Read;
 
 use anyhow::{ensure, Context};
 use filecoin_hashers::{Domain, Hasher};
-use fr32::Fr32Ary;
 use merkletree::merkle::next_pow2;
 
 use crate::{
     error::{Error, Result},
+    fr32::Fr32Ary,
     merkle::BinaryMerkleTree,
     util::NODE_SIZE,
 };

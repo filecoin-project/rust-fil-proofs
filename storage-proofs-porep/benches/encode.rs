@@ -2,9 +2,8 @@ use blstrs::Scalar as Fr;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use ff::Field;
 use filecoin_hashers::{sha256::Sha256Hasher, Domain, Hasher};
-use fr32::fr_into_bytes;
 use rand::thread_rng;
-use storage_proofs_core::api_version::ApiVersion;
+use storage_proofs_core::{api_version::ApiVersion, fr32::fr_into_bytes};
 use storage_proofs_porep::stacked::{
     create_label::single::{create_label, create_label_exp},
     StackedBucketGraph,

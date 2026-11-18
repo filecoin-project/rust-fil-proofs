@@ -4,7 +4,6 @@ use std::marker::PhantomData;
 
 use anyhow::ensure;
 use filecoin_hashers::{Hasher, PoseidonArity};
-use fr32::bytes_into_fr_repr_safe;
 use generic_array::typenum::Unsigned;
 use merkletree::merkle::get_merkle_tree_row_count;
 use rand::{Rng, SeedableRng};
@@ -15,6 +14,7 @@ use crate::{
     api_version::ApiVersion,
     crypto::{derive_porep_domain_seed, DRSAMPLE_DST},
     error::Result,
+    fr32::bytes_into_fr_repr_safe,
     parameter_cache::ParameterSetMetadata,
     util::{data_at_node_offset, NODE_SIZE},
     PoRepID,
