@@ -1,6 +1,8 @@
 use anyhow::{ensure, Result};
 use storage_proofs_core::{api_version::ApiFeature, proof::ProofScheme};
 use storage_proofs_porep::stacked::{self, Challenges, StackedDrg};
+use storage_proofs_porep::zigzag::{self, LayerChallenges, ZigZagDrgPoRep};
+// DefaultPieceHasher is used as the Sha256 data-tree hasher for ZigZag CommD.
 use storage_proofs_post::fallback::{self, FallbackPoSt};
 
 use crate::{
@@ -101,6 +103,55 @@ pub fn setup_params(porep_config: &PoRepConfig) -> Result<stacked::SetupParams> 
         num_layers,
         api_version: porep_config.api_version,
         api_features: porep_config.api_features.clone(),
+    })
+}
+
+/// ZigZag layered PoRep public parameters for the given porep config.
+pub fn zigzag_public_params<Tree: 'static + MerkleTreeTrait>(
+    porep_config: &PoRepConfig,
+) -> Result<zigzag::PublicParams<Tree>> {
+    ZigZagDrgPoRep::<Tree, DefaultPieceHasher>::setup(&zigzag_setup_params(porep_config)?)
+}
+
+/// ZigZag layered PoRep setup parameters, derived from the porep config.
+///
+/// ZigZag uses the same layer count and per-partition challenge budget as Stacked (from `LAYERS`
+/// and `minimum_challenges`), but expresses challenges per-layer via `LayerChallenges` (fixed count
+/// on every layer) rather than Stacked's `Challenges` enum.
+pub fn zigzag_setup_params(porep_config: &PoRepConfig) -> Result<zigzag::SetupParams> {
+    let sector_bytes = porep_config.padded_bytes_amount();
+
+    let num_layers = *LAYERS
+        .read()
+        .expect("LAYERS poisoned")
+        .get(&u64::from(sector_bytes))
+        .expect("unknown sector size");
+
+    let sector_bytes = u64::from(sector_bytes);
+    ensure!(
+        sector_bytes % 32 == 0,
+        "sector_bytes ({}) must be a multiple of 32",
+        sector_bytes,
+    );
+
+    let challenges_per_layer = div_ceil(
+        porep_config.minimum_challenges(),
+        usize::from(porep_config.partitions),
+    );
+    ensure!(
+        challenges_per_layer <= usize::from(crate::constants::ZIGZAG_MAX_CHALLENGES_PER_PARTITION),
+        "challenges per layer ({}) exceeds the ZigZag circuit maximum ({})",
+        challenges_per_layer,
+        crate::constants::ZIGZAG_MAX_CHALLENGES_PER_PARTITION,
+    );
+
+    Ok(zigzag::SetupParams {
+        nodes: (sector_bytes / 32) as usize,
+        degree: DRG_DEGREE,
+        expansion_degree: EXP_DEGREE,
+        porep_id: porep_config.porep_id,
+        api_version: porep_config.api_version,
+        layer_challenges: LayerChallenges::new_fixed(num_layers, challenges_per_layer),
     })
 }
 

@@ -39,6 +39,7 @@ mod update;
 mod util;
 mod window_post;
 mod winning_post;
+mod zigzag;
 
 pub use fake_seal::*;
 pub use post_util::*;
@@ -47,6 +48,7 @@ pub use update::*;
 pub use util::*;
 pub use window_post::*;
 pub use winning_post::*;
+pub use zigzag::*;
 
 pub use storage_proofs_update::constants::{partition_count, TreeRHasher};
 
