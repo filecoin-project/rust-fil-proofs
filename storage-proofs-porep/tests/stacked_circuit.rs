@@ -5,7 +5,6 @@ use bellperson::{
 use blstrs::Scalar as Fr;
 use ff::Field;
 use filecoin_hashers::{poseidon::PoseidonHasher, sha256::Sha256Hasher, Hasher};
-use fr32::fr_into_bytes;
 use generic_array::typenum::{U0, U2, U4, U8};
 use rand::{Rng, SeedableRng};
 use rand_xorshift::XorShiftRng;
@@ -13,6 +12,7 @@ use storage_proofs_core::{
     api_version::ApiVersion,
     compound_proof::CompoundProof,
     drgraph::BASE_DEGREE,
+    fr32::fr_into_bytes,
     merkle::{get_base_tree_count, DiskTree, MerkleTreeTrait},
     proof::ProofScheme,
     test_helper::setup_replica,

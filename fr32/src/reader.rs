@@ -193,11 +193,11 @@ mod tests {
     use std::io::Cursor;
 
     use bitvec::{order::Lsb0 as LittleEndian, vec::BitVec};
+    use blstrs::Scalar as Fr;
+    use ff::PrimeField;
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
     use rand::random;
-
-    use crate::bytes_into_fr;
 
     const DATA_BITS: u64 = 254;
     const TARGET_BITS: u64 = 256;
@@ -355,9 +355,11 @@ mod tests {
     }
 
     fn validate_fr32(bytes: &[u8]) {
+        assert_eq!(bytes.len() % 32, 0, "slice does not contain full Frs");
         let chunks = (bytes.len() as f64 / 32_f64).ceil() as usize;
-        for (i, chunk) in bytes.chunks(32).enumerate() {
-            let _ = bytes_into_fr(chunk).unwrap_or_else(|_| {
+        // Due to the assertion above, there's not remainder.
+        for (i, chunk) in bytes.as_chunks::<32>().0.iter().enumerate() {
+            let _ = Fr::from_repr_vartime(*chunk).unwrap_or_else(|| {
                 panic!(
                     "chunk {}/{} cannot be converted to valid Fr: {:?}",
                     i + 1,

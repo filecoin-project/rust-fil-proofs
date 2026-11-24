@@ -4,11 +4,11 @@ use anyhow::{ensure, Context, Result};
 use bellperson::groth16::{self, Proof};
 use blstrs::{Bls12, Scalar as Fr};
 use filecoin_hashers::{Domain, Hasher};
-use fr32::{bytes_into_fr, fr_into_bytes};
 use log::trace;
 use merkletree::merkle::{get_merkle_tree_leafs, get_merkle_tree_len};
 use storage_proofs_core::{
     cache_key::CacheKey,
+    fr32::{bytes_into_fr, fr_into_bytes},
     merkle::{get_base_tree_count, MerkleTreeTrait},
     parameter_cache::SRS_MAX_PROOFS_TO_AGGREGATE,
 };

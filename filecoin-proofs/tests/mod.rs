@@ -6,10 +6,9 @@ use filecoin_proofs::{
     as_safe_commitment, verify_seal, DefaultOctLCTree, DefaultTreeDomain, PoRepConfig,
     SECTOR_SIZE_2_KIB, TEST_SEED,
 };
-use fr32::bytes_into_fr;
 use rand::SeedableRng;
 use rand_xorshift::XorShiftRng;
-use storage_proofs_core::{api_version::ApiVersion, sector::SectorId};
+use storage_proofs_core::{api_version::ApiVersion, fr32::bytes_into_fr, sector::SectorId};
 
 #[test]
 fn test_verify_seal_fr32_validation() {
