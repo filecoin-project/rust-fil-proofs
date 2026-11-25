@@ -1099,7 +1099,6 @@ dependencies = [
  "rand 0.8.8",
  "raw-cpuid",
  "rayon",
- "regex",
  "serde",
  "serde_json",
  "storage-proofs-core",

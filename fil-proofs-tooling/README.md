@@ -3,7 +3,6 @@
 This crate contains the following binaries
 
 - `benchy` - Can be used to capture Stacked performance metrics
-- `micro` - Runs the micro benchmarks written with criterion, parses the output.
 
 ## `benchy`
 
@@ -184,16 +183,4 @@ Run benchy in "prodbench" mode with custom input and detailed metrics.
     }
   }
 }
-```
-
-
-## `micro`
-
-All arguments passed to `micro` will be passed to `cargo bench --all <your arguments> -- --verbose --color never`.
-Except for the following
-
-### Example
-
-```sh
-> cargo run --bin micro -- --bench blake2s hash-blake2s
 ```
