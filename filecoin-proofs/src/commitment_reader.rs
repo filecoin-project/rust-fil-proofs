@@ -35,7 +35,7 @@ impl<R: Read> CommitmentReader<R> {
             return;
         }
 
-        for chunk in self.buffer[..self.buffer_pos].chunks_exact(64) {
+        for chunk in self.buffer[..self.buffer_pos].as_chunks::<64>().0 {
             // WARNING: keep in sync with DefaultPieceHasher and its .node impl
             let hash = <DefaultPieceHasher as Hasher>::Function::hash(chunk);
             self.current_tree.push(hash);

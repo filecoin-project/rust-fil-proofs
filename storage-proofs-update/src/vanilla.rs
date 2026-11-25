@@ -663,7 +663,7 @@ fn mmap_write(path: &Path) -> Result<MmapMut, Error> {
         .read(true)
         .write(true)
         .open(path)
-        .with_context(|| format!("could not open path={:?}", &path))?;
+        .with_context(|| format!("could not open path={:?}", path))?;
     unsafe {
         MmapOptions::new()
             .map_mut(&f_data)
@@ -672,7 +672,6 @@ fn mmap_write(path: &Path) -> Result<MmapMut, Error> {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::from_iter_instead_of_collect)]
 impl<TreeR> EmptySectorUpdate<TreeR>
 where
     TreeR: 'static + MerkleTreeTrait<Hasher = TreeRHasher>,

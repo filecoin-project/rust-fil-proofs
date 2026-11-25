@@ -148,7 +148,7 @@ fn build_tree_r_last<Tree: MerkleTreeTrait>(
             config.rows_to_discard,
             offset,
             (offset + (sector_size / tree_count)),
-            &store_path
+            store_path
         );
         let tree = SectorShapeBase::from_byte_slice_with_config(slice, config.clone())?;
         base_tree_roots.push(tree.root());

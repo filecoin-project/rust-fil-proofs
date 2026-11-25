@@ -48,7 +48,7 @@ pub use util::*;
 pub use window_post::*;
 pub use winning_post::*;
 
-pub use storage_proofs_update::constants::{partition_count, TreeRHasher};
+pub use storage_proofs_update::constants::partition_count;
 
 pub fn clear_cache(cache_dir: &Path) -> Result<()> {
     info!("clear_cache:start");
@@ -518,19 +518,19 @@ fn verify_store(config: &StoreConfig, arity: usize, required_configs: usize) -> 
             let data_path = StoreConfig::data_path(&config.path, &config.id);
             trace!(
                 "verify_store: {:?} has length {} bytes",
-                &data_path,
+                data_path,
                 std::fs::metadata(&data_path)?.len()
             );
             ensure!(
                 DiskStore::<DefaultPieceDomain>::is_consistent(store_len, arity, config,)?,
                 "Store is inconsistent: {:?}",
-                &data_path
+                data_path
             );
         }
     } else {
         trace!(
             "verify_store: {:?} has length {}",
-            &store_path,
+            store_path,
             std::fs::metadata(&store_path)?.len()
         );
         ensure!(
@@ -593,7 +593,7 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
             let data_path = StoreConfig::data_path(&config.path, &config.id);
             trace!(
                 "verify_store: {:?} has length {}",
-                &data_path,
+                data_path,
                 std::fs::metadata(&data_path)?.len()
             );
             ensure!(
@@ -603,13 +603,13 @@ fn verify_level_cache_store<Tree: MerkleTreeTrait>(config: &StoreConfig) -> Resu
                     config,
                 )?,
                 "Store is inconsistent: {:?}",
-                &data_path
+                data_path
             );
         }
     } else {
         trace!(
             "verify_store: {:?} has length {}",
-            &store_path,
+            store_path,
             std::fs::metadata(&store_path)?.len()
         );
         ensure!(

@@ -155,7 +155,7 @@ impl Drop for LockedFile {
     fn drop(&mut self) {
         self.0
             .unlock()
-            .unwrap_or_else(|e| panic!("{}: failed to {:?} unlock file safely", e, &self.0));
+            .unwrap_or_else(|e| panic!("{}: failed to {:?} unlock file safely", e, self.0));
     }
 }
 
@@ -283,13 +283,13 @@ where
 
         let generate = || -> Result<_> {
             if let Some(rng) = rng {
-                info!("Actually generating groth params. (id: {})", &id);
+                info!("Actually generating groth params. (id: {})", id);
                 let start = Instant::now();
                 let parameters = groth16::generate_random_parameters::<Bls12, _, _>(circuit, rng)?;
                 let generation_time = start.elapsed();
                 info!(
                     "groth_parameter_generation_time: {:?} (id: {})",
-                    generation_time, &id
+                    generation_time, id
                 );
                 Ok(parameters)
             } else {
@@ -376,7 +376,7 @@ where
         #[cfg(not(feature = "cuda-supraseal"))]
         let generate = || -> Result<groth16::VerifyingKey<Bls12>> {
             let groth_params = Self::get_groth_params(rng, circuit, pub_params)?;
-            info!("Getting verifying key. (id: {})", &id);
+            info!("Getting verifying key. (id: {})", id);
             Ok(groth_params.vk)
         };
         #[cfg(feature = "cuda-supraseal")]

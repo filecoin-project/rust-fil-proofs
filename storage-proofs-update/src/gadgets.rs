@@ -339,7 +339,7 @@ mod tests {
                 let gadget_constraints = constraints_after - constraints_before;
                 assert_eq!(gadget_constraints, constraints_expected);
 
-                for (c, c_generated_bits) in challenges.zip(generated_bits.into_iter()) {
+                for (c, c_generated_bits) in challenges.zip(generated_bits) {
                     assert_eq!(c_generated_bits.len(), rand_challenge_bits);
                     let mut c_circ: u32 = 0;
                     for (i, bit) in c_generated_bits

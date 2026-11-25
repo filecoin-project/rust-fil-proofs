@@ -282,7 +282,7 @@ pub fn main() {
             .file_size(file_size_opts::BINARY)
             .expect("failed to format sector size");
         let message = format!("Generating sector size: {}", human_size);
-        info!("{}", &message);
+        info!("{}", message);
 
         let spinner = ProgressBar::new_spinner();
         spinner.set_message(message);

@@ -277,7 +277,7 @@ fn run_benches(mut args: Vec<String>) -> Result<()> {
     reader.lines().for_each(|line| {
         let line = line.expect("io (stdout) read error");
         if is_verbose {
-            println!("{}", &line);
+            println!("{}", line);
         }
         stdout += &line;
         stdout += "\n";

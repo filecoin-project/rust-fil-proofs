@@ -30,7 +30,7 @@ impl FakeIpfsBin {
             .output()?;
 
         if !output.status.success() {
-            Err(anyhow!("{:?} produced non-zero exit code", &self.bin_path))
+            Err(anyhow!("{:?} produced non-zero exit code", self.bin_path))
         } else {
             Ok(String::from_utf8(output.stdout)?.trim().to_string())
         }

@@ -315,9 +315,9 @@ pub fn create_replicas<Tree: 'static + MerkleTreeTrait>(
 
     for (((sector_id, piece_info), priv_info), pub_info) in sector_ids
         .into_iter()
-        .zip(piece_infos.into_iter())
-        .zip(priv_infos.into_iter())
-        .zip(pub_infos.into_iter())
+        .zip(piece_infos)
+        .zip(priv_infos)
+        .zip(pub_infos)
     {
         out.push((
             sector_id,
