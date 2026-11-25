@@ -1,7 +1,7 @@
 use std::env::consts::ARCH;
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::Serialize;
 use sysinfo::{RefreshKind, System, SystemExt};
 
@@ -29,14 +29,14 @@ impl<T> Metadata<T> {
 #[serde(rename_all = "kebab-case")]
 pub struct GitMetadata {
     hash: String,
-    date: DateTime<Utc>,
+    date: Timestamp,
 }
 
 impl GitMetadata {
     pub fn new() -> Result<Self> {
         // Unwrap is OK as vergen returns a valid timestamp.
         let date = env!("VERGEN_GIT_COMMIT_TIMESTAMP")
-            .parse::<DateTime<Utc>>()
+            .parse::<Timestamp>()
             .expect("VERGEN_GIT_COMMIT_TIMESTAMP error");
         Ok(GitMetadata {
             hash: env!("VERGEN_GIT_SHA").to_string(),

@@ -72,9 +72,7 @@ pub fn colored_with_thread(
     write!(
         writer,
         "{} {} {} {} {} > {}",
-        now.now()
-            .format(time::macros::format_description!("%Y-%m-%dT%H:%M:%S%.3f"))
-            .expect("failed to format time"),
+        now.format("%Y-%m-%dT%H:%M:%S%.3f"),
         process::id(),
         thread::current()
             .name()
