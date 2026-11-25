@@ -4,7 +4,7 @@ use std::io::BufWriter;
 use std::path::Path;
 
 use anyhow::Result;
-use clap::{Arg, Command};
+use clap::{value_parser, Arg, Command};
 use filecoin_hashers::sha256::Sha256Hasher;
 use filecoin_proofs::{
     with_shape, DRG_DEGREE, EXP_DEGREE, SECTOR_SIZE_2_KIB, SECTOR_SIZE_32_GIB, SECTOR_SIZE_512_MIB,
@@ -80,12 +80,14 @@ fn main() -> Result<()> {
             Arg::new("json")
                 .long("json")
                 .help("Creates a new json output file.")
+                .value_parser(value_parser!(bool))
                 .default_value("false"),
         )
         .arg(
             Arg::new("size")
                 .long("size")
                 .help("Generate and/or verify the graph cache files for a single sector size")
+                .value_parser(value_parser!(u64))
                 .default_value("0"),
         )
         .get_matches();
@@ -186,12 +188,8 @@ fn main() -> Result<()> {
         .collect::<Vec<u64>>();
     let mut parent_cache_summary_map: ParentCacheSummaryMap = BTreeMap::new();
 
-    let size = matches
-        .value_of_t::<u64>("size")
-        .expect("failed to get size");
-    let json = matches
-        .value_of_t::<bool>("json")
-        .expect("failed to get json");
+    let size = *matches.get_one::<u64>("size").expect("failed to get size");
+    let json = *matches.get_one::<bool>("json").expect("failed to get json");
 
     if size == 0 {
         println!(

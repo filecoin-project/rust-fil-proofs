@@ -17,6 +17,7 @@ storage-proofs-update.workspace = true
 # Sorted alphabetically
 anyhow.workspace = true
 blake2b_simd.workspace = true
+clap.workspace = true
 dialoguer.workspace = true
 env_proxy = "0.4"
 fil_logger.workspace = true
@@ -31,7 +32,6 @@ pbr = "1.0"
 rand.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "native-tls-vendored"] }
 serde_json.workspace = true
-structopt.workspace = true
 tar = "0.4.46"
 
 [dev-dependencies]

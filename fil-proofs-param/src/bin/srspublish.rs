@@ -6,6 +6,7 @@ use std::path::Path;
 use std::process::{exit, Command};
 
 use anyhow::{ensure, Context, Result};
+use clap::Parser;
 use filecoin_proofs::param::{
     get_digest_for_file_within_cache, get_full_path_for_file_within_cache, has_extension,
 };
@@ -15,7 +16,6 @@ use storage_proofs_core::parameter_cache::{
     parameter_cache_dir, parameter_cache_dir_name, ParameterData, ParameterMap,
     GROTH_PARAMETER_EXT, PARAMETER_METADATA_EXT, SRS_KEY_EXT, VERIFYING_KEY_EXT,
 };
-use structopt::StructOpt;
 
 lazy_static! {
     static ref CLI_ABOUT: String = format!(
@@ -99,19 +99,19 @@ fn write_param_map_to_disk(param_map: &ParameterMap, json_path: &str) -> Result<
     Ok(())
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "srspublish", version = "1.0", about = CLI_ABOUT.as_str())]
+#[derive(Debug, Parser)]
+#[command(name = "srspublish", version = "1.0", about = CLI_ABOUT.as_str())]
 struct Cli {
-    #[structopt(
+    #[arg(
         long = "ipfs-bin",
         value_name = "PATH TO IPFS BINARY",
         default_value = "ipfs",
         help = "Use a specific ipfs binary instead of searching for one in $PATH."
     )]
     ipfs_bin: String,
-    #[structopt(
+    #[arg(
         long = "json",
-        short = "j",
+        short = 'j',
         value_name = "PATH",
         default_value = "srs-inner-product.json",
         help = "The path to write the srs-inner-product.json file."
@@ -124,7 +124,7 @@ pub fn main() {
     env::set_var("RUST_LOG", "srspublish");
     fil_logger::init();
 
-    let cli = Cli::from_args();
+    let cli = Cli::parse();
 
     let cache_dir = match env::var("FIL_PROOFS_PARAMETER_CACHE") {
         Ok(s) => s,

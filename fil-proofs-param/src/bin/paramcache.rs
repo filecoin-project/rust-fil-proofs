@@ -3,6 +3,7 @@ use std::process::exit;
 use std::str::FromStr;
 use std::time::Duration;
 
+use clap::Parser;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
 use filecoin_proofs::{
     constants::{
@@ -28,7 +29,6 @@ use storage_proofs_update::{
     circuit::EmptySectorUpdateCircuit, compound::EmptySectorUpdateCompound, EmptySectorUpdate,
     PublicParams,
 };
-use structopt::StructOpt;
 
 fn cache_porep_params<Tree: 'static + MerkleTreeTrait>(porep_config: PoRepConfig) {
     info!("generating PoRep groth params");
@@ -143,28 +143,30 @@ fn cache_empty_sector_update_params<Tree: 'static + MerkleTreeTrait<Hasher = Tre
     .expect("failed to get verifying key");
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(
+#[derive(Debug, Parser)]
+#[command(
     name = "paramcache",
+    version,
     about = "generates and caches SDR PoRep, Winning-PoSt, Window-PoSt, and EmptySectorUpdate groth params"
 )]
 struct Opt {
-    #[structopt(long, group = "onlyonecache", help = "Only cache PoSt groth params.")]
+    #[arg(long, group = "onlyonecache", help = "Only cache PoSt groth params.")]
     only_post: bool,
-    #[structopt(
+    #[arg(
         long,
         group = "onlyonecache",
         help = "Only cache EmptySectorUpdate groth params."
     )]
     only_sector_update: bool,
-    #[structopt(
-        short = "z",
+    #[arg(
+        short = 'z',
         long,
-        use_delimiter = true,
+        value_delimiter = ',',
+        num_args = 1..,
         help = "A comma-separated list of sector sizes (in number of bytes)."
     )]
     sector_sizes: Vec<u64>,
-    #[structopt(
+    #[arg(
         long = "api-version",
         value_name = "SEMANTIC VERSION",
         default_value = "1.1.0",
@@ -226,7 +228,7 @@ pub fn main() {
     env::set_var("RUST_LOG", "paramcache");
     fil_logger::init();
 
-    let mut opts = Opt::from_args();
+    let mut opts = Opt::parse();
 
     // If no sector-sizes were given provided via. the CLI, display an interactive menu. Otherwise,
     // filter out invalid CLI sector-size arguments.

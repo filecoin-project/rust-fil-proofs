@@ -2,10 +2,10 @@ use std::fs::File;
 use std::io;
 
 use blake2b_simd::State as Blake2b;
-use structopt::StructOpt;
+use clap::Parser;
 
-#[derive(Debug, StructOpt)]
-#[structopt(
+#[derive(Debug, Parser)]
+#[command(
     name = "fakeipfsadd",
     version = "0.1",
     about = "This program is used to simulate the `ipfs add` command while testing. It accepts a \
@@ -14,9 +14,9 @@ use structopt::StructOpt;
 )]
 enum Cli {
     Add {
-        #[structopt(help = "Positional argument for the path to the file to add.")]
+        #[arg(help = "Positional argument for the path to the file to add.")]
         file_path: String,
-        #[structopt(short = "Q", help = "Simulates the -Q argument to `ipfs add`.")]
+        #[arg(short = 'Q', help = "Simulates the -Q argument to `ipfs add`.")]
         _quieter: bool,
     },
 }
@@ -30,7 +30,7 @@ impl Cli {
 }
 
 pub fn main() {
-    let cli = Cli::from_args();
+    let cli = Cli::parse();
 
     let mut src_file = File::open(cli.file_path())
         .unwrap_or_else(|_| panic!("failed to open file: {}", cli.file_path()));
