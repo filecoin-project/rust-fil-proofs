@@ -36,7 +36,6 @@ memmap2.workspace = true
 merkletree.workspace = true
 rand.workspace = true
 rayon.workspace = true
-regex = "1.3.7"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sysinfo = { version = "0.28.4", default-features = false }
