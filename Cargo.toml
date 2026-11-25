@@ -51,7 +51,7 @@ neptune = { version = "11.0.0", features = ["bls", "arity2", "arity4", "arity8",
 num_cpus = "1.10.1"
 pretty_assertions = "1.2.0"
 rand = "0.8"
-rand_xorshift = "0.3.0"
+rand_xorshift = "0.5.0"
 rayon = "1.3.0"
 serde = "1.0"
 serde_json = "1.0"
