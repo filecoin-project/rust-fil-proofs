@@ -16,7 +16,7 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
     - name: Download all Artifacts from proof-params-generate workflow
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         #pattern: proof-params-v28-n-${{ inputs.parameters-json-hash }}-*
         pattern: proof-params-v28-n-${{ hashFiles('filecoin-proofs/parameters.json') }}-*
