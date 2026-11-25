@@ -190,7 +190,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd3291d3e15b3de935a9f58574dafadbe15686e56e1c7850596b14f275cdae73"
 dependencies = [
  "bellpepper-core",
- "bincode",
+ "bincode 1.3.3",
  "blake2s_simd 1.0.5",
  "blstrs",
  "byteorder",
@@ -222,6 +222,12 @@ checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
 dependencies = [
  "serde",
 ]
+
+[[package]]
+name = "bincode"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd6a120d2e16b3e1b4a24bd70f23b12d3e16b81f113364a26935f8db7245452d"
 
 [[package]]
 name = "bit-set"
@@ -1078,7 +1084,7 @@ version = "19.1.0"
 dependencies = [
  "anyhow",
  "bellperson",
- "bincode",
+ "bincode 3.0.0",
  "blake2s_simd 1.0.5",
  "blstrs",
  "byte-unit",
@@ -1169,7 +1175,7 @@ version = "19.1.0"
 dependencies = [
  "anyhow",
  "bellperson",
- "bincode",
+ "bincode 3.0.0",
  "blake2b_simd",
  "blstrs",
  "criterion",
@@ -3021,7 +3027,7 @@ version = "19.1.0"
 dependencies = [
  "anyhow",
  "bellperson",
- "bincode",
+ "bincode 3.0.0",
  "blake2b_simd",
  "blstrs",
  "byte-slice-cast",

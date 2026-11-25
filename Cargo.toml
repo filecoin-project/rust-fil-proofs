@@ -25,7 +25,7 @@ storage-proofs-update = { path = "storage-proofs-update", default-features = fal
 # Sorted alphabetically
 anyhow = "1.0.23"
 bellperson = "0.27.0"
-bincode = "1.1.2"
+bincode = "3.0.0"
 blake2b_simd = "1.0.0"
 blake2s_simd = "1.0.0"
 blstrs = "0.7.0"
