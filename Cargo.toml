@@ -1,4 +1,5 @@
 [workspace]
+resolver = "2"
 members = [
   "fil-proofs-param",
   "fil-proofs-tooling",
