@@ -17,28 +17,27 @@ storage-proofs-update.workspace = true
 # Sorted alphabetically
 anyhow.workspace = true
 blake2b_simd.workspace = true
+clap.workspace = true
 dialoguer.workspace = true
 env_proxy = "0.4"
 fil_logger.workspace = true
 flate2 = { version = "1.0.9", features = ["rust_backend"] }
 gperftools = { workspace = true, optional = true }
 humansize.workspace = true
-indicatif = "0.17"
+indicatif = "0.18"
 itertools.workspace = true
 lazy_static.workspace = true
 log.workspace = true
 pbr = "1.0"
 rand.workspace = true
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "native-tls-vendored"] }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "native-tls-vendored"] }
 serde_json.workspace = true
-structopt.workspace = true
 tar = "0.4.46"
 
 [dev-dependencies]
 # Sorted alphabetically
+rexpect = "0.7.1"
 tempfile.workspace = true
-failure = "0.1.7"
-rexpect = "0.4.0"
 
 [features]
 default = ["opencl"]

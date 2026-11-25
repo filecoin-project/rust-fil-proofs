@@ -3,12 +3,12 @@
 
 use std::collections::HashMap;
 use std::process::{self, Child, Command, Stdio};
-use std::str::{self, FromStr};
+use std::str;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use clap::Arg;
+use clap::{value_parser, Arg, ValueEnum};
 use fil_proofs_tooling::shared::{create_replica, PROVER_ID, RANDOMNESS};
 use filecoin_proofs::constants::{SectorShape8MiB, SECTOR_SIZE_8_MIB};
 use filecoin_proofs::types::{PoStConfig, SectorSize};
@@ -35,25 +35,10 @@ const POST_CONFIG: PoStConfig = PoStConfig {
     api_version: FIXED_API_VERSION,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum Mode {
     Threads,
     Processes,
-}
-
-impl FromStr for Mode {
-    type Err = clap::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "threads" => Ok(Mode::Threads),
-            "processes" => Ok(Mode::Processes),
-            _ => Err(clap::Error::raw(
-                clap::ErrorKind::InvalidValue,
-                format!("unknown mode '{}'", s),
-            )),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -254,43 +239,43 @@ fn main() {
             Arg::new("parallel")
                 .long("parallel")
                 .help("Run multiple proofs in parallel.")
+                .value_parser(value_parser!(u8))
                 .default_value("3"),
         )
         .arg(
             Arg::new("gpu-stealing")
                 .long("gpu-stealing")
                 .help("Force high priority proof on the GPU and let low priority one continue on CPU.")
+                .value_parser(value_parser!(bool))
                 .default_value("true"),
         )
         .arg(
             Arg::new("mode")
               .long("mode")
               .help("Whether to run with threads or processes.")
-              .possible_values(["threads", "processes"])
+              .value_parser(value_parser!(Mode))
               .ignore_case(true)
               .default_value("threads"),
         )
         .get_matches();
 
-    let parallel = matches
-        .value_of_t::<u8>("parallel")
+    let parallel = *matches
+        .get_one::<u8>("parallel")
         .expect("failed to get parallel");
     if parallel == 1 {
         info!("Running high priority proof only")
     } else {
         info!("Running high and low priority proofs in parallel")
     }
-    let gpu_stealing = matches
-        .value_of_t::<bool>("gpu-stealing")
+    let gpu_stealing = *matches
+        .get_one::<bool>("gpu-stealing")
         .expect("failed to get gpu-stealing");
     if gpu_stealing {
         info!("Force low piority proofs to CPU")
     } else {
         info!("Let everyone queue up to run on GPU")
     }
-    let mode = matches
-        .value_of_t::<Mode>("mode")
-        .unwrap_or_else(|e| e.exit());
+    let mode = *matches.get_one::<Mode>("mode").expect("failed to get mode");
     match mode {
         Mode::Threads => info!("Using threads"),
         Mode::Processes => info!("Using processes"),

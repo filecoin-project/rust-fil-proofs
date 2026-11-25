@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
 use anyhow::{ensure, Context, Result};
+use clap::{ArgAction, Parser};
 use dialoguer::{theme::ColorfulTheme, MultiSelect, Select};
 use filecoin_proofs::param::{
     get_digest_for_file_within_cache, get_full_path_for_file_within_cache, has_extension,
@@ -18,7 +19,6 @@ use reqwest::{blocking::Client, header, Proxy, Url};
 use storage_proofs_core::parameter_cache::{
     parameter_cache_dir, parameter_cache_dir_name, ParameterMap, GROTH_PARAMETER_EXT,
 };
-use structopt::StructOpt;
 use tar::Archive;
 
 lazy_static! {
@@ -215,57 +215,56 @@ fn download_file_with_ipget(
     Ok(())
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "paramfetch", version = "1.1", about = CLI_ABOUT.as_str())]
+#[derive(Debug, Parser)]
+#[command(name = "paramfetch", version = "1.1", about = CLI_ABOUT.as_str())]
 struct Cli {
-    #[structopt(
+    #[arg(
         long,
-        short = "j",
+        short = 'j',
         value_name = "PATH TO JSON FILE",
         help = "Use a specific JSON file."
     )]
     json: Option<String>,
-    #[structopt(long, short = "r", help = "Prompt to retry file downloads on failure.")]
+    #[arg(long, short = 'r', help = "Prompt to retry file downloads on failure.")]
     retry: bool,
-    #[structopt(
+    #[arg(
         long,
-        short = "a",
-        conflicts_with = "sector-sizes",
+        short = 'a',
+        conflicts_with = "sector_sizes",
         help = "Download parameters for all sector sizes."
     )]
     all: bool,
-    #[structopt(
+    #[arg(
         long = "sector-sizes",
-        short = "z",
+        short = 'z',
         value_name = "SECTOR SIZES",
-        value_delimiter = ",",
-        require_delimiter = true,
-        multiple = false,
+        value_delimiter = ',',
+        action = ArgAction::Set,
         conflicts_with = "all",
         help = "A comma-separated list of sector sizes (in bytes) for which Groth parameters will \
             be downloaded."
     )]
     sector_sizes: Option<Vec<u64>>,
-    #[structopt(long, short = "v")]
+    #[arg(long, short = 'v')]
     verbose: bool,
-    #[structopt(
+    #[arg(
         long = "ipget-bin",
-        short = "i",
+        short = 'i',
         value_name = "PATH TO IPGET",
-        conflicts_with = "ipget-version",
+        conflicts_with = "ipget_version",
         long_help = "Path to an ipget binary. If this argument is not given, paramfetch with look \
             for ipget in the default location: /var/tmp/ipget-<version>/ipget/ipget. If no binary \
             is found in the default location, paramfetch will download ipget into that location."
     )]
     ipget_bin: Option<String>,
-    #[structopt(
+    #[arg(
         long = "ipget-version",
         value_name = "VERSION",
-        conflicts_with = "ipget-bin",
+        conflicts_with = "ipget_bin",
         help = "Set the version of ipget to use."
     )]
     ipget_version: Option<String>,
-    #[structopt(
+    #[arg(
         long = "ipget-args",
         value_name = "ARGS",
         help = "Specify additional arguments for ipget."
@@ -278,7 +277,7 @@ pub fn main() {
     env::set_var("RUST_LOG", "paramfetch");
     fil_logger::init();
 
-    let cli = Cli::from_args();
+    let cli = Cli::parse();
 
     // Parse parameters.json file.
     let parameter_map: ParameterMap = match cli.json {

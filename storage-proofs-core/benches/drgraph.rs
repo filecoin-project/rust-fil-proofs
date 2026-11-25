@@ -1,4 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
+
+use criterion::{criterion_group, criterion_main, Criterion};
 use filecoin_hashers::poseidon::PoseidonHasher;
 use storage_proofs_core::{
     api_version::ApiVersion,

@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[test]
-fn writes_json_manifest() -> Result<(), failure::Error> {
+fn writes_json_manifest() -> anyhow::Result<()> {
     let filenames = vec!["v10-aaa.vk", "v10-aaa.params"];
 
     let manifest_path = tmp_manifest(None)?;

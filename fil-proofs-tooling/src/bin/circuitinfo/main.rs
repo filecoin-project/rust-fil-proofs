@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use bellperson::{util_cs::bench_cs::BenchCS, Circuit};
 use blstrs::Scalar as Fr;
+use clap::Parser;
 use dialoguer::{theme::ColorfulTheme, MultiSelect};
 use filecoin_proofs::{
     parameters::{public_params, window_post_public_params, winning_post_public_params},
@@ -16,7 +17,6 @@ use storage_proofs_core::{
 };
 use storage_proofs_porep::stacked::{StackedCompound, StackedDrg};
 use storage_proofs_post::fallback::{FallbackPoSt, FallbackPoStCircuit, FallbackPoStCompound};
-use structopt::StructOpt;
 
 struct CircuitInfo {
     constraints: usize,
@@ -77,18 +77,18 @@ fn get_window_post_info<Tree: 'static + MerkleTreeTrait>(post_config: &PoStConfi
     circuit_info(circuit)
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "circuitinfo")]
+#[derive(Debug, Parser)]
+#[command(name = "circuitinfo", version)]
 struct Opt {
-    #[structopt(long)]
+    #[arg(long)]
     winning: bool,
-    #[structopt(long)]
+    #[arg(long)]
     window: bool,
-    #[structopt(long)]
+    #[arg(long)]
     porep: bool,
-    #[structopt(short = "z", long, use_delimiter = true)]
+    #[arg(short = 'z', long, value_delimiter = ',', num_args = 1..)]
     constraints_for_sector_sizes: Vec<u64>,
-    #[structopt(default_value = "1.0.0", long)]
+    #[arg(default_value = "1.0.0", long)]
     api_version: String,
 }
 
@@ -149,7 +149,7 @@ pub fn main() {
     // `RUST_LOG` environment variable also see warngings/progress.
     fil_logger::init();
 
-    let opts = Opt::from_args();
+    let opts = Opt::parse();
 
     // Display interactive menu if no sizes are given
     let sizes: Vec<u64> = if opts.constraints_for_sector_sizes.is_empty() {

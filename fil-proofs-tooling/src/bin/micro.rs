@@ -1,7 +1,7 @@
 use std::io::{self, BufRead};
+use std::process::{Command, Stdio};
 
-use anyhow::{anyhow, Context, Result};
-use commandspec::command;
+use anyhow::{Context, Result};
 use fil_proofs_tooling::metadata::Metadata;
 use regex::Regex;
 use serde::Serialize;
@@ -263,15 +263,12 @@ fn run_benches(mut args: Vec<String>) -> Result<()> {
         false
     };
 
-    let mut cmd = command!(
-        r"
-        cargo bench -p storage-proofs {args} -- --verbose --color never
-    ",
-        args = args
-    )
-    .map_err(|err| anyhow!("{:?}", err))?;
-
-    let process = cmd.stdout(std::process::Stdio::piped()).spawn()?;
+    let process = Command::new("cargo")
+        .args(["bench", "-p", "storage-proofs"])
+        .args(&args)
+        .args(["--", "--verbose", "--color", "never"])
+        .stdout(Stdio::piped())
+        .spawn()?;
 
     let stdout = process.stdout.context("Failed to capture stdout")?;
 

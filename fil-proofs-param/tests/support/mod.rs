@@ -6,7 +6,7 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
-use failure::format_err;
+use anyhow::anyhow;
 use rexpect::{session::PtyReplSession, spawn_bash};
 use storage_proofs_core::parameter_cache::ParameterData;
 use tempfile::tempdir;
@@ -22,7 +22,7 @@ impl FakeIpfsBin {
         }
     }
 
-    pub fn compute_checksum<P: AsRef<Path>>(&self, path: P) -> Result<String, failure::Error> {
+    pub fn compute_checksum<P: AsRef<Path>>(&self, path: P) -> Result<String, anyhow::Error> {
         let output = Command::new(&self.bin_path)
             .arg("add")
             .arg("-Q")
@@ -30,10 +30,7 @@ impl FakeIpfsBin {
             .output()?;
 
         if !output.status.success() {
-            Err(format_err!(
-                "{:?} produced non-zero exit code",
-                &self.bin_path
-            ))
+            Err(anyhow!("{:?} produced non-zero exit code", &self.bin_path))
         } else {
             Ok(String::from_utf8(output.stdout)?.trim().to_string())
         }
@@ -67,7 +64,7 @@ pub fn cargo_bin<S: AsRef<str>>(name: S) -> PathBuf {
 pub fn spawn_bash_with_retries(
     retries: u8,
     timeout: Option<u64>,
-) -> Result<PtyReplSession, rexpect::errors::Error> {
+) -> Result<PtyReplSession, rexpect::error::Error> {
     let result = spawn_bash(timeout);
     if result.is_ok() || retries == 0 {
         result
@@ -86,7 +83,7 @@ pub fn spawn_bash_with_retries(
 /// path.
 pub fn tmp_manifest(
     opt_manifest: Option<BTreeMap<String, ParameterData>>,
-) -> Result<PathBuf, failure::Error> {
+) -> Result<PathBuf, anyhow::Error> {
     let manifest_dir = tempdir()?;
     let mut pbuf = manifest_dir.keep();
     pbuf.push("parameters.json");

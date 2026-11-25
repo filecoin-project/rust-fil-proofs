@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{ensure, Context, Result};
 use bincode::deserialize;
-use clap::{Arg, Command};
+use clap::{value_parser, Arg, Command};
 use filecoin_hashers::Hasher;
 use filecoin_proofs::{
     is_sector_shape_base, is_sector_shape_sub2, is_sector_shape_sub8, is_sector_shape_top2,
@@ -318,21 +318,21 @@ fn main() -> Result<()> {
                 .long("size")
                 .default_value("34359738368")
                 .help("The data size in bytes")
-                .takes_value(true),
+                .value_parser(value_parser!(usize)),
         )
         .arg(
             Arg::new("replica")
                 .long("replica")
                 .help("The replica file")
                 .required(true)
-                .takes_value(true),
+                .value_parser(value_parser!(PathBuf)),
         )
         .arg(
             Arg::new("cache")
                 .long("cache")
                 .help("The cache directory for the output trees")
                 .required(true)
-                .takes_value(true),
+                .value_parser(value_parser!(PathBuf)),
         );
 
     let inspect_cmd = Command::new("inspect")
@@ -342,21 +342,21 @@ fn main() -> Result<()> {
                 .long("size")
                 .default_value("34359738368")
                 .help("The data size in bytes")
-                .takes_value(true),
+                .value_parser(value_parser!(usize)),
         )
         .arg(
             Arg::new("replica")
                 .long("replica")
                 .help("The replica file")
                 .required(true)
-                .takes_value(true),
+                .value_parser(value_parser!(PathBuf)),
         )
         .arg(
             Arg::new("cache")
                 .long("cache")
                 .help("The cache directory for the output trees")
                 .required(true)
-                .takes_value(true),
+                .value_parser(value_parser!(PathBuf)),
         );
 
     let verify_cmd = Command::new("verify")
@@ -366,21 +366,21 @@ fn main() -> Result<()> {
                 .long("size")
                 .default_value("34359738368")
                 .help("The data size in bytes")
-                .takes_value(true),
+                .value_parser(value_parser!(usize)),
         )
         .arg(
             Arg::new("replica")
                 .long("replica")
                 .help("The replica file")
                 .required(true)
-                .takes_value(true),
+                .value_parser(value_parser!(PathBuf)),
         )
         .arg(
             Arg::new("cache")
                 .long("cache")
                 .help("The cache directory for the output trees")
                 .required(true)
-                .takes_value(true),
+                .value_parser(value_parser!(PathBuf)),
         );
 
     let matches = Command::new("update_tree_r_cache")
@@ -392,27 +392,21 @@ fn main() -> Result<()> {
 
     match matches.subcommand() {
         Some(("rebuild", m)) => {
-            let cache = m.value_of_t::<PathBuf>("cache")?;
-            let replica = m.value_of_t::<PathBuf>("replica")?;
-            let size = m
-                .value_of_t::<usize>("size")
-                .expect("could not convert `size` CLI argument to `usize`");
+            let cache = m.get_one::<PathBuf>("cache").expect("required argument");
+            let replica = m.get_one::<PathBuf>("replica").expect("required argument");
+            let size = *m.get_one::<usize>("size").expect("defaulted argument");
             run_rebuild(size, cache.as_path(), replica.as_path())?;
         }
         Some(("inspect", m)) => {
-            let cache = m.value_of_t::<PathBuf>("cache")?;
-            let replica = m.value_of_t::<PathBuf>("replica")?;
-            let size = m
-                .value_of_t::<usize>("size")
-                .expect("could not convert `size` CLI argument to `usize`");
+            let cache = m.get_one::<PathBuf>("cache").expect("required argument");
+            let replica = m.get_one::<PathBuf>("replica").expect("required argument");
+            let size = *m.get_one::<usize>("size").expect("defaulted argument");
             run_inspect(size, cache.as_path(), replica.as_path())?;
         }
         Some(("verify", m)) => {
-            let cache = m.value_of_t::<PathBuf>("cache")?;
-            let replica = m.value_of_t::<PathBuf>("replica")?;
-            let size = m
-                .value_of_t::<usize>("size")
-                .expect("could not convert `size` CLI argument to `usize`");
+            let cache = m.get_one::<PathBuf>("cache").expect("required argument");
+            let replica = m.get_one::<PathBuf>("replica").expect("required argument");
+            let size = *m.get_one::<usize>("size").expect("defaulted argument");
             run_verify(size, cache.as_path(), replica.as_path())?;
         }
         _ => panic!("Unrecognized subcommand"),

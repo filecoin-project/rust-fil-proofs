@@ -6,6 +6,7 @@ use std::path::Path;
 use std::process::{exit, Command};
 
 use anyhow::{ensure, Context, Result};
+use clap::Parser;
 use dialoguer::{theme::ColorfulTheme, MultiSelect, Select};
 use filecoin_proofs::{
     param::{
@@ -23,7 +24,6 @@ use storage_proofs_core::parameter_cache::{
     parameter_cache_dir, parameter_cache_dir_name, ParameterData, ParameterMap,
     GROTH_PARAMETER_EXT, PARAMETER_METADATA_EXT, VERIFYING_KEY_EXT,
 };
-use structopt::StructOpt;
 
 lazy_static! {
     static ref CLI_ABOUT: String = format!(
@@ -127,27 +127,27 @@ fn write_param_map_to_disk(param_map: &ParameterMap, json_path: &str) -> Result<
     Ok(())
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "parampublish", version = "1.0", about = CLI_ABOUT.as_str())]
+#[derive(Debug, Parser)]
+#[command(name = "parampublish", version = "1.0", about = CLI_ABOUT.as_str())]
 struct Cli {
-    #[structopt(
+    #[arg(
         long = "list-all",
-        short = "a",
+        short = 'a',
         help = "The user will be prompted to select the files to publish from the set of all files \
             found in the cache dir. Excluding the -a/--list-all flag will result in the user being \
             prompted for a single param version number for filtering-in files in the cache dir."
     )]
     list_all_files: bool,
-    #[structopt(
+    #[arg(
         long = "ipfs-bin",
         value_name = "PATH TO IPFS BINARY",
         default_value = "ipfs",
         help = "Use a specific ipfs binary instead of searching for one in $PATH."
     )]
     ipfs_bin: String,
-    #[structopt(
+    #[arg(
         long = "json",
-        short = "j",
+        short = 'j',
         value_name = "PATH",
         default_value = "parameters.json",
         help = "The path to write the parameters.json file."
@@ -160,7 +160,7 @@ pub fn main() {
     env::set_var("RUST_LOG", "parampublish");
     fil_logger::init();
 
-    let cli = Cli::from_args();
+    let cli = Cli::parse();
 
     let cache_dir = match env::var("FIL_PROOFS_PARAMETER_CACHE") {
         Ok(s) => s,

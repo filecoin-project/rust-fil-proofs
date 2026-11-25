@@ -1,5 +1,7 @@
+use std::hint::black_box;
+
 use anyhow::Result;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use filecoin_hashers::{
     poseidon::PoseidonDomain, poseidon::PoseidonHasher, sha256::Sha256Hasher, Domain,
 };

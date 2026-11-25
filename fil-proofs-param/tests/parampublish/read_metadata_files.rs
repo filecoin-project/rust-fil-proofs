@@ -1,9 +1,9 @@
-use failure::Error as FailureError;
+use anyhow::Result;
 
 use crate::parampublish::support::session::ParamPublishSessionBuilder;
 
 #[test]
-fn fails_if_missing_metadata_file() -> Result<(), FailureError> {
+fn fails_if_missing_metadata_file() -> Result<()> {
     // missing the corresponding .meta file
     let filenames = vec!["v12-aaa.vk", "v12-aaa.params"];
 
@@ -21,7 +21,7 @@ fn fails_if_missing_metadata_file() -> Result<(), FailureError> {
 }
 
 #[test]
-fn fails_if_malformed_metadata_file() -> Result<(), FailureError> {
+fn fails_if_malformed_metadata_file() -> Result<()> {
     // A malformed v11-aaa.meta file.
     let mut malformed: &[u8] = &[42];
 

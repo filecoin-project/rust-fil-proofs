@@ -16,8 +16,7 @@ fn main() {
         Arg::new("param")
             .long("parameter-file")
             .help("The parameter file to map")
-            .required(true)
-            .takes_value(true),
+            .required(true),
     );
 
     let matches = Command::new("check_parameters")
@@ -27,8 +26,8 @@ fn main() {
 
     match matches.subcommand() {
         Some(("map", m)) => {
-            let parameter_file_str = m.value_of_t::<String>("param").expect("param failed");
-            run_map(Path::new(&parameter_file_str)).expect("run_map failed");
+            let parameter_file_str = m.get_one::<String>("param").expect("param failed");
+            run_map(Path::new(parameter_file_str)).expect("run_map failed");
         }
         _ => panic!("Unrecognized subcommand"),
     }

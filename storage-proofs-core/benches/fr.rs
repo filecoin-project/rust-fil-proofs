@@ -1,5 +1,7 @@
+use std::hint::black_box;
+
 use blstrs::Scalar as Fr;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use ff::Field;
 use rand::thread_rng;
 use storage_proofs_core::fr32::{bytes_into_fr, fr_into_bytes};
