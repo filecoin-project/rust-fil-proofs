@@ -172,7 +172,9 @@ impl HashFunction<Sha256Domain> for Sha256Function {
 
             bits.extend(
                 padded
-                    .chunks_exact(8)
+                    .as_chunks::<8>()
+                    .0
+                    .iter()
                     .flat_map(|chunk| chunk.iter().rev())
                     .cloned(),
             );
@@ -195,7 +197,9 @@ impl HashFunction<Sha256Domain> for Sha256Function {
 
         preimage.extend(
             left_padded
-                .chunks_exact(8)
+                .as_chunks::<8>()
+                .0
+                .iter()
                 .flat_map(|chunk| chunk.iter().rev())
                 .cloned(),
         );
@@ -207,7 +211,9 @@ impl HashFunction<Sha256Domain> for Sha256Function {
 
         preimage.extend(
             right_padded
-                .chunks_exact(8)
+                .as_chunks::<8>()
+                .0
+                .iter()
                 .flat_map(|chunk| chunk.iter().rev())
                 .cloned(),
         );
@@ -250,7 +256,9 @@ impl HashFunction<Sha256Domain> for Sha256Function {
 
         preimage.extend(
             a_padded
-                .chunks_exact(8)
+                .as_chunks::<8>()
+                .0
+                .iter()
                 .flat_map(|chunk| chunk.iter().rev())
                 .cloned(),
         );
@@ -262,7 +270,9 @@ impl HashFunction<Sha256Domain> for Sha256Function {
 
         preimage.extend(
             b_padded
-                .chunks_exact(8)
+                .as_chunks::<8>()
+                .0
+                .iter()
                 .flat_map(|chunk| chunk.iter().rev())
                 .cloned(),
         );

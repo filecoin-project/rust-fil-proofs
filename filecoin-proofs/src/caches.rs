@@ -112,17 +112,17 @@ where
     F: FnOnce() -> Result<G>,
     G: Send + Sync,
 {
-    info!("trying parameters memory cache for: {}", &identifier);
+    info!("trying parameters memory cache for: {}", identifier);
     {
         let cache = (*cache_ref).lock().expect("poisoned cache");
 
         if let Some(entry) = cache.get(&identifier) {
-            info!("found params in memory cache for {}", &identifier);
+            info!("found params in memory cache for {}", identifier);
             return Ok(entry.clone());
         }
     }
 
-    info!("no params in memory cache for {}", &identifier);
+    info!("no params in memory cache for {}", identifier);
 
     let new_entry = Arc::new(generator()?);
     let res = new_entry.clone();
@@ -167,7 +167,7 @@ fn lookup_verifying_key<F>(
 where
     F: FnOnce() -> Result<Bls12PreparedVerifyingKey>,
 {
-    let vk_identifier = format!("{}-verifying-key", &identifier);
+    let vk_identifier = format!("{}-verifying-key", identifier);
     cache_lookup(&*VERIFYING_KEY_MEMORY_CACHE, vk_identifier, generator)
 }
 
@@ -176,7 +176,7 @@ fn lookup_srs_key<F>(identifier: String, generator: F) -> Result<Arc<Bls12Prover
 where
     F: FnOnce() -> Result<Bls12ProverSRSKey>,
 {
-    let srs_identifier = format!("{}-{}", &identifier, SRS_IDENTIFIER);
+    let srs_identifier = format!("{}-{}", identifier, SRS_IDENTIFIER);
     srs_cache_lookup::<_, Bls12ProverSRSKey>(&*SRS_KEY_MEMORY_CACHE, srs_identifier, generator)
 }
 
@@ -185,7 +185,7 @@ fn lookup_srs_verifier_key<F>(identifier: String, generator: F) -> Result<Arc<Bl
 where
     F: FnOnce() -> Result<Bls12VerifierSRSKey>,
 {
-    let srs_identifier = format!("{}-{}", &identifier, SRS_VERIFIER_IDENTIFIER);
+    let srs_identifier = format!("{}-{}", identifier, SRS_VERIFIER_IDENTIFIER);
     srs_cache_lookup::<_, Bls12VerifierSRSKey>(
         &*SRS_VERIFIER_KEY_MEMORY_CACHE,
         srs_identifier,

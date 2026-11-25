@@ -131,7 +131,7 @@ mod tests {
                     &hash[..],
                     &Original::digest(&input)[..],
                     "input: {:?}",
-                    &input
+                    input
                 );
             }
         }

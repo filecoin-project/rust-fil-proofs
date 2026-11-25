@@ -15,7 +15,7 @@ fn remove_files_with_glob(glob_path: &Path) -> Result<()> {
         .expect("Glob pattern must be valid");
     for maybe_path in globs {
         let path = maybe_path?;
-        fs::remove_file(&path).with_context(|| format!("Failed to delete {:?}", &path))?
+        fs::remove_file(&path).with_context(|| format!("Failed to delete {:?}", path))?
     }
     Ok(())
 }
@@ -25,7 +25,7 @@ pub fn clear_cache_dir(cache_path: &Path) -> Result<()> {
     let tree_d_path = StoreConfig::data_path(cache_path, &CacheKey::CommDTree.to_string());
     if tree_d_path.exists() {
         fs::remove_file(&tree_d_path)
-            .with_context(|| format!("Failed to delete {:?}", &tree_d_path))?;
+            .with_context(|| format!("Failed to delete {:?}", tree_d_path))?;
         trace!("tree d deleted");
     }
 
@@ -51,7 +51,7 @@ pub fn clear_synthetic_proofs(cache_path: &Path) -> Result<()> {
     if synth_proofs_path.exists() {
         trace!("removing synthetic proofs at {:?}", synth_proofs_path);
         fs::remove_file(&synth_proofs_path)
-            .with_context(|| format!("Failed to delete {:?}", &synth_proofs_path))
+            .with_context(|| format!("Failed to delete {:?}", synth_proofs_path))
     } else {
         trace!(
             "persisted synthetic proofs do not exist at {:?}",
