@@ -10,7 +10,6 @@ readme = "README.md"
 
 [dependencies]
 filecoin-hashers = { workspace = true, features = ["poseidon", "sha256"] }
-fr32.workspace = true
 storage-proofs-core.workspace = true
 storage-proofs-porep.workspace = true
 # Sorted alphabetically

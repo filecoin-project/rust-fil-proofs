@@ -8,6 +8,10 @@ edition = "2018"
 repository = "https://github.com/filecoin-project/rust-fil-proofs"
 readme = "README.md"
 
+[package.metadata.cargo-shear]
+# Optional dependencies behind features used only by benches and tests.
+ignored = ["file-lock", "gperftools"]
+
 [dependencies]
 filecoin-hashers = { workspace = true, features = ["poseidon", "sha256"] }
 fr32.workspace = true

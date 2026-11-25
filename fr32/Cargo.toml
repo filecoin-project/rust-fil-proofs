@@ -15,7 +15,6 @@ byte-slice-cast.workspace = true
 # Sorted alphabetically
 bitvec = "0.17"
 blstrs.workspace = true
-criterion.workspace = true
 itertools.workspace = true
 ff.workspace = true
 pretty_assertions.workspace = true

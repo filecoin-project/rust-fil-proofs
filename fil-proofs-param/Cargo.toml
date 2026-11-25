@@ -22,7 +22,6 @@ dialoguer.workspace = true
 env_proxy = "0.4"
 fil_logger.workspace = true
 flate2 = { version = "1.0.9", features = ["rust_backend"] }
-gperftools = { workspace = true, optional = true }
 humansize.workspace = true
 indicatif = "0.18"
 itertools.workspace = true
@@ -41,8 +40,8 @@ tempfile.workspace = true
 
 [features]
 default = ["opencl"]
-cpu-profile = ["gperftools"]
-heap-profile = ["gperftools/heap"]
+cpu-profile = []
+heap-profile = []
 simd = ["storage-proofs-core/simd"]
 asm = ["storage-proofs-core/asm"]
 cuda = ["storage-proofs-core/cuda", "storage-proofs-porep/cuda", "storage-proofs-post/cuda", "storage-proofs-update/cuda"]

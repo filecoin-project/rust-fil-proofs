@@ -36,5 +36,4 @@ poseidon = ["neptune", "lazy_static"]
 sha256 = ["sha2"]
 
 [dev-dependencies]
-rand_xorshift.workspace = true
 serde_json.workspace = true

@@ -401,15 +401,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bytefmt"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "590b1af059a21c47d4da7cd11f05e08b1992b58b5b4acf2a5e10d7e53aed3d74"
-dependencies = [
- "regex",
-]
-
-[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1063,7 +1054,6 @@ dependencies = [
  "fil_logger",
  "filecoin-proofs",
  "flate2",
- "gperftools",
  "humansize",
  "indicatif",
  "itertools 0.13.0",
@@ -1092,7 +1082,6 @@ dependencies = [
  "blake2s_simd 1.0.5",
  "blstrs",
  "byte-unit",
- "bytefmt",
  "clap",
  "cpu-time",
  "dialoguer",
@@ -1108,7 +1097,6 @@ dependencies = [
  "memmap2",
  "merkletree",
  "rand 0.8.8",
- "rand_xorshift 0.3.0",
  "raw-cpuid",
  "rayon",
  "regex",
@@ -1170,7 +1158,6 @@ dependencies = [
  "merkletree",
  "neptune",
  "rand 0.8.8",
- "rand_xorshift 0.3.0",
  "serde",
  "serde_json",
  "sha2",
@@ -1301,7 +1288,6 @@ dependencies = [
  "bitvec 0.17.4",
  "blstrs",
  "byte-slice-cast",
- "criterion",
  "ff",
  "itertools 0.13.0",
  "pretty_assertions",
@@ -3005,7 +2991,6 @@ dependencies = [
  "criterion",
  "ff",
  "filecoin-hashers",
- "fr32",
  "fs2",
  "generic-array 0.14.7",
  "gperftools",
@@ -3048,7 +3033,6 @@ dependencies = [
  "ff",
  "fil_logger",
  "filecoin-hashers",
- "fr32",
  "generic-array 0.14.7",
  "glob",
  "hex",
@@ -3060,7 +3044,6 @@ dependencies = [
  "merkletree",
  "neptune",
  "num-bigint",
- "num-traits",
  "num_cpus",
  "pretty_assertions",
  "rand 0.8.8",
@@ -3107,7 +3090,6 @@ dependencies = [
  "blstrs",
  "ff",
  "filecoin-hashers",
- "fr32",
  "generic-array 0.14.7",
  "lazy_static",
  "log",
