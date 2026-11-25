@@ -3,7 +3,6 @@ use std::io::{self, Read};
 use std::panic::panic_any;
 use std::path::{Path, PathBuf};
 
-use failure::SyncFailure;
 use rexpect::session::PtyReplSession;
 use tempfile::{tempdir, TempDir};
 
@@ -118,12 +117,7 @@ pub struct ParamFetchSession {
 impl ParamFetchSession {
     /// Block until provided string is seen on stdout from paramfetch and
     /// return remaining output.
-    pub fn exp_string(
-        &mut self,
-        needle: &str,
-    ) -> Result<String, SyncFailure<rexpect::errors::Error>> {
-        self.pty_session
-            .exp_string(needle)
-            .map_err(SyncFailure::new)
+    pub fn exp_string(&mut self, needle: &str) -> Result<String, rexpect::error::Error> {
+        self.pty_session.exp_string(needle)
     }
 }

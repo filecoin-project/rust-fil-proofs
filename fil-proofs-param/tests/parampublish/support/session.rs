@@ -3,7 +3,6 @@ use std::io::{self, Read, Write};
 use std::panic::panic_any;
 use std::path::{Path, PathBuf};
 
-use failure::SyncFailure;
 use rand::{thread_rng, Rng};
 use rexpect::session::PtyReplSession;
 use storage_proofs_core::parameter_cache::CacheEntryMetadata;
@@ -164,18 +163,13 @@ pub struct ParamPublishSession {
 
 impl ParamPublishSession {
     /// Send provided string and trailing newline to parampublish.
-    pub fn send_line(&mut self, line: &str) -> Result<usize, SyncFailure<rexpect::errors::Error>> {
-        self.pty_session.send_line(line).map_err(SyncFailure::new)
+    pub fn send_line(&mut self, line: &str) -> Result<usize, rexpect::error::Error> {
+        self.pty_session.send_line(line)
     }
 
     /// Block until provided string is seen on stdout from parampublish and
     /// return remaining output.
-    pub fn exp_string(
-        &mut self,
-        needle: &str,
-    ) -> Result<String, SyncFailure<rexpect::errors::Error>> {
-        self.pty_session
-            .exp_string(needle)
-            .map_err(SyncFailure::new)
+    pub fn exp_string(&mut self, needle: &str) -> Result<String, rexpect::error::Error> {
+        self.pty_session.exp_string(needle)
     }
 }

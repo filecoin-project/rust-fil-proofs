@@ -1,10 +1,10 @@
-use failure::Error as FailureError;
+use anyhow::Result;
 use storage_proofs_core::parameter_cache::CacheEntryMetadata;
 
 use crate::parampublish::support::session::ParamPublishSessionBuilder;
 
 #[test]
-fn ignores_files_unrecognized_extensions() -> Result<(), FailureError> {
+fn ignores_files_unrecognized_extensions() -> Result<()> {
     let to_create = vec!["v1-aaa.vk", "v1-aaa.params", "v1-bbb.txt", "ddd"];
 
     let (mut session, _) = ParamPublishSessionBuilder::new()
@@ -28,7 +28,7 @@ fn ignores_files_unrecognized_extensions() -> Result<(), FailureError> {
 }
 
 #[test]
-fn displays_sector_size_in_prompt() -> Result<(), FailureError> {
+fn displays_sector_size_in_prompt() -> Result<()> {
     let to_create = vec!["v1-aaa.vk", "v1-aaa.params", "v1-xxx.vk", "v1-xxx.params"];
 
     let (mut session, _) = ParamPublishSessionBuilder::new()
@@ -55,7 +55,7 @@ fn displays_sector_size_in_prompt() -> Result<(), FailureError> {
 }
 
 #[test]
-fn no_assets_no_prompt() -> Result<(), FailureError> {
+fn no_assets_no_prompt() -> Result<()> {
     let (mut session, _) = ParamPublishSessionBuilder::new()
         .with_session_timeout_ms(1000)
         .build();

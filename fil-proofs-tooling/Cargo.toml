@@ -24,7 +24,6 @@ blstrs.workspace = true
 byte-unit = "4.0.14"
 bytefmt = "0.1.7"
 clap.workspace = true
-commandspec = "0.12.2"
 cpu-time.workspace = true
 dialoguer.workspace = true
 fdlimit.workspace = true

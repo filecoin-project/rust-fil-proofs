@@ -3,8 +3,8 @@ use std::fs::File;
 use std::io::{self, BufReader, Write};
 use std::path::PathBuf;
 
+use anyhow::Result;
 use blake2b_simd::State as Blake2b;
-use failure::Error as FailureError;
 use rand::{thread_rng, Rng};
 use storage_proofs_core::parameter_cache::{ParameterData, ParameterMap};
 
@@ -17,7 +17,7 @@ use session::ParamFetchSessionBuilder;
 /// Produce a random sequence of bytes and first 32 characters of hex encoded
 /// BLAKE2b checksum. This helper function must be kept up-to-date with the
 /// parampublish implementation.
-fn rand_bytes_with_blake2b() -> Result<(Vec<u8>, String), FailureError> {
+fn rand_bytes_with_blake2b() -> Result<(Vec<u8>, String)> {
     let bytes = thread_rng().gen::<[u8; 32]>();
 
     let mut hasher = Blake2b::new();
@@ -38,7 +38,7 @@ fn clean_up_manifest_and_parent(manifest_pbuf: &PathBuf) {
 }
 
 #[test]
-fn nothing_to_fetch_if_cache_fully_hydrated() -> Result<(), FailureError> {
+fn nothing_to_fetch_if_cache_fully_hydrated() -> Result<()> {
     let mut manifest: BTreeMap<String, ParameterData> = BTreeMap::new();
 
     let (aaa_bytes, aaa_checksum) = rand_bytes_with_blake2b()?;
@@ -72,7 +72,7 @@ fn nothing_to_fetch_if_cache_fully_hydrated() -> Result<(), FailureError> {
 }
 
 #[test]
-fn prompts_to_download_if_file_in_manifest_is_missing() -> Result<(), FailureError> {
+fn prompts_to_download_if_file_in_manifest_is_missing() -> Result<()> {
     let mut manifest: BTreeMap<String, ParameterData> = BTreeMap::new();
 
     manifest.insert(
@@ -102,7 +102,7 @@ fn prompts_to_download_if_file_in_manifest_is_missing() -> Result<(), FailureErr
 }
 
 #[test]
-fn prompts_to_download_if_file_checksum_does_not_match_manifest() -> Result<(), FailureError> {
+fn prompts_to_download_if_file_checksum_does_not_match_manifest() -> Result<()> {
     let mut manifest: BTreeMap<String, ParameterData> = BTreeMap::new();
 
     let (aaa_bytes, _) = rand_bytes_with_blake2b()?;
@@ -137,7 +137,7 @@ fn prompts_to_download_if_file_checksum_does_not_match_manifest() -> Result<(), 
 }
 
 #[test]
-fn fetches_vk_even_if_sector_size_does_not_match() -> Result<(), FailureError> {
+fn fetches_vk_even_if_sector_size_does_not_match() -> Result<()> {
     let mut manifest: BTreeMap<String, ParameterData> = BTreeMap::new();
 
     manifest.insert(
@@ -177,7 +177,7 @@ fn fetches_vk_even_if_sector_size_does_not_match() -> Result<(), FailureError> {
 }
 
 #[test]
-fn invalid_json_path_produces_error() -> Result<(), FailureError> {
+fn invalid_json_path_produces_error() -> Result<()> {
     let mut session = ParamFetchSessionBuilder::new(Some(PathBuf::from("/invalid/path")))
         .with_session_timeout_ms(1000)
         .build();
@@ -191,7 +191,7 @@ fn invalid_json_path_produces_error() -> Result<(), FailureError> {
 }
 
 #[test]
-fn invalid_json_produces_error() -> Result<(), FailureError> {
+fn invalid_json_produces_error() -> Result<()> {
     let manifest_pbuf = tmp_manifest(None)?;
 
     {
@@ -212,7 +212,7 @@ fn invalid_json_produces_error() -> Result<(), FailureError> {
 }
 
 #[test]
-fn no_json_path_uses_default_manifest() -> Result<(), FailureError> {
+fn no_json_path_uses_default_manifest() -> Result<()> {
     let file = File::open("../parameters.json")?;
     let reader = BufReader::new(file);
     let manifest: ParameterMap = serde_json::from_reader(reader)?;

@@ -36,9 +36,8 @@ tar = "0.4.46"
 
 [dev-dependencies]
 # Sorted alphabetically
+rexpect = "0.7.1"
 tempfile.workspace = true
-failure = "0.1.7"
-rexpect = "0.4.0"
 
 [features]
 default = ["opencl"]
