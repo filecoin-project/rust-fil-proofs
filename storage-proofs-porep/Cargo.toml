@@ -10,7 +10,6 @@ readme = "README.md"
 
 [dependencies]
 filecoin-hashers = { workspace = true, features = ["poseidon", "sha256"] }
-fr32.workspace = true
 sha2raw.workspace = true
 storage-proofs-core.workspace = true
 # Sorted alphabetically
@@ -36,7 +35,6 @@ memmap2.workspace = true
 merkletree.workspace = true
 neptune.workspace = true
 num-bigint = "0.4.3"
-num-traits = "0.2"
 num_cpus.workspace = true
 pretty_assertions.workspace = true
 rayon.workspace = true

@@ -13,7 +13,6 @@ bench = false
 
 [dependencies]
 filecoin-hashers = { workspace = true, features = ["sha256", "poseidon"] }
-fr32.workspace = true
 # Sorted alphabetically
 aes = "0.8.1"
 anyhow.workspace = true

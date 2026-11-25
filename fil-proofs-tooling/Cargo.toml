@@ -22,7 +22,6 @@ bincode.workspace = true
 blake2s_simd.workspace = true
 blstrs.workspace = true
 byte-unit = "4.0.14"
-bytefmt = "0.1.7"
 clap.workspace = true
 cpu-time.workspace = true
 dialoguer.workspace = true
@@ -36,7 +35,6 @@ log.workspace = true
 memmap2.workspace = true
 merkletree.workspace = true
 rand.workspace = true
-rand_xorshift.workspace = true
 rayon.workspace = true
 regex = "1.3.7"
 serde = { workspace = true, features = ["derive"] }
