@@ -298,7 +298,7 @@ fn main() -> Result<()> {
             let skip_commit_phase2 = m.get_flag("skip-commit-phase2");
             let test_resume = m.get_flag("test-resume");
             let cache_dir = value(m, "cache").to_owned();
-            let sector_size = Byte::from_str(value(m, "size"))?.get_bytes() as usize;
+            let sector_size = Byte::parse_str(value(m, "size"), true)?.as_u128() as usize;
             let api_version = ApiVersion::from_str(value(m, "api_version"))?;
             let api_features = parse_api_features(m)?;
             let task_numbers = *m
@@ -351,14 +351,14 @@ fn main() -> Result<()> {
             }
         }
         Some(("winning-post", m)) => {
-            let sector_size = Byte::from_str(value(m, "size"))?.get_bytes() as usize;
+            let sector_size = Byte::parse_str(value(m, "size"), true)?.as_u128() as usize;
             let fake_replica = m.get_flag("fake");
             let api_version = ApiVersion::from_str(value(m, "api_version"))?;
             let api_features = parse_api_features(m)?;
             winning_post::run(sector_size, fake_replica, api_version, api_features)?;
         }
         Some(("window-post-fake", m)) => {
-            let sector_size = Byte::from_str(value(m, "size"))?.get_bytes() as usize;
+            let sector_size = Byte::parse_str(value(m, "size"), true)?.as_u128() as usize;
             let fake_replica = m.get_flag("fake");
             let api_version = ApiVersion::from_str(value(m, "api_version"))?;
             let api_features = parse_api_features(m)?;
@@ -368,7 +368,7 @@ fn main() -> Result<()> {
             hash_fns::run()?;
         }
         Some(("merkleproofs", m)) => {
-            let size = Byte::from_str(value(m, "size"))?.get_bytes() as usize;
+            let size = Byte::parse_str(value(m, "size"), true)?.as_u128() as usize;
 
             let proofs = *m.get_one::<usize>("proofs").expect("defaulted argument");
             merkleproofs::run(size, proofs, m.get_flag("validate"))?;
@@ -382,7 +382,7 @@ fn main() -> Result<()> {
             let skip_commit_phase2 = m.get_flag("skip-commit-phase2");
             let test_resume = m.get_flag("test-resume");
             let cache_dir = value(m, "cache").to_owned();
-            let sector_size = Byte::from_str(value(m, "size"))?.get_bytes() as usize;
+            let sector_size = Byte::parse_str(value(m, "size"), true)?.as_u128() as usize;
             let api_version = ApiVersion::from_str(value(m, "api_version"))?;
             let api_features = parse_api_features(m)?;
 
