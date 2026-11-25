@@ -23,16 +23,16 @@ blake2s_simd.workspace = true
 blstrs.workspace = true
 byte-unit = "4.0.14"
 bytefmt = "0.1.7"
-chrono = { version = "0.4.7", features = ["serde"] }
 clap = { version = "3.1.6", features = ["derive"] }
 commandspec = "0.12.2"
 cpu-time.workspace = true
 dialoguer.workspace = true
 fdlimit.workspace = true
 fil_logger.workspace = true
-flexi_logger = "0.22.3"
+flexi_logger = "0.32"
 generic-array.workspace = true
 humansize.workspace = true
+jiff = { version = "1", features = ["serde"] }
 log.workspace = true
 memmap2.workspace = true
 merkletree.workspace = true
@@ -45,7 +45,6 @@ serde_json.workspace = true
 structopt.workspace = true
 sysinfo = { version = "0.28.4", default-features = false }
 tempfile.workspace = true
-time = "0.3.47"
 typenum.workspace = true
 
 [build-dependencies]
