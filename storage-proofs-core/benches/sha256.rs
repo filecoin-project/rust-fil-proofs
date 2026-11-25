@@ -1,3 +1,5 @@
+use std::hint::black_box;
+
 use bellperson::{
     gadgets::{
         boolean::{AllocatedBit, Boolean},
@@ -8,7 +10,7 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use blstrs::{Bls12, Scalar as Fr};
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use rand::{thread_rng, Rng};
 use sha2::Digest;
 

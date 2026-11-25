@@ -1,3 +1,5 @@
+use std::hint::black_box;
+
 use bellperson::{
     gadgets::{
         blake2s::blake2s as blake2s_circuit,
@@ -9,7 +11,7 @@ use bellperson::{
 };
 use blake2s_simd::blake2s;
 use blstrs::{Bls12, Scalar as Fr};
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{thread_rng, Rng};
 
 struct Blake2sExample<'a> {

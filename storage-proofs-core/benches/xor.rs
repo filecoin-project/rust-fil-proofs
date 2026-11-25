@@ -1,3 +1,5 @@
+use std::hint::black_box;
+
 use bellperson::{
     gadgets::boolean::{AllocatedBit, Boolean},
     groth16::{create_random_proof, generate_random_parameters},
@@ -5,7 +7,7 @@ use bellperson::{
     Circuit, ConstraintSystem, SynthesisError,
 };
 use blstrs::{Bls12, Scalar as Fr};
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use rand::{thread_rng, Rng};
 use storage_proofs_core::{crypto::xor, gadgets::xor::xor as xor_circuit};
 

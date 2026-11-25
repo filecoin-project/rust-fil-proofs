@@ -1,7 +1,8 @@
+use std::hint::black_box;
 use std::sync::Once;
 use std::time::Duration;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use filecoin_proofs::{
     caches::{get_stacked_srs_key, get_stacked_srs_verifier_key},
     get_seal_inputs, get_sector_update_inputs, PoRepConfig, SectorShape2KiB, SectorShape32GiB,
