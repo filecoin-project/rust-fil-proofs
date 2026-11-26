@@ -13,7 +13,7 @@ edition = "2018"
 [dependencies]
 # Sorted alphabetically
 byteorder.workspace = true
-digest = "0.10.3"
+digest = "0.11.3"
 fake-simd = "0.1"
 lazy_static.workspace = true
 opaque-debug = "0.3"
