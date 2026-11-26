@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-24.04
     name: Clippy
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install required packages
         run: |
           sudo apt-get update
@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-24.04
     name: Checking fmt
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
 
@@ -51,7 +51,7 @@ jobs:
       # Run all tests with multicore-SDR enabled.
       FIL_PROOFS_USE_MULTICORE_SDR: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install required packages
         run: |
           sudo apt-get update
@@ -64,7 +64,7 @@ jobs:
 
       # TODO: Remove this and other rust installation directives from jobs running 
       # on self-hosted runners once rust is available on these machines by default
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc
         with:
           toolchain: 1.99.1
 
@@ -79,7 +79,7 @@ jobs:
     runs-on: ubuntu-24.04
     name: Test ignored in release mode
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install required packages
         run: |
           sudo apt-get update
@@ -97,7 +97,7 @@ jobs:
     runs-on: ['self-hosted', 'linux', 'x64', '2xlarge']
     name: Test without default features
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install required packages
         run: |
           sudo apt-get update
@@ -108,7 +108,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc
         with:
           toolchain: 1.99.1
 
@@ -119,13 +119,13 @@ jobs:
     runs-on: ['self-hosted', 'linux', 'x64', '2xlarge']
     name: Build with various GPU support enabled
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install required packages
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends --yes libhwloc-dev nvidia-cuda-toolkit ocl-icd-opencl-dev
 
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc
         with:
           toolchain: 1.99.1
 
@@ -147,7 +147,7 @@ jobs:
       BELLMAN_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
       NEPTUNE_CUDA_NVCC_ARGS: --fatbin --gpu-architecture=sm_75 --generate-code=arch=compute_75,code=sm_75
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # TODO: Move the driver installation to the AMI.
       # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html
       # https://www.nvidia.com/en-us/drivers/
@@ -174,7 +174,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc
         with:
           toolchain: 1.99.1
 
@@ -187,7 +187,7 @@ jobs:
     runs-on: macos-latest
     name: Test in release mode on MacOS
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install required packages
         run: HOMEBREW_NO_AUTO_UPDATE=1 brew install hwloc
 
